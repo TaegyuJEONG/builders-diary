@@ -3,12 +3,15 @@ import { Portfolio } from '@/lib/types';
 const CACHE_KEY = 'builders-diary-portfolio-cache';
 const CACHE_TTL = 1000 * 60 * 60; // 1 hour
 
+/**
+ * Retrieve cached portfolio from localStorage
+ */
 export function getCachedPortfolio(): Portfolio | null {
   try {
     const cached = localStorage.getItem(CACHE_KEY);
     if (!cached) return null;
 
-    const { data, timestamp } = JSON.parse(cached);
+    const { data, timestamp } = JSON.parse(cached) as { data: Portfolio; timestamp: number };
     if (Date.now() - timestamp > CACHE_TTL) {
       localStorage.removeItem(CACHE_KEY);
       return null;
@@ -21,6 +24,9 @@ export function getCachedPortfolio(): Portfolio | null {
   }
 }
 
+/**
+ * Store portfolio in localStorage with timestamp
+ */
 export function setCachedPortfolio(portfolio: Portfolio): void {
   try {
     const cached = {
@@ -33,6 +39,9 @@ export function setCachedPortfolio(portfolio: Portfolio): void {
   }
 }
 
+/**
+ * Clear the cached portfolio
+ */
 export function clearCache(): void {
   try {
     localStorage.removeItem(CACHE_KEY);

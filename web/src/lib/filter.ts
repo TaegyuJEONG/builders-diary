@@ -1,17 +1,25 @@
 import { Portfolio, Project, Goal, Record } from './types';
 
+/**
+ * Extract all unique tags from all records in a portfolio
+ */
 export function extractAllTags(projects: Project[]): string[] {
-  const tags = new Set<string>();
-  
-  for (const project of projects) {
-    for (const goal of project.goals) {
-      for (const record of goal.records) {
-        record.tags.forEach(tag => tags.add(tag));
+  try {
+    const tags = new Set<string>();
+    
+    for (const project of projects) {
+      for (const goal of project.goals) {
+        for (const record of goal.records) {
+          record.tags.forEach((tag: string) => tags.add(tag));
+        }
       }
     }
+    
+    return Array.from(tags).sort();
+  } catch (error) {
+    console.error('Error extracting tags:', error);
+    return [];
   }
-  
-  return Array.from(tags).sort();
 }
 
 export function filterByTags(portfolio: Portfolio, selectedTags: string[]): Portfolio {
