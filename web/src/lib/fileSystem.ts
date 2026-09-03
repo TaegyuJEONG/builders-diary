@@ -37,38 +37,72 @@ export async function selectFolder(): Promise<FileSystemDirectoryHandle | null> 
 }
 
 export async function saveFolderHandleToStorage(handle: FileSystemDirectoryHandle): Promise<void> {
-  try {
-    const idb = indexedDB.open('BuildersDiary', 1);
-    idb.onupgradeneeded = (e: any) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('folderHandles')) {
-        db.createObjectStore('folderHandles');
-      }
-    };
-    idb.onsuccess = (e: any) => {
-      const db = e.target.result;
-      const transaction = db.transaction('folderHandles', 'readwrite');
-      transaction.objectStore('folderHandles').put(handle, 'root');
-    };
-  } catch (error) {
-    console.error('Failed to save folder handle:', error);
-  }
+  return new Promise((resolve, reject) => {
+    try {
+      const idb = indexedDB.open('BuildersDiary', 1);
+      idb.onupgradeneeded = (e: any) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('folderHandles')) {
+          db.createObjectStore('folderHandles');
+        }
+      };
+      idb.onsuccess = (e: any) => {
+        const db = e.target.result;
+        try {
+          const transaction = db.transaction('folderHandles', 'readwrite');
+          const request = transaction.objectStore('folderHandles').put(handle, 'root');
+          request.onsuccess = () => {
+            db.close();
+            resolve();
+          };
+          request.onerror = () => {
+            db.close();
+            reject(request.error);
+          };
+        } catch (error) {
+          db.close();
+          reject(error);
+        }
+      };
+      idb.onerror = () => reject(idb.error);
+    } catch (error) {
+      console.error('Failed to save folder handle:', error);
+      reject(error);
+    }
+  });
 }
 
 export async function loadFolderHandleFromStorage(): Promise<FileSystemDirectoryHandle | null> {
   return new Promise((resolve) => {
     try {
       const idb = indexedDB.open('BuildersDiary', 1);
+      idb.onupgradeneeded = (e: any) => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('folderHandles')) {
+          db.createObjectStore('folderHandles');
+        }
+      };
       idb.onsuccess = (e: any) => {
         const db = e.target.result;
-        const transaction = db.transaction('folderHandles', 'readonly');
-        const request = transaction.objectStore('folderHandles').get('root');
-        request.onsuccess = () => {
-          resolve(request.result || null);
-        };
+        try {
+          const transaction = db.transaction('folderHandles', 'readonly');
+          const request = transaction.objectStore('folderHandles').get('root');
+          request.onsuccess = () => {
+            db.close();
+            resolve(request.result || null);
+          };
+          request.onerror = () => {
+            db.close();
+            resolve(null);
+          };
+        } catch (error) {
+          db.close();
+          resolve(null);
+        }
       };
       idb.onerror = () => resolve(null);
     } catch (error) {
+      console.error('Failed to load folder handle:', error);
       resolve(null);
     }
   });
