@@ -36,76 +36,76 @@ def mock_generate_summary(record_title, context):
     return "OAuth를 구현하고 리다이렉트 버그를 수정했습니다."
 
 
-def test_step_1_context_analysis():
+def test_step_1_context_analysis(tmpdir):
     """Test Step 1: Context analysis and proposal generation."""
     print("\n" + "="*60)
     print("TEST 1: Step 1 - Context Analysis")
     print("="*60)
     
     tool = GenerateRecordTool()
+    portfolio_path = tmpdir
     
-    # Create a test portfolio directory
-    with tempfile.TemporaryDirectory() as tmpdir:
-        portfolio_path = tmpdir
-        
-        # Test context
-        context = """
-        I worked on implementing OAuth login for the Builder's Diary project. 
-        I set up Google OAuth, integrated it with the authentication flow, 
-        and fixed a redirect bug where users were going to the home page 
-        instead of the dashboard after login.
-        """
-        
-        # Mock the LLM call
-        with patch.object(tool.llm_handler, 'analyze_context', side_effect=mock_analyze_context):
-            # Execute step 1
-            result = tool.execute(
-                portfolio_path=portfolio_path,
-                action="step_1",
-                context=context
-            )
-        
-        # Verify response structure
-        assert result["step"] == 1
-        assert result["status"] == "awaiting_confirmation"
-        assert "proposal" in result
-        assert "message" in result
-        assert "state" in result
-        
-        # Verify proposal contains required fields
-        proposal = result["proposal"]
-        assert "project_slug" in proposal
-        assert "project_title" in proposal
-        assert "goal_slug" in proposal
-        assert "goal_title" in proposal
-        assert "record_title" in proposal
-        assert "tags" in proposal
-        assert isinstance(proposal["tags"], list)
-        
-        # Verify state for next turn
-        assert result["state"]["proposal"] == proposal
-        assert result["state"]["context"] == context
-        assert result["state"]["portfolio_path"] == portfolio_path
-        
-        print(f"✅ Step 1 passed")
-        print(f"\nProposal:")
-        print(f"  Project: {proposal['project_title']} ({proposal['project_slug']})")
-        print(f"  Goal: {proposal['goal_title']} ({proposal['goal_slug']})")
-        print(f"  Title: {proposal['record_title']}")
-        print(f"  Tags: {', '.join(proposal['tags'])}")
-        print(f"\nMessage for user:\n{result['message']}")
-        
-        return result["state"]
+    # Test context
+    context = """
+    I worked on implementing OAuth login for the Builder's Diary project. 
+    I set up Google OAuth, integrated it with the authentication flow, 
+    and fixed a redirect bug where users were going to the home page 
+    instead of the dashboard after login.
+    """
+    
+    # Mock the LLM call
+    with patch.object(tool.llm_handler, 'analyze_context', side_effect=mock_analyze_context):
+        # Execute step 1
+        result = tool.execute(
+            portfolio_path=portfolio_path,
+            action="step_1",
+            context=context
+        )
+    
+    # Verify response structure
+    assert result["step"] == 1
+    assert result["status"] == "awaiting_confirmation"
+    assert "proposal" in result
+    assert "message" in result
+    assert "state" in result
+    
+    # Verify proposal contains required fields
+    proposal = result["proposal"]
+    assert "project_slug" in proposal
+    assert "project_title" in proposal
+    assert "goal_slug" in proposal
+    assert "goal_title" in proposal
+    assert "record_title" in proposal
+    assert "tags" in proposal
+    assert isinstance(proposal["tags"], list)
+    
+    # Verify state for next turn
+    assert result["state"]["proposal"] == proposal
+    assert result["state"]["context"] == context
+    assert result["state"]["portfolio_path"] == portfolio_path
+    
+    print(f"✅ Step 1 passed")
+    print(f"\nProposal:")
+    print(f"  Project: {proposal['project_title']} ({proposal['project_slug']})")
+    print(f"  Goal: {proposal['goal_title']} ({proposal['goal_slug']})")
+    print(f"  Title: {proposal['record_title']}")
+    print(f"  Tags: {', '.join(proposal['tags'])}")
+    print(f"\nMessage for user:\n{result['message']}")
+    
+    return result["state"]
 
 
-def test_step_2_confirmation(state_from_step1):
+def test_step_2_confirmation(tmpdir, state_from_step1):
     """Test Step 2: User confirmation handling."""
     print("\n" + "="*60)
     print("TEST 2: Step 2 - User Confirmation")
     print("="*60)
     
     tool = GenerateRecordTool()
-    portfolio_path = state_from_step1.get("portfolio_path")
+    portfolio_path = tmpdir
+    
+    # Update state with valid portfolio path
+    state_from_step1["portfolio_path"] = portfolio_path
     
     # Test case 1: User confirms proposal as-is
     print("\n--- Case 1: User confirms ('맞아') ---")
@@ -115,10 +115,6 @@ def test_step_2_confirmation(state_from_step1):
         context="맞아",
         state=state_from_step1
     )
-    
-    print(f"DEBUG: Result step: {result.get('step')}")
-    print(f"DEBUG: Result status: {result.get('status')}")
-    print(f"DEBUG: Full result: {result}")
     
     assert result["step"] == 2, f"Expected step 2, got {result.get('step')}"
     assert result["status"] == "confirmed", f"Expected confirmed, got {result.get('status')}"
@@ -173,175 +169,174 @@ def test_step_2_confirmation(state_from_step1):
     return result
 
 
-def test_step_3_file_creation():
+def test_step_3_file_creation(tmpdir):
     """Test Step 3: File creation."""
     print("\n" + "="*60)
     print("TEST 3: Step 3 - File Creation")
     print("="*60)
     
     tool = GenerateRecordTool()
+    portfolio_path = tmpdir
+    context = "I fixed an OAuth redirect bug and improved authentication flow"
     
-    # Create a test portfolio directory with proper structure
-    with tempfile.TemporaryDirectory() as tmpdir:
-        portfolio_path = tmpdir
-        context = "I fixed an OAuth redirect bug and improved authentication flow"
+    # Mock LLM calls
+    with patch.object(tool.llm_handler, 'analyze_context', side_effect=mock_analyze_context), \
+         patch.object(tool.llm_handler, 'generate_summary', side_effect=mock_generate_summary):
         
-        # Mock LLM calls
-        with patch.object(tool.llm_handler, 'analyze_context', side_effect=mock_analyze_context), \
-             patch.object(tool.llm_handler, 'generate_summary', side_effect=mock_generate_summary):
-            
-            # Step 1
-            result1 = tool.execute(
-                portfolio_path=portfolio_path,
-                action="step_1",
-                context=context
-            )
-            
-            # Step 2
-            result2 = tool.execute(
-                action="step_2",
-                context="맞아",
-                state=result1["state"]
-            )
-            
-            # Step 3
-            result = tool.execute(
-                action="step_3",
-                state=result2["state"]
-            )
+        # Step 1
+        result1 = tool.execute(
+            portfolio_path=portfolio_path,
+            action="step_1",
+            context=context
+        )
         
-        # Verify response structure
-        assert result["step"] == 3
-        assert result["status"] == "completed"
-        assert "file_created" in result
-        assert "message" in result
+        # Step 2
+        result2 = tool.execute(
+            portfolio_path=portfolio_path,
+            action="step_2",
+            context="맞아",
+            state=result1["state"]
+        )
         
-        file_info = result["file_created"]
-        assert "path" in file_info
-        assert "project_id" in file_info
-        assert "goal_id" in file_info
-        assert "record_id" in file_info
-        
-        # Verify file was actually created
-        file_path = Path(file_info["path"])
-        assert file_path.exists(), f"File not created at {file_path}"
-        assert file_path.suffix == ".md", "File should be markdown"
-        
-        # Verify file contents
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        # Check for YAML front matter
-        assert content.startswith("---"), "File should start with YAML front matter"
-        
-        # Check for required fields in front matter
-        assert "project_id:" in content
-        assert "project_slug:" in content
-        assert "goal_id:" in content
-        assert "goal_slug:" in content
-        assert "title:" in content
-        assert "tags:" in content
-        assert "created_at:" in content
-        assert "status: completed" in content
-        
-        # Check for body sections
-        assert "# 무엇을 했는가" in content
-        assert "# 왜 했는가" in content
-        assert "# 배운 점" in content
-        assert "# 다음은 무엇인가" in content
-        
-        print(f"✅ Step 3 passed")
-        print(f"\nFile created at:")
-        print(f"  {file_path}")
-        print(f"  Relative: {file_info.get('relative_path', 'N/A')}")
-        print(f"\nFile info:")
-        print(f"  Project ID: {file_info['project_id']}")
-        print(f"  Goal ID: {file_info['goal_id']}")
-        print(f"  Record ID: {file_info['record_id']}")
-        
-        # Verify folder structure
-        assert (Path(tmpdir) / "content").exists()
-        project_slug = result2["confirmed_data"]["project_slug"]
-        goal_slug = result2["confirmed_data"]["goal_slug"]
-        expected_base = Path(tmpdir) / "content" / f"projects-{project_slug}" / "goals" / goal_slug
-        assert expected_base.exists()
-        assert (expected_base / "goal.yaml").exists()
-        
-        print(f"\nFolder structure verified:")
-        print(f"  content/projects-{project_slug}/goals/{goal_slug}/records/")
-        
-        return file_path
+        # Step 3
+        result = tool.execute(
+            portfolio_path=portfolio_path,
+            action="step_3",
+            state=result2["state"]
+        )
+    
+    # Verify response structure
+    assert result["step"] == 3
+    assert result["status"] == "completed"
+    assert "file_created" in result
+    assert "message" in result
+    
+    file_info = result["file_created"]
+    assert "path" in file_info
+    assert "project_id" in file_info
+    assert "goal_id" in file_info
+    assert "record_id" in file_info
+    
+    # Verify file was actually created
+    file_path = Path(file_info["path"])
+    assert file_path.exists(), f"File not created at {file_path}"
+    assert file_path.suffix == ".md", "File should be markdown"
+    
+    # Verify file contents
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Check for YAML front matter
+    assert content.startswith("---"), "File should start with YAML front matter"
+    
+    # Check for required fields in front matter
+    assert "project_id:" in content
+    assert "project_slug:" in content
+    assert "goal_id:" in content
+    assert "goal_slug:" in content
+    assert "title:" in content
+    assert "tags:" in content
+    assert "created_at:" in content
+    assert "status: completed" in content
+    
+    # Check for body sections
+    assert "# 무엇을 했는가" in content
+    assert "# 왜 했는가" in content
+    assert "# 배운 점" in content
+    assert "# 다음은 무엇인가" in content
+    
+    print(f"✅ Step 3 passed")
+    print(f"\nFile created at:")
+    print(f"  {file_path}")
+    print(f"  Relative: {file_info.get('relative_path', 'N/A')}")
+    print(f"\nFile info:")
+    print(f"  Project ID: {file_info['project_id']}")
+    print(f"  Goal ID: {file_info['goal_id']}")
+    print(f"  Record ID: {file_info['record_id']}")
+    
+    # Verify folder structure
+    assert (Path(tmpdir) / "content").exists()
+    project_slug = result2["confirmed_data"]["project_slug"]
+    goal_slug = result2["confirmed_data"]["goal_slug"]
+    expected_base = Path(tmpdir) / "content" / f"projects-{project_slug}" / "goals" / goal_slug
+    assert expected_base.exists()
+    assert (expected_base / "goal.yaml").exists()
+    
+    print(f"\nFolder structure verified:")
+    print(f"  content/projects-{project_slug}/goals/{goal_slug}/records/")
+    
+    return file_path
 
 
-def test_end_to_end():
+def test_end_to_end(tmpdir):
     """Test complete E2E workflow from step 1 to step 3."""
     print("\n" + "="*60)
     print("E2E TEST: Complete 3-Turn Workflow")
     print("="*60)
     
     tool = GenerateRecordTool()
+    portfolio_path = tmpdir
     
-    with tempfile.TemporaryDirectory() as tmpdir:
-        portfolio_path = tmpdir
-        
-        # Step 1: Analyze context
-        print("\n[Step 1] Analyzing work context...")
-        context = """
-        Built a new authentication module for the Builder's Diary app.
-        Integrated Google OAuth, implemented token refresh, and set up
-        proper error handling for failed logins. Also created middleware
-        to validate tokens on protected routes.
-        """
-        
-        with patch.object(tool.llm_handler, 'analyze_context', side_effect=mock_analyze_context):
-            result1 = tool.execute(
-                portfolio_path=portfolio_path,
-                action="step_1",
-                context=context
-            )
-        
-        assert result1["status"] == "awaiting_confirmation"
-        proposal = result1["proposal"]
-        print(f"✓ LLM proposal: {proposal['record_title']}")
-        print(f"✓ Project: {proposal['project_title']}")
-        print(f"✓ Goal: {proposal['goal_title']}")
-        
-        # Step 2: User confirms
-        print("\n[Step 2] User confirms proposal...")
-        result2 = tool.execute(
-            action="step_2",
-            context="맞아",
-            state=result1["state"]
+    # Step 1: Analyze context
+    print("\n[Step 1] Analyzing work context...")
+    context = """
+    Built a new authentication module for the Builder's Diary app.
+    Integrated Google OAuth, implemented token refresh, and set up
+    proper error handling for failed logins. Also created middleware
+    to validate tokens on protected routes.
+    """
+    
+    with patch.object(tool.llm_handler, 'analyze_context', side_effect=mock_analyze_context):
+        result1 = tool.execute(
+            portfolio_path=portfolio_path,
+            action="step_1",
+            context=context
         )
-        
-        assert result2["status"] == "confirmed"
-        print(f"✓ Confirmation accepted")
-        
-        # Step 3: Create file
-        print("\n[Step 3] Creating record file...")
-        with patch.object(tool.llm_handler, 'generate_summary', side_effect=mock_generate_summary):
-            result3 = tool.execute(
-                action="step_3",
-                state=result2["state"]
-            )
-        
-        assert result3["status"] == "completed"
-        file_path = Path(result3["file_created"]["path"])
-        assert file_path.exists()
-        
-        print(f"✓ File created: {file_path.name}")
-        
-        # Verify entire workflow
-        with open(file_path, 'r', encoding='utf-8') as f:
-            content = f.read()
-        
-        assert "OAuth" in content or "oauth" in content.lower()
-        
-        print("\n" + "="*60)
-        print("✅ E2E TEST PASSED - Full workflow successful!")
-        print("="*60)
-        print(f"\nFile location: {file_path}")
-        print(f"File size: {file_path.stat().st_size} bytes")
+    
+    assert result1["status"] == "awaiting_confirmation"
+    proposal = result1["proposal"]
+    print(f"✓ LLM proposal: {proposal['record_title']}")
+    print(f"✓ Project: {proposal['project_title']}")
+    print(f"✓ Goal: {proposal['goal_title']}")
+    
+    # Step 2: User confirms
+    print("\n[Step 2] User confirms proposal...")
+    result2 = tool.execute(
+        portfolio_path=portfolio_path,
+        action="step_2",
+        context="맞아",
+        state=result1["state"]
+    )
+    
+    assert result2["status"] == "confirmed"
+    print(f"✓ Confirmation accepted")
+    
+    # Step 3: Create file
+    print("\n[Step 3] Creating record file...")
+    with patch.object(tool.llm_handler, 'generate_summary', side_effect=mock_generate_summary):
+        result3 = tool.execute(
+            portfolio_path=portfolio_path,
+            action="step_3",
+            state=result2["state"]
+        )
+    
+    assert result3["status"] == "completed"
+    file_path = Path(result3["file_created"]["path"])
+    assert file_path.exists()
+    
+    print(f"✓ File created: {file_path.name}")
+    
+    # Verify entire workflow
+    with open(file_path, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    assert "OAuth" in content or "oauth" in content.lower()
+    
+    print("\n" + "="*60)
+    print("✅ E2E TEST PASSED - Full workflow successful!")
+    print("="*60)
+    print(f"\nFile location: {file_path}")
+    print(f"File size: {file_path.stat().st_size} bytes")
 
 
 def test_error_handling():
@@ -379,15 +374,17 @@ def test_error_handling():
     
     # Test 3: Missing state in step 2
     print("\n--- Test 3: Missing state in step 2 ---")
-    result = tool.execute(
-        action="step_2",
-        context="맞아",
-        state=None
-    )
-    
-    assert result["status"] == "error"
-    assert result["error"] == "missing_state"
-    print(f"✓ Missing state error caught")
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = tool.execute(
+            portfolio_path=tmpdir,
+            action="step_2",
+            context="맞아",
+            state=None
+        )
+        
+        assert result["status"] == "error"
+        assert result["error"] == "missing_state"
+        print(f"✓ Missing state error caught")
     
     print("\n✅ Error handling tests passed")
 
@@ -484,14 +481,21 @@ if __name__ == "__main__":
         print("BUILDER'S DIARY MCP SERVER - TEST SUITE")
         print("="*60)
         
-        # Step 1 test
-        state1 = test_step_1_context_analysis()
-        
-        # Step 2 test
-        state2 = test_step_2_confirmation(state1)
-        
-        # Step 3 test
-        test_step_3_file_creation()
+        # Use a persistent temp directory for tests 1-2
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Step 1 test
+            state1 = test_step_1_context_analysis(tmpdir)
+            
+            # Step 2 test (uses same tmpdir)
+            state2 = test_step_2_confirmation(tmpdir, state1)
+            
+            # Step 3 test (fresh tmpdir)
+            with tempfile.TemporaryDirectory() as tmpdir2:
+                test_step_3_file_creation(tmpdir2)
+            
+            # E2E test (fresh tmpdir)
+            with tempfile.TemporaryDirectory() as tmpdir3:
+                test_end_to_end(tmpdir3)
         
         # Error handling test
         test_error_handling()
@@ -501,9 +505,6 @@ if __name__ == "__main__":
         
         # FileManager test
         test_file_manager()
-        
-        # E2E test
-        test_end_to_end()
         
         print("\n" + "="*60)
         print("✅ ALL TESTS PASSED!")
