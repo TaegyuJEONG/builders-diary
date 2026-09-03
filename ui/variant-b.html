@@ -1,0 +1,481 @@
+<!--
+변형 B: "3행 동시 노출"
+가설: 앞면에 상황·결과·틀린것 3행을 요약해 노출하면 뒤집기 전에 판단이 가능하다.
+      카드는 정보 컨테이너가 아니라 비교 도구다.
+      빌더는 여러 장면을 나란히 스캔하면서 "이 패턴이 내 것과 같은가" 본다.
+-->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>빌더스 다이어리 — B: 3행 동시 노출</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface2: #f8f7f3;
+  --border: #e0ddd6;
+  --border2: #ccc9c0;
+  --text: #1a1a1a;
+  --text2: #555;
+  --text3: #999;
+  --accent: #1a5c3a;
+  --accent-light: #e8f3ed;
+  --wrong: #9b2c2c;
+  --wrong-light: #fef2f2;
+  --card-w: 264px;
+  --card-h: 340px;
+  --header-h: 52px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Georgia', 'Times New Roman', serif;
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  height: var(--header-h);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 24px;
+  flex-shrink: 0;
+  background: var(--surface);
+}
+
+.brand {
+  font-size: 13px;
+  font-weight: normal;
+  letter-spacing: 0.02em;
+  color: var(--text2);
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.brand strong { color: var(--text); font-weight: 600; }
+
+.project-tab {
+  font-size: 12px;
+  color: var(--text2);
+  padding: 3px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.project-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.filter-label {
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.tag-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  background: var(--surface2);
+  color: var(--text2);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  transition: all 0.12s;
+}
+.tag-chip:hover { border-color: var(--border2); color: var(--text); }
+.tag-chip.active {
+  background: var(--accent-light);
+  color: var(--accent);
+  border-color: #b2d4c0;
+}
+
+.filter-reset {
+  font-size: 11px;
+  color: var(--text3);
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.filter-reset:hover { color: var(--text2); }
+.filter-reset.hidden { display: none; }
+
+.sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+
+main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.entry-section {
+  padding: 20px 24px 12px;
+  flex-shrink: 0;
+}
+.entry-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.entry-date {
+  font-size: 11px;
+  color: var(--text3);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.entry-title {
+  font-size: 14px;
+  color: var(--text);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 500px;
+}
+
+.cards-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 24px;
+  padding-right: 24px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.cards-row::-webkit-scrollbar { height: 3px; }
+.cards-row::-webkit-scrollbar-track { background: transparent; }
+.cards-row::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.card-wrap {
+  flex-shrink: 0;
+  width: var(--card-w);
+  height: var(--card-h);
+  perspective: 1200px;
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-wrap.flipped .card-inner { transform: rotateY(180deg); }
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.card-back {
+  transform: rotateY(180deg);
+  overflow-y: auto;
+}
+.card-back::-webkit-scrollbar { width: 3px; }
+.card-back::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ── Card front: 3-row layout ── */
+.cf-header {
+  padding: 14px 14px 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cf-scene-num {
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.cf-title {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+/* Three rows */
+.cf-row {
+  flex: 1;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  overflow: hidden;
+}
+.cf-row:last-of-type { border-bottom: none; flex: 1.3; }
+
+.cf-row-label {
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  flex-shrink: 0;
+}
+.cf-row-text {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text2);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+.cf-row.row-wrong .cf-row-text { color: var(--wrong); }
+
+.cf-footer {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+  background: var(--surface2);
+}
+.cf-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: #fff;
+  color: var(--text3);
+  border: 1px solid var(--border);
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* ── Card back ── */
+.cb-header {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text);
+  font-style: italic;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+  background: var(--surface2);
+}
+.cb-flip-hint {
+  font-size: 10px;
+  color: var(--text3);
+  font-style: normal;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.cb-field {
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cb-label {
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-bottom: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.cb-value { font-size: 11.5px; color: var(--text2); line-height: 1.5; }
+.cb-value.highlight { color: var(--accent); }
+.cb-value.wrong { color: var(--wrong); background: var(--wrong-light); padding: 6px 8px; border-radius: 3px; }
+.cb-source {
+  padding: 8px 14px;
+  font-size: 10px;
+  color: var(--text3);
+  font-family: 'Courier New', monospace;
+  word-break: break-all;
+  flex-shrink: 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 50px 24px;
+  color: var(--text3);
+}
+.empty-btn {
+  font-size: 11px;
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: none;
+  color: var(--text2);
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><strong>빌더스 다이어리</strong></div>
+  <div class="sep"></div>
+  <div id="project-list" style="display:flex;gap:6px;"></div>
+  <div class="sep"></div>
+  <div id="filter-section" style="display:flex;align-items:center;gap:10px;flex:1;overflow:hidden;"></div>
+</header>
+
+<main id="main-feed"></main>
+
+<script>
+const EMBEDDED = {"version":"1.0","tagCategories":{"마인드셋":["비용 감각","검증 규율","무인 실행 설계","자기 오류 교정"],"도구":["문서보다 실행 흔적","claude code","end-to-end"]},"projects":[{"id":"hermes-agent-team","name":"Hermes Agent Team","description":"밤에 사람 없이 도는 에이전트 팀","entries":[{"id":"2026-08-29-hermes-night-team","title":"밤에 사람 없이 도는 에이전트 팀 세팅하기","date":"2026-08-29","duration":"이틀 (8/28~8/29)","tags":["비용 감각","검증 규율","문서보다 실행 흔적","무인 실행 설계","자기 오류 교정"],"problem":"낮에 설계하고 밤에 에이전트가 돌고 아침에 판단하는 구조를 만들려고 했다.","takeaways":["프로바이더를 바꾸면 base_url을 반드시 비운다.","문서를 먼저 읽어 범위를 좁히고, 돈이 걸리거나 되돌릴 수 없는 지점만 측정한다.","측정 지점이 기록을 남기는지 먼저 확인한다."],"source":"entries/2026-08-29-hermes-night-team.md","scenes":[{"id":"scene-1","number":1,"title":"첫 카드가 3초 만에 죽었다","insight":"프로바이더만 바꾸면 되는 줄 알았다. base_url을 비우고서야 확인됐다.","tags":["무인 실행 설계","비용 감각"],"situation":"프로필 4개(scout/listener/judge/builder)를 만들고 칸반 카드를 하나 던졌다.","criterion":"기준 없이 시작함. '일단 되는지 보자'로 던졌다.","action":"칸반 카드 생성 → 즉시 blocked.","result":"HTTP 402 (DeepSeek). 3초. model.provider를 바꿔도 base_url이 DeepSeek을 가리키고 있었다.","wrong":"프로바이더만 바꾸면 되는 줄 알았다. base_url을 비우고서야 billing_base_url이 https://api.anthropic.com으로 바뀌었다."},{"id":"scene-2","number":2,"title":"게이트웨이를 네 개 켜야 하나","insight":"기준을 세 갈래로 미리 적으면 결과가 나왔을 때 해석이 필요 없다.","tags":["검증 규율"],"situation":"프로필 4개의 게이트웨이가 전부 stopped. 특정 프로필로 가려면 그 게이트웨이가 떠 있어야 하는지 몰랐다.","criterion":"scout state.db 새 행 = 라우팅됨, default에만 = default 처리, 없음 = 디스패처 미집행. 자기보고 불가.","action":"--assignee scout --workspace dir:~/work/research 카드.","result":"18초 만에 done. scout state.db에 새 행. default 최신 행은 33분 전. 게이트웨이 하나로 충분.","wrong":"없음. 공식 문서에 이미 있었다 (장면 4)."},{"id":"scene-3","number":3,"title":"막았다고 믿었는데 안 막고 있었다","insight":"free_only는 2순위 fallback만 막는다. 누수를 전혀 막고 있지 않았다.","tags":["비용 감각","검증 규율","문서보다 실행 흔적","자기 오류 교정"],"situation":"auxiliary.free_only: true가 있었고, 배경 작업이 저가로 묶인다고 이해했다.","criterion":"메인과 다른 모델을 박고 보조 호출 한 번. 나간 모델로 판단. 근거는 실행 흔적만.","action":"카나리아 — haiku 프로필에서 profile_describer를 sonnet으로 박고 describe.","result":"1순위는 메인 모델. free_only는 2순위 OpenRouter만 막는다. 누수 전혀 막고 있지 않았다.","wrong":"셋: (1) DB에 기록 안 됨 — 로그가 관측점. (2) '비용 추적 이미 있다' 단정. (3) delegation을 슬롯으로 오해. CLI 경고가 맞았다."},{"id":"scene-4","number":4,"title":"반나절이 재발명이었다","insight":"문서를 먼저 읽었으면 장면 2와 3의 절반은 안 해도 됐다.","tags":["문서보다 실행 흔적","무인 실행 설계","자기 오류 교정"],"situation":"위 세 장면을 다 끝낸 뒤에야 공식 문서를 열었다.","criterion":"확인한 것 하나하나가 문서에 있었는지 대조.","action":"configuration과 kanban 문서를 읽고 항목별 대조.","result":"장면 3 핵심이 한 문장으로 있었다. 장면 2도. scratch 워크스페이스가 삭제된다는 것은 문서에서만 얻었다.","wrong":"순서. 문서를 먼저 읽었으면 장면 2와 3의 절반은 안 해도 됐다."}]}]}]};
+
+const state = { data: null, projectId: null, activeTags: new Set() };
+
+async function init() {
+  try {
+    const r = await fetch('./data.json');
+    if (r.ok) state.data = await r.json();
+    else throw new Error();
+  } catch { state.data = EMBEDDED; }
+  state.projectId = state.data.projects[0].id;
+  renderHeader();
+  renderFeed();
+}
+
+function renderHeader() {
+  const { data, projectId, activeTags } = state;
+  const pl = document.getElementById('project-list');
+  pl.innerHTML = data.projects.map(p => `
+    <div class="project-tab ${p.id === projectId ? 'active' : ''}"
+         onclick="selectProject('${p.id}')">${p.name}</div>`).join('');
+
+  const fs = document.getElementById('filter-section');
+  let html = '';
+  for (const [cat, tags] of Object.entries(data.tagCategories)) {
+    html += `<span class="filter-label">${cat}</span>`;
+    html += tags.map(t => `
+      <span class="tag-chip ${activeTags.has(t) ? 'active' : ''}"
+            onclick="toggleTag('${t}')">${t}</span>`).join('');
+    html += '<span style="width:6px;display:inline-block"></span>';
+  }
+  if (activeTags.size) {
+    html += `<span class="filter-reset" onclick="clearFilter()">초기화</span>`;
+  }
+  fs.innerHTML = html;
+}
+
+function renderFeed() {
+  const { data, projectId, activeTags } = state;
+  const project = data.projects.find(p => p.id === projectId);
+  const main = document.getElementById('main-feed');
+  main.innerHTML = '';
+
+  for (const entry of project.entries) {
+    const scenes = activeTags.size
+      ? entry.scenes.filter(s => s.tags.some(t => activeTags.has(t)))
+      : entry.scenes;
+
+    const section = document.createElement('div');
+    section.className = 'entry-section';
+    const meta = `<div class="entry-meta">
+      <span class="entry-date">${entry.date}</span>
+      <span class="entry-title">${entry.title}</span>
+    </div>`;
+
+    if (!scenes.length) {
+      section.innerHTML = meta + `<div class="empty-state">
+        <div style="font-size:12px;color:#aaa">이 태그에 해당하는 장면이 없습니다</div>
+        <button class="empty-btn" onclick="clearFilter()">필터 초기화</button>
+      </div>`;
+    } else {
+      const cards = scenes.map(s => cardHTML(s, entry)).join('');
+      section.innerHTML = meta + `<div class="cards-row">${cards}</div>`;
+    }
+    main.appendChild(section);
+  }
+}
+
+function cardHTML(scene, entry) {
+  const tags = scene.tags.map(t => `<span class="cf-tag">${t}</span>`).join('');
+  const id = `card-${scene.id}`;
+  return `<div class="card-wrap" id="${id}" onclick="flipCard('${id}')">
+    <div class="card-inner">
+      <div class="card-face">
+        <div class="cf-header">
+          <div class="cf-scene-num">장면 ${scene.number}</div>
+          <div class="cf-title">${esc(scene.title)}</div>
+        </div>
+        <div class="cf-row">
+          <div class="cf-row-label">상황</div>
+          <div class="cf-row-text">${esc(scene.situation)}</div>
+        </div>
+        <div class="cf-row">
+          <div class="cf-row-label">결과</div>
+          <div class="cf-row-text">${esc(scene.result)}</div>
+        </div>
+        <div class="cf-row row-wrong">
+          <div class="cf-row-label">틀린 것</div>
+          <div class="cf-row-text">${esc(scene.wrong)}</div>
+        </div>
+        <div class="cf-footer">${tags}</div>
+      </div>
+      <div class="card-face card-back">
+        <div class="cb-header"><span>${esc(scene.title)}</span><span class="cb-flip-hint">↻ 앞으로</span></div>
+        <div class="cb-field">
+          <div class="cb-label">판단 기준</div>
+          <div class="cb-value highlight">${esc(scene.criterion)}</div>
+        </div>
+        <div class="cb-field">
+          <div class="cb-label">한 것</div>
+          <div class="cb-value">${esc(scene.action)}</div>
+        </div>
+        <div class="cb-field">
+          <div class="cb-label">인사이트</div>
+          <div class="cb-value">${esc(scene.insight)}</div>
+        </div>
+        <div class="cb-source">${entry.source}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function flipCard(id) { document.getElementById(id).classList.toggle('flipped'); }
+function selectProject(id) { state.projectId = id; renderHeader(); renderFeed(); }
+function toggleTag(t) {
+  if (state.activeTags.has(t)) state.activeTags.delete(t);
+  else state.activeTags.add(t);
+  renderHeader(); renderFeed();
+}
+function clearFilter() { state.activeTags.clear(); renderHeader(); renderFeed(); }
+
+init();
+</script>
+</body>
+</html>

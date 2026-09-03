@@ -1,0 +1,467 @@
+<!--
+변형 A: "인사이트 우선"
+가설: 카드 앞면의 80%가 핵심 인사이트 한 문장이어야 한다.
+      빌더가 피드를 훑을 때 "이게 내 문제인가?" 한 줄로 판단한다.
+      나머지 맥락(기준·상황·결과)은 판단 이후에 꺼낸다.
+-->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>빌더스 다이어리 — A: 인사이트 우선</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #0e0e0e;
+  --surface: #181818;
+  --surface2: #222;
+  --border: #2a2a2a;
+  --text: #f0f0f0;
+  --text2: #888;
+  --text3: #555;
+  --accent: #4ade80;
+  --tag-bg: #1e1e1e;
+  --tag-active-bg: #2a3a2a;
+  --tag-active-text: #4ade80;
+  --card-w: 248px;
+  --card-h: 340px;
+  --header-h: 56px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Header ── */
+header {
+  height: var(--header-h);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  flex-shrink: 0;
+  background: var(--bg);
+}
+
+.brand {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text2);
+  white-space: nowrap;
+}
+
+.project-tab {
+  font-size: 12px;
+  color: var(--text);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.project-tab.active { border-color: var(--accent); color: var(--accent); }
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.filter-label {
+  font-size: 10px;
+  color: var(--text3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.tag-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 3px;
+  background: var(--tag-bg);
+  color: var(--text2);
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.tag-chip:hover { border-color: var(--border); color: var(--text); }
+.tag-chip.active { background: var(--tag-active-bg); color: var(--tag-active-text); border-color: #2a4a2a; }
+
+.filter-reset {
+  font-size: 11px;
+  color: var(--text3);
+  cursor: pointer;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+.filter-reset:hover { color: var(--text2); border-color: var(--border); }
+.filter-reset.hidden { display: none; }
+
+.sep { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+
+/* ── Main feed ── */
+main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.entry-section {
+  padding: 20px 24px 12px;
+  flex-shrink: 0;
+}
+.entry-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.entry-date { font-size: 11px; color: var(--text3); font-variant-numeric: tabular-nums; }
+.entry-title {
+  font-size: 12px;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 480px;
+}
+.entry-title:hover { color: var(--text); cursor: pointer; }
+
+.cards-row {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 24px;
+  padding-right: 24px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.cards-row::-webkit-scrollbar { height: 3px; }
+.cards-row::-webkit-scrollbar-track { background: transparent; }
+.cards-row::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Card flip ── */
+.card-wrap {
+  flex-shrink: 0;
+  width: var(--card-w);
+  height: var(--card-h);
+  perspective: 1200px;
+  scroll-snap-align: start;
+  cursor: pointer;
+}
+
+.card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.card-wrap.flipped .card-inner { transform: rotateY(180deg); }
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+  overflow-y: auto;
+}
+.card-back::-webkit-scrollbar { width: 3px; }
+.card-back::-webkit-scrollbar-thumb { background: var(--border); }
+
+/* ── Card front ── */
+.cf-scene-label {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 14px 16px 0;
+  letter-spacing: 0.06em;
+}
+
+.cf-insight {
+  flex: 1;
+  padding: 12px 16px 10px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+}
+
+.cf-tags {
+  padding: 0 16px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.cf-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 2px;
+  background: var(--tag-bg);
+  color: var(--text3);
+  border: 1px solid var(--border);
+}
+
+/* ── Card back ── */
+.cb-header {
+  font-size: 10px;
+  color: var(--text3);
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.cb-flip-hint { font-size: 10px; color: var(--text3); }
+
+.cb-field {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.cb-field:last-child { border-bottom: none; }
+.cb-label {
+  font-size: 9px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}
+.cb-value {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+.cb-value.highlight { color: var(--text); }
+.cb-value.wrong { color: #f87171; }
+
+.cb-source {
+  padding: 10px 16px;
+  font-size: 10px;
+  color: var(--text3);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  word-break: break-all;
+  flex-shrink: 0;
+}
+
+/* ── Empty state ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 60px 24px;
+  color: var(--text3);
+}
+.empty-state-icon { font-size: 28px; opacity: 0.4; }
+.empty-state-msg { font-size: 13px; }
+.empty-state-btn {
+  font-size: 11px;
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  color: var(--text2);
+  cursor: pointer;
+}
+.empty-state-btn:hover { border-color: var(--text3); color: var(--text); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">빌더스 다이어리</div>
+  <div class="sep"></div>
+  <div id="project-list" style="display:flex;gap:6px;"></div>
+  <div class="sep"></div>
+  <div id="filter-section" style="display:flex;align-items:center;gap:12px;flex:1;overflow:hidden;"></div>
+</header>
+
+<main id="main-feed"></main>
+
+<script>
+// 데이터는 fetch('./data.json')으로 로드. file:// 환경에서는 아래 내장 데이터가 폴백.
+const EMBEDDED = {"version":"1.0","tagCategories":{"마인드셋":["비용 감각","검증 규율","무인 실행 설계","자기 오류 교정"],"도구":["문서보다 실행 흔적","claude code","end-to-end"]},"projects":[{"id":"hermes-agent-team","name":"Hermes Agent Team","description":"밤에 사람 없이 도는 에이전트 팀","entries":[{"id":"2026-08-29-hermes-night-team","title":"밤에 사람 없이 도는 에이전트 팀 세팅하기","date":"2026-08-29","duration":"이틀 (8/28~8/29)","tags":["비용 감각","검증 규율","문서보다 실행 흔적","무인 실행 설계","자기 오류 교정"],"problem":"낮에 설계하고 밤에 에이전트가 돌고 아침에 판단하는 구조를 만들려고 했다. Hermes Agent의 칸반과 프로필을 쓰면 될 것 같았다. 문제는 이게 남의 도구라는 것이다.","takeaways":["프로바이더를 바꾸면 base_url을 반드시 비운다. 확인은 설정이 아니라 billing_base_url로.","문서를 먼저 읽어 범위를 좁히고, 돈이 걸리거나 되돌릴 수 없는 지점만 측정한다.","문자열 grep으로 설정 키를 단정하지 않는다. 스키마 블록 안인지 라인 번호로 확인한다.","측정 지점을 고를 때, 그 지점이 기록을 남긴다는 것 자체를 먼저 확인한다.","밤에 도는 카드는 --workspace dir:<절대경로>를 강제한다."],"source":"entries/2026-08-29-hermes-night-team.md","scenes":[{"id":"scene-1","number":1,"title":"첫 카드가 3초 만에 죽었다","insight":"프로바이더만 바꾸면 되는 줄 알았다. base_url을 비우고서야 확인됐다.","tags":["무인 실행 설계","비용 감각"],"situation":"프로필 4개(scout/listener/judge/builder)를 만들고 칸반 카드를 하나 던졌다.","criterion":"기준 없이 시작함. '일단 되는지 보자'로 던졌다.","action":"칸반 카드 생성 → 즉시 blocked.","result":"HTTP 402 Insufficient Balance (DeepSeek). 3초 만에 죽었다. model.provider를 anthropic으로 바꾼 뒤에도 model.base_url이 DeepSeek을 가리키고 있었다.","wrong":"프로바이더만 바꾸면 되는 줄 알았다. base_url을 비우고서야 billing_base_url이 https://api.anthropic.com으로 바뀌었다."},{"id":"scene-2","number":2,"title":"게이트웨이를 네 개 켜야 하나","insight":"기준을 세 갈래로 미리 적으면 결과가 나왔을 때 해석이 필요 없다.","tags":["검증 규율"],"situation":"프로필 4개의 게이트웨이가 전부 stopped. 카드가 특정 프로필로 가려면 그 프로필의 게이트웨이가 떠 있어야 하는지 몰랐다.","criterion":"던지기 전에 세 갈래를 미리 적었다. scout state.db에 행이 생기면 라우팅된 것, default에만 생기면 default가 처리한 것, 없으면 디스패처가 안 집는 것. 자기보고는 근거 불가.","action":"--assignee scout --workspace dir:~/work/research 카드 하나.","result":"18초 만에 done. profiles/scout/state.db에 새 행, default 쪽 최신 행은 33분 전. 게이트웨이 하나가 디스패처를 돌리고 지정 프로필 워커를 띄운다.","wrong":"없음. 다만 공식 문서에 이미 적혀 있었다 (장면 4)."},{"id":"scene-3","number":3,"title":"막았다고 믿었는데 안 막고 있었다","insight":"free_only는 2순위 fallback만 막는다. 누수를 전혀 막고 있지 않았다.","tags":["비용 감각","검증 규율","문서보다 실행 흔적","자기 오류 교정"],"situation":"auxiliary.free_only: true가 있었고, 이름을 보고 배경 작업은 저가로 묶인다고 이해했다.","criterion":"메인과 다른 모델을 슬롯에 박고 보조 호출을 한 번. 나간 모델로 판단. 근거는 실행 흔적만.","action":"카나리아 — haiku 프로필에서 profile_describer를 sonnet으로 박고 hermes profile describe.","result":"free_only는 2순위 OpenRouter만 막는다. 1순위는 메인 모델 그대로. 누수를 전혀 막고 있지 않았다.","wrong":"셋. (1) 측정 지점이 DB였는데 profile_describer는 로그에만 기록됨. (2) '비용 추적 이미 있다' 단정. (3) auxiliary.delegation을 슬롯으로 오해. CLI 경고가 맞았다."},{"id":"scene-4","number":4,"title":"반나절이 재발명이었다","insight":"문서를 먼저 읽었으면 장면 2와 3의 절반은 안 해도 됐다.","tags":["문서보다 실행 흔적","무인 실행 설계","자기 오류 교정"],"situation":"위 세 장면을 다 끝낸 뒤에야 공식 문서를 열었다.","criterion":"확인한 것 하나하나가 문서에 있었는지 대조한다.","action":"docs/user-guide/configuration과 features/kanban을 읽고 항목별 대조.","result":"장면 3 핵심이 한 문장으로 있었다. 장면 2도. 단, 문서가 틀린 곳도 있었다. scratch 워크스페이스가 완료 시 삭제된다는 것은 문서에서만 얻었다.","wrong":"순서. 문서를 먼저 읽었으면 장면 2와 3의 절반은 안 해도 됐다."}]}]}]};
+
+const state = { data: null, projectId: null, activeTags: new Set() };
+
+async function init() {
+  try {
+    const r = await fetch('./data.json');
+    if (r.ok) state.data = await r.json();
+    else throw new Error();
+  } catch { state.data = EMBEDDED; }
+  state.projectId = state.data.projects[0].id;
+  renderHeader();
+  renderFeed();
+}
+
+function renderHeader() {
+  const { data, projectId, activeTags } = state;
+
+  // Projects
+  const pl = document.getElementById('project-list');
+  pl.innerHTML = data.projects.map(p => `
+    <div class="project-tab ${p.id === projectId ? 'active' : ''}"
+         onclick="selectProject('${p.id}')">${p.name}</div>`).join('');
+
+  // Tag filter
+  const fs = document.getElementById('filter-section');
+  const cats = data.tagCategories;
+  let html = '';
+  for (const [cat, tags] of Object.entries(cats)) {
+    html += `<span class="filter-label">${cat}</span>`;
+    html += tags.map(t => `
+      <span class="tag-chip ${activeTags.has(t) ? 'active' : ''}"
+            onclick="toggleTag('${t}')">${t}</span>`).join('');
+    html += '<span style="width:8px;display:inline-block"></span>';
+  }
+  html += `<span class="filter-reset ${activeTags.size ? '' : 'hidden'}"
+               onclick="clearFilter()">초기화</span>`;
+  fs.innerHTML = html;
+}
+
+function renderFeed() {
+  const { data, projectId, activeTags } = state;
+  const project = data.projects.find(p => p.id === projectId);
+  const main = document.getElementById('main-feed');
+  main.innerHTML = '';
+
+  if (!project.entries.length) {
+    main.innerHTML = emptyHTML('아직 기록이 없습니다', '첫 편을 추가하면 여기에 나타납니다');
+    return;
+  }
+
+  for (const entry of project.entries) {
+    const scenes = activeTags.size
+      ? entry.scenes.filter(s => s.tags.some(t => activeTags.has(t)))
+      : entry.scenes;
+
+    const section = document.createElement('div');
+    section.className = 'entry-section';
+
+    const meta = `
+      <div class="entry-meta">
+        <span class="entry-date">${entry.date}</span>
+        <span class="entry-title" title="${entry.title}">${entry.title}</span>
+      </div>`;
+
+    if (!scenes.length) {
+      section.innerHTML = meta + emptyHTML('이 태그에 해당하는 장면이 없습니다', null, true);
+    } else {
+      const cards = scenes.map(s => cardHTML(s, entry)).join('');
+      section.innerHTML = meta + `<div class="cards-row">${cards}</div>`;
+    }
+
+    main.appendChild(section);
+  }
+}
+
+function cardHTML(scene, entry) {
+  const tags = scene.tags.map(t =>
+    `<span class="cf-tag">${t}</span>`).join('');
+  const id = `card-${scene.id}`;
+  return `
+    <div class="card-wrap" id="${id}" onclick="flipCard('${id}')">
+      <div class="card-inner">
+        <div class="card-face">
+          <div class="cf-scene-label">장면 ${scene.number}</div>
+          <div class="cf-insight">${esc(scene.insight)}</div>
+          <div class="cf-tags">${tags}</div>
+        </div>
+        <div class="card-face card-back">
+          <div class="cb-header">
+            <span>${esc(scene.title)}</span>
+            <span class="cb-flip-hint">↻ 앞으로</span>
+          </div>
+          <div class="cb-field">
+            <div class="cb-label">판단 기준</div>
+            <div class="cb-value highlight">${esc(scene.criterion)}</div>
+          </div>
+          <div class="cb-field">
+            <div class="cb-label">상황</div>
+            <div class="cb-value">${esc(scene.situation)}</div>
+          </div>
+          <div class="cb-field">
+            <div class="cb-label">한 것</div>
+            <div class="cb-value">${esc(scene.action)}</div>
+          </div>
+          <div class="cb-field">
+            <div class="cb-label">결과</div>
+            <div class="cb-value">${esc(scene.result)}</div>
+          </div>
+          <div class="cb-field">
+            <div class="cb-label">틀린 것</div>
+            <div class="cb-value wrong">${esc(scene.wrong)}</div>
+          </div>
+          <div class="cb-source">${entry.source}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function emptyHTML(msg, sub, inline) {
+  const container = inline
+    ? 'style="display:flex;flex-direction:column;align-items:center;padding:40px 24px;gap:8px;"'
+    : 'class="empty-state"';
+  return `<div ${container}>
+    <div class="empty-state-icon">◌</div>
+    <div class="empty-state-msg" style="color:#555;font-size:12px">${msg}</div>
+    ${sub ? `<div style="color:#444;font-size:11px">${sub}</div>` : ''}
+    ${state.activeTags.size ? `<button class="empty-state-btn" onclick="clearFilter()">필터 초기화</button>` : ''}
+  </div>`;
+}
+
+function esc(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function flipCard(id) {
+  document.getElementById(id).classList.toggle('flipped');
+}
+function selectProject(id) {
+  state.projectId = id;
+  renderHeader();
+  renderFeed();
+}
+function toggleTag(tag) {
+  if (state.activeTags.has(tag)) state.activeTags.delete(tag);
+  else state.activeTags.add(tag);
+  renderHeader();
+  renderFeed();
+}
+function clearFilter() {
+  state.activeTags.clear();
+  renderHeader();
+  renderFeed();
+}
+
+init();
+</script>
+</body>
+</html>

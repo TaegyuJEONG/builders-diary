@@ -1,0 +1,82 @@
+{
+  "version": "1.0",
+  "tagCategories": {
+    "마인드셋": ["비용 감각", "검증 규율", "무인 실행 설계", "자기 오류 교정"],
+    "도구": ["문서보다 실행 흔적", "claude code", "end-to-end"]
+  },
+  "projects": [
+    {
+      "id": "hermes-agent-team",
+      "name": "Hermes Agent Team",
+      "description": "밤에 사람 없이 도는 에이전트 팀",
+      "entries": [
+        {
+          "id": "2026-08-29-hermes-night-team",
+          "title": "밤에 사람 없이 도는 에이전트 팀 세팅하기",
+          "date": "2026-08-29",
+          "duration": "이틀 (8/28~8/29)",
+          "tags": ["비용 감각", "검증 규율", "문서보다 실행 흔적", "무인 실행 설계", "자기 오류 교정"],
+          "problem": "낮에 설계하고 밤에 에이전트가 돌고 아침에 판단하는 구조를 만들려고 했다. Hermes Agent의 칸반과 프로필을 쓰면 될 것 같았다. 문제는 이게 남의 도구라는 것이다. 설정 키 하나를 잘못 이해하면 밤새 비싼 모델이 조용히 돌고, 아침에 결과물이 사라져 있고, 그걸 알아챌 방법이 없다.",
+          "takeaways": [
+            "프로바이더를 바꾸면 base_url을 반드시 비운다. 확인은 설정이 아니라 billing_base_url로.",
+            "문서를 먼저 읽어 범위를 좁히고, 돈이 걸리거나 되돌릴 수 없는 지점만 측정한다.",
+            "문자열 grep으로 설정 키를 단정하지 않는다. 스키마 블록 안인지 라인 번호로 확인한다.",
+            "측정 지점을 고를 때, 그 지점이 기록을 남긴다는 것 자체를 먼저 확인한다. 0건이 '없다'인지 '안 잡힌다'인지 구분되지 않으면 그 측정은 무효다.",
+            "밤에 도는 카드는 --workspace dir:<절대경로>를 강제한다. 기본값(scratch)은 완료 시 결과를 지운다."
+          ],
+          "source": "entries/2026-08-29-hermes-night-team.md",
+          "scenes": [
+            {
+              "id": "scene-1",
+              "number": 1,
+              "title": "첫 카드가 3초 만에 죽었다",
+              "insight": "프로바이더만 바꾸면 되는 줄 알았다. base_url을 비우고서야 확인됐다.",
+              "tags": ["무인 실행 설계", "비용 감각"],
+              "situation": "프로필 4개(scout/listener/judge/builder)를 만들고 칸반 카드를 하나 던졌다.",
+              "criterion": "기준 없이 시작함. '일단 되는지 보자'로 던졌다.",
+              "action": "칸반 카드 생성 → 즉시 blocked.",
+              "result": "HTTP 402 Insufficient Balance (DeepSeek). 3초 만에 죽었다. model.provider를 anthropic으로 바꾼 뒤에도 model.base_url이 DeepSeek을 가리키고 있었다. Anthropic 모델명을 DeepSeek 엔드포인트로 쏘고 있었던 것.",
+              "wrong": "프로바이더만 바꾸면 되는 줄 알았다. base_url을 비우고서야 state.db의 billing_base_url이 https://api.anthropic.com으로 바뀌었다."
+            },
+            {
+              "id": "scene-2",
+              "number": 2,
+              "title": "게이트웨이를 네 개 켜야 하나",
+              "insight": "기준을 세 갈래로 미리 적으면 결과가 나왔을 때 해석이 필요 없다.",
+              "tags": ["검증 규율"],
+              "situation": "프로필 4개의 게이트웨이가 전부 stopped. 카드가 특정 프로필로 가려면 그 프로필의 게이트웨이가 떠 있어야 하는지 몰랐다.",
+              "criterion": "던지기 전에 세 갈래를 미리 적었다. scout 전용 state.db에 세션 행이 생기면 라우팅된 것, default 것에만 생기면 default가 처리한 것, 아무 데도 없으면 디스패처가 안 집는 것. 모델의 자기보고는 근거로 치지 않기로 했다.",
+              "action": "--assignee scout --workspace dir:~/work/research 카드 하나.",
+              "result": "18초 만에 done. 결과 파일의 pwd가 ~/work/research, profiles/scout/state.db에 새 행, default 쪽 최신 행은 33분 전 것 그대로. 게이트웨이 하나가 디스패처를 돌리고 지정된 프로필의 워커를 띄운다.",
+              "wrong": "없음. 다만 이건 공식 문서에 이미 적혀 있었다 (장면 4)."
+            },
+            {
+              "id": "scene-3",
+              "number": 3,
+              "title": "막았다고 믿었는데 안 막고 있었다",
+              "insight": "free_only는 2순위 fallback만 막는다. 누수를 전혀 막고 있지 않았다.",
+              "tags": ["비용 감각", "검증 규율", "문서보다 실행 흔적", "자기 오류 교정"],
+              "situation": "judge/builder의 메인 모델을 sonnet으로 올렸다. auxiliary.free_only: true가 있었고, 이름을 보고 배경 작업은 저가로 묶인다고 이해했다.",
+              "criterion": "메인과 다른 모델을 슬롯에 박고 보조 호출을 한 번 태운다. 나간 모델이 박은 값이면 오버라이드가 먹는 것, 메인이면 무시된 것, 호출 자체가 없으면 free_only가 스킵한 것. 근거는 실행 흔적만.",
+              "action": "소스 확인 후 카나리아 — 메인이 haiku인 프로필에서 auxiliary.profile_describer.model = claude-sonnet-4-6으로 박고 hermes profile describe auxtest --auto.",
+              "result": "agent/auxiliary_client.py 해결 순서 1번이 User's main provider + main model이었다. free_only는 주석에 'restricts the step-2 fallback' — 2순위 OpenRouter만 막는다. 누수를 전혀 막고 있지 않았다.",
+              "wrong": "셋. (1) 측정 지점을 state.db로 잡았는데 profile_describer는 거기 기록되지 않는다 — 관측 지점은 로그였다. (2) '비용 추적은 이미 그 테이블에 있다'고 단정해 문서에 써넣었다가 되돌렸다. (3) auxiliary.delegation을 슬롯으로 믿고 설정에 박았다. CLI가 경고했고 그 경고가 맞았다."
+            },
+            {
+              "id": "scene-4",
+              "number": 4,
+              "title": "반나절이 재발명이었다",
+              "insight": "문서를 먼저 읽었으면 장면 2와 3의 절반은 안 해도 됐다.",
+              "tags": ["문서보다 실행 흔적", "무인 실행 설계", "자기 오류 교정"],
+              "situation": "위 세 장면을 다 끝낸 뒤에야 공식 문서를 열었다.",
+              "criterion": "확인한 것 하나하나가 문서에 있었는지 대조한다.",
+              "action": "docs/user-guide/configuration과 features/kanban을 읽고 항목별 대조.",
+              "result": "'By default, auxiliary tasks route to your main chat model' — 장면 3의 핵심이 한 문장으로 있었다. 보조 슬롯 10개 목록도, 'Only one gateway needs to run the dispatcher'(장면 2)도 있었다. 단, 문서가 틀린 곳도 있었다. 기본 워크스페이스 scratch는 완료 시 삭제된다는 것은 문서에서만 얻었다.",
+              "wrong": "순서. 문서를 먼저 읽었으면 장면 2와 3의 절반은 안 해도 됐다."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
