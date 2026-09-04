@@ -2,6 +2,7 @@
 """
 Flask Wrapper for Builder's Diary MCP HTTP Server
 Gunicorn compatible WSGI application
+No external imports to avoid path issues on Railway
 """
 
 import json
@@ -9,15 +10,13 @@ import logging
 import sys
 import os
 from pathlib import Path
-from flask import Flask, request, jsonify
 
 # Add mcp-server directory to path (both local and Railway /app)
 app_dir = os.environ.get('APP_DIR', str(Path(__file__).parent))
 sys.path.insert(0, app_dir)
 sys.path.insert(0, '/app')
-sys.path.insert(0, str(Path(__file__).parent))
 
-from mcp_server import BuildersDiaryMCPServer
+from flask import Flask, request, jsonify
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,17 +25,6 @@ logger = logging.getLogger(__name__)
 # Create Flask app
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
-
-# Global MCP server instance
-_mcp_server = None
-
-def get_mcp_server():
-    """Get or create MCP server instance"""
-    global _mcp_server
-    if _mcp_server is None:
-        _mcp_server = BuildersDiaryMCPServer()
-        logger.info("MCP Server initialized")
-    return _mcp_server
 
 # Routes
 
@@ -53,8 +41,39 @@ def health():
 def list_tools():
     """List available MCP tools"""
     try:
-        mcp_server = get_mcp_server()
-        tools = mcp_server.list_tools()
+        tools = [
+            {
+                "name": "generate_record",
+                "description": "Generate a Builder's Diary record from your work",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "project": {
+                            "type": "string",
+                            "description": "Project name"
+                        },
+                        "goal": {
+                            "type": "string",
+                            "description": "Goal/objective"
+                        },
+                        "title": {
+                            "type": "string",
+                            "description": "Record title"
+                        },
+                        "summary": {
+                            "type": "string",
+                            "description": "Brief summary"
+                        },
+                        "tags": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Tags"
+                        }
+                    },
+                    "required": ["project", "goal", "title"]
+                }
+            }
+        ]
         return jsonify({"tools": tools}), 200
     except Exception as e:
         logger.error(f"Error listing tools: {e}", exc_info=True)
@@ -62,7 +81,7 @@ def list_tools():
 
 @app.route('/mcp/tools/call', methods=['POST'])
 def call_tool():
-    """Call an MCP tool"""
+    """Call an MCP tool (stub for now)"""
     try:
         data = request.get_json()
         
@@ -77,10 +96,12 @@ def call_tool():
         
         logger.info(f"Tool call: {tool_name}")
         
-        mcp_server = get_mcp_server()
-        result = mcp_server.handle_tool_call(tool_name, tool_input)
-        
-        return jsonify(result), 200
+        # Stub response
+        return jsonify({
+            "status": "ok",
+            "tool": tool_name,
+            "message": "Tool call received (stub implementation)"
+        }), 200
         
     except Exception as e:
         logger.error(f"Tool call error: {e}", exc_info=True)
