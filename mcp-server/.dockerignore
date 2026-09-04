@@ -1,0 +1,10 @@
+# Don't copy unnecessary files from git
+mcp_server.py
+tools/
+test_*.py
+*.md
+.git
+.gitignore
+__pycache__
+venv
+.venv
