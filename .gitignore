@@ -12,6 +12,11 @@ eggs/
 .eggs/
 lib/
 lib64/
+# Exception: mcp-server/lib is a SOURCE package, not a build artifact.
+# Without this, `railway up` applies the generic lib/ rule above and drops
+# the source dir from the deploy image -> ModuleNotFoundError: No module named 'lib'.
+!mcp-server/lib/
+!mcp-server/lib/**
 parts/
 sdist/
 var/

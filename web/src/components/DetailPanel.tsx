@@ -5,116 +5,146 @@ import { Record } from '@/lib/types';
 
 interface DetailPanelProps {
   record: Record | null;
+  onClose: () => void;
 }
 
-export function DetailPanel({ record }: DetailPanelProps) {
-  if (!record) {
-    return (
-      <div className="flex items-center justify-center h-full text-slate-400 p-8">
-        <div className="text-center">
-          <p className="text-lg font-medium">Select a record to view details</p>
-          <p className="text-sm mt-2">Click on any card to see more information</p>
-        </div>
-      </div>
-    );
-  }
+const STATUS_META: { [k: string]: { label: string; color: string } } = {
+  completed: { label: '완료', color: 'var(--status-completed)' },
+  in_progress: { label: '진행 중', color: 'var(--status-progress)' },
+  blocked: { label: '막힘', color: 'var(--status-blocked)' },
+};
 
-  const statusColors: { [key: string]: { bg: string; text: string } } = {
-    completed: { bg: 'bg-green-100', text: 'text-green-700' },
-    in_progress: { bg: 'bg-blue-100', text: 'text-blue-700' },
-    blocked: { bg: 'bg-red-100', text: 'text-red-700' }
-  };
+export function DetailPanel({ record, onClose }: DetailPanelProps) {
+  if (!record) return null;
 
-  const statusLabel = record.status || 'pending';
-  const statusColor = statusColors[statusLabel] || { bg: 'bg-slate-100', text: 'text-slate-700' };
+  const status = record.status ? STATUS_META[record.status] : null;
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-8 max-w-2xl">
-        {/* Header */}
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-slate-900 mb-3">{record.title}</h1>
-          
-          {/* Status Badge */}
-          {record.status && (
-            <div className={`inline-block ${statusColor.bg} ${statusColor.text} px-3 py-1 rounded-full text-sm font-semibold capitalize`}>
-              {statusLabel.replace('_', ' ')}
-            </div>
-          )}
-        </div>
-
-        {/* Meta Information */}
-        <div className="bg-slate-50 rounded-lg p-4 mb-6 space-y-3">
-          <div>
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Created</p>
-            <p className="text-sm text-slate-900 mt-1">
-              {new Date(record.created_at).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              })}
-            </p>
+    <div style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      background: 'var(--surface)',
+      borderLeft: '1px solid var(--border)',
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+        gap: 12, padding: '18px 20px 14px', borderBottom: '1px solid var(--border)', flexShrink: 0,
+      }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            {status && (
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                fontSize: 11, color: status.color,
+              }} className="mono">
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: status.color, display: 'inline-block' }} />
+                {status.label}
+              </span>
+            )}
+            <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>
+              {record.created_at}
+            </span>
           </div>
-          {record.updated_at && (
-            <div>
-              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Updated</p>
-              <p className="text-sm text-slate-900 mt-1">
-                {new Date(record.updated_at).toLocaleDateString('en-US', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric'
-                })}
-              </p>
-            </div>
-          )}
+          <h2 style={{ fontSize: 17, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4, margin: 0 }}>
+            {record.title}
+          </h2>
         </div>
+        <button
+          onClick={onClose}
+          aria-label="닫기"
+          style={{
+            flexShrink: 0, background: 'none', border: '1px solid var(--border)',
+            borderRadius: 4, color: 'var(--text2)', width: 28, height: 28,
+            fontSize: 16, lineHeight: 1, cursor: 'pointer',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--text)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)'; }}
+        >
+          ×
+        </button>
+      </div>
 
+      {/* Body */}
+      <div className="thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: '18px 20px' }}>
         {/* Summary */}
         {record.summary && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-3">Summary</h2>
-            <p className="text-slate-700 leading-relaxed">{record.summary}</p>
-          </div>
+          <Section label="요약">
+            <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
+              {record.summary}
+            </p>
+          </Section>
+        )}
+
+        {/* Content / 작업 상세 */}
+        {record.content && (
+          <Section label="작업 상세">
+            <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
+              {record.content}
+            </p>
+          </Section>
+        )}
+
+        {/* Result / 결과 */}
+        {record.result && (
+          <Section label="결과">
+            <div style={{
+              fontSize: 13,
+              color: 'var(--accent)',
+              lineHeight: 1.6,
+              background: 'var(--tag-active-bg)',
+              border: '1px solid var(--accent-dim)',
+              borderRadius: 4,
+              padding: '10px 12px',
+            }} className="mono">
+              {record.result}
+            </div>
+          </Section>
         )}
 
         {/* Tags */}
-        {record.tags && record.tags.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-3">Tags</h2>
-            <div className="flex flex-wrap gap-2">
-              {record.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="inline-block bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-sm font-medium"
-                >
+        {record.tags.length > 0 && (
+          <Section label="태그">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {record.tags.map(tag => (
+                <span key={tag} className="mono" style={{
+                  fontSize: 11, padding: '3px 8px', borderRadius: 3,
+                  background: 'var(--tag-bg)', color: 'var(--text2)', border: '1px solid var(--border)',
+                }}>
                   {tag}
                 </span>
               ))}
             </div>
-          </div>
+          </Section>
         )}
 
-        {/* Content */}
-        {record.content && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-slate-900 mb-3">Details</h2>
-            <div className="prose prose-sm max-w-none">
-              <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                {record.content.substring(0, 500)}
-                {record.content.length > 500 && '...'}
-              </div>
+        {/* File path */}
+        {record.file_path && (
+          <div style={{ marginTop: 20, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
+              경로
+            </div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', wordBreak: 'break-all' }}>
+              {record.file_path}
             </div>
           </div>
         )}
-
-        {/* File Path */}
-        {record.file_path && (
-          <div className="mt-8 pt-6 border-t border-slate-200">
-            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">File Path</p>
-            <p className="text-xs text-slate-500 mt-1 font-mono break-all">{record.file_path}</p>
-          </div>
-        )}
       </div>
+    </div>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom: 20 }}>
+      <div className="mono" style={{
+        fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase',
+        letterSpacing: '0.08em', marginBottom: 8,
+      }}>
+        {label}
+      </div>
+      {children}
     </div>
   );
 }

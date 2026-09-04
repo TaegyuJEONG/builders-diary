@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { Project, Goal } from '@/lib/types';
+import React, { useMemo } from 'react';
+import { Project } from '@/lib/types';
+import { SearchableSelect, SelectOption } from './SearchableSelect';
 
 interface FilterBarProps {
   projects: Project[];
   selectedProjectId: string | null;
   selectedGoalId: string | null;
   searchKeyword: string;
+  resultCount: number;
   onProjectChange: (projectId: string | null) => void;
   onGoalChange: (goalId: string | null) => void;
   onSearchChange: (keyword: string) => void;
@@ -18,90 +20,110 @@ export function FilterBar({
   selectedProjectId,
   selectedGoalId,
   searchKeyword,
+  resultCount,
   onProjectChange,
   onGoalChange,
-  onSearchChange
+  onSearchChange,
 }: FilterBarProps) {
   const selectedProject = projects.find(p => p.id === selectedProjectId);
   const goals = selectedProject?.goals || [];
 
-  const handleClear = () => {
-    onProjectChange(null);
-    onGoalChange(null);
-    onSearchChange('');
-  };
+  const projectOptions: SelectOption[] = useMemo(
+    () => projects.map(p => ({
+      value: p.id,
+      label: p.title,
+      count: p.goals.reduce((a, g) => a + g.records.length, 0),
+    })),
+    [projects]
+  );
 
-  const hasActiveFilters = selectedProjectId || selectedGoalId || searchKeyword;
+  const goalOptions: SelectOption[] = useMemo(
+    () => goals.map(g => ({ value: g.id, label: g.title, count: g.records.length })),
+    [goals]
+  );
 
   return (
-    <div className="bg-white border-b border-slate-200 p-4 space-y-4">
-      {/* Project Filter */}
-      <div>
-        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-          Project
-        </label>
-        <select
-          value={selectedProjectId || ''}
-          onChange={(e) => {
-            const newProjectId = e.target.value || null;
-            onProjectChange(newProjectId);
-            onGoalChange(null); // Reset goal when project changes
-          }}
-          className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50"
-        >
-          <option value="">All Projects</option>
-          {projects.map((project) => (
-            <option key={project.id} value={project.id}>
-              {project.title}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Goal Filter */}
-      {selectedProject && (
-        <div>
-          <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-            Goal
-          </label>
-          <select
-            value={selectedGoalId || ''}
-            onChange={(e) => onGoalChange(e.target.value || null)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50"
-          >
-            <option value="">All Goals</option>
-            {goals.map((goal) => (
-              <option key={goal.id} value={goal.id}>
-                {goal.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
-
-      {/* Keyword Search */}
-      <div>
-        <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-          Search
-        </label>
-        <input
-          type="text"
-          placeholder="Search records..."
-          value={searchKeyword}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50"
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 14,
+      padding: '12px 24px',
+      background: 'var(--bg)',
+      borderBottom: '1px solid var(--border)',
+      flexShrink: 0,
+    }}>
+      {/* Project */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          프로젝트
+        </span>
+        <SearchableSelect
+          options={projectOptions}
+          value={selectedProjectId}
+          onChange={(v) => { onProjectChange(v); onGoalChange(null); }}
+          placeholder="프로젝트 선택"
+          searchPlaceholder="프로젝트 검색…"
+          allOptionLabel="전체 프로젝트"
+          minWidth={200}
         />
       </div>
 
-      {/* Clear Filters Button */}
-      {hasActiveFilters && (
-        <button
-          onClick={handleClear}
-          className="w-full px-3 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-md transition-colors"
-        >
-          Clear Filters
-        </button>
-      )}
+      {/* Goal */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          목표
+        </span>
+        <SearchableSelect
+          options={goalOptions}
+          value={selectedGoalId}
+          onChange={onGoalChange}
+          placeholder={selectedProject ? '목표 선택' : '프로젝트 먼저'}
+          searchPlaceholder="목표 검색…"
+          allOptionLabel="전체 목표"
+          minWidth={200}
+          emptyText={selectedProject ? '목표 없음' : '프로젝트를 먼저 선택'}
+        />
+      </div>
+
+      {/* Keyword search */}
+      <div style={{ position: 'relative', flex: 1, maxWidth: 320 }}>
+        <input
+          type="text"
+          value={searchKeyword}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="작업 카드 검색…"
+          className="mono"
+          style={{
+            width: '100%',
+            padding: '7px 28px 7px 10px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 4,
+            color: 'var(--text)',
+            fontSize: 12,
+            outline: 'none',
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = 'var(--accent)'; }}
+          onBlur={e => { e.currentTarget.style.borderColor = 'var(--border)'; }}
+        />
+        {searchKeyword && (
+          <button
+            onClick={() => onSearchChange('')}
+            style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', color: 'var(--text3)', fontSize: 14, cursor: 'pointer',
+              lineHeight: 1, padding: 2,
+            }}
+          >
+            ×
+          </button>
+        )}
+      </div>
+
+      {/* Count */}
+      <span className="mono" style={{ fontSize: 11, color: 'var(--text3)', marginLeft: 'auto', flexShrink: 0 }}>
+        작업 {resultCount}개
+      </span>
     </div>
   );
 }

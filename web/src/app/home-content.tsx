@@ -1,354 +1,239 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Header } from '@/components/Header';
 import { FilterBar } from '@/components/FilterBar';
+import { GoalList } from '@/components/GoalList';
 import { CardScrollable } from '@/components/CardScrollable';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
-import { Portfolio, Project, Record, Goal } from '@/lib/types';
-import { selectFolder, scanFolderStructure, verifyFolderPermission, loadFolderHandleFromStorage, saveFolderHandleToStorage } from '@/lib/fileSystem';
-import { extractAllTags, filterByTags, findRecordById, findProjectBySlug, findGoalBySlug } from '@/lib/filter';
-import { parseDeepLink } from '@/utils/resumeLink';
-import { getCachedPortfolio, setCachedPortfolio } from '@/utils/cache';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
-import { mockPortfolioV2 } from '@/lib/mockData';
+import { Portfolio } from '@/lib/types';
+import {
+  selectFolder, scanFolderStructure, verifyFolderPermission,
+  loadFolderHandleFromStorage, saveFolderHandleToStorage,
+} from '@/lib/fileSystem';
+import {
+  convertMockToPortfolio, buildTagOptions,
+  scopedRecords, visibleCountByGoal, FilterState,
+} from '@/lib/portfolio';
 
-// Convert mockPortfolioV2 to Portfolio format (outside component for initial state)
-const convertMockToPortfolio = (): Portfolio => {
-  return {
-    path: '/mock',
-    projects: mockPortfolioV2.projects.map(proj => ({
-      id: proj.id,
-      slug: proj.id.replace(/^project-/, ''),
-      title: proj.title,
-      goals: proj.goals.map(goal => ({
-        id: goal.id,
-        slug: goal.id.replace(/^goal-/, ''),
-        title: goal.title,
-        records: goal.cards.map(card => ({
-          id: card.id,
-          title: card.title,
-          summary: card.summary,
-          tags: card.tags,
-          created_at: card.created_at,
-          status: card.status,
-          content: card.summary,
-          file_path: `/mock/${proj.id}/${goal.id}/${card.id}`
-        }))
-      }))
-    }))
-  };
-};
-
-// Initialize with mock portfolio data so it shows immediately
-const initialPortfolio = convertMockToPortfolio();
+const CONNECTED_KEY = 'builders-diary-connected';
 
 export function HomeContent() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  
-  const [portfolio, setPortfolio] = useState<Portfolio>(initialPortfolio);
+  const [connected, setConnected] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // selection
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [searchKeyword, setSearchKeyword] = useState<string>('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [hasFolder, setHasFolder] = useState(false);
 
-  // Initialize portfolio on mount
+  // filters
+  const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
+  const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const [searchKeyword, setSearchKeyword] = useState('');
+
+  // Restore "connected" state on mount (prototype: mock data)
   useEffect(() => {
-    const initialize = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Use mockData as default/fallback portfolio
-        const mockPortfolio = convertMockToPortfolio();
-        setPortfolio(mockPortfolio);
-        setHasFolder(true);
-        
-        // Try to load cached portfolio first
-        const cached = getCachedPortfolio();
-        if (cached) {
-          setPortfolio(cached);
-          setHasFolder(true);
-
-          // Try to load folder handle for refresh capability
-          const handle = await loadFolderHandleFromStorage();
-          if (handle) {
-            await verifyFolderPermission(handle);
-          }
-
-          // Handle deep links
-          handleDeepLink(cached);
-          return;
-        }
-
-        // Try to restore folder from storage
-        const handle = await loadFolderHandleFromStorage();
-        if (handle) {
-          const hasPermission = await verifyFolderPermission(handle);
-          if (hasPermission) {
-            const data = await scanFolderStructure(handle);
-            setPortfolio(data);
-            setCachedPortfolio(data);
-            setHasFolder(true);
-
-            // Handle deep links
-            handleDeepLink(data);
-            return;
-          }
-        }
-
-        // Fallback to mock data
-        handleDeepLink(mockPortfolio);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load portfolio';
-        console.error('Portfolio load error:', err);
-        // Still show mock data on error
-        const mockPortfolio = convertMockToPortfolio();
-        setPortfolio(mockPortfolio);
-        setHasFolder(true);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    initialize();
+    const forceDemo = typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('demo') === '1';
+    const wasConnected = typeof window !== 'undefined'
+      && localStorage.getItem(CONNECTED_KEY) === '1';
+    if (forceDemo || wasConnected) {
+      const data = convertMockToPortfolio();
+      setPortfolio(data);
+      setConnected(true);
+      initSelection(data);
+    }
+    setHydrated(true);
   }, []);
 
-  // Initialize project and goal selection when portfolio loads
-  useEffect(() => {
-    if (portfolio && portfolio.projects.length > 0) {
-      // Only set if not already set
-      if (!selectedProjectId) {
-        const firstProjectId = portfolio.projects[0].id;
-        setSelectedProjectId(firstProjectId);
-        // Also set the first goal of the first project
-        if (portfolio.projects[0].goals.length > 0 && !selectedGoalId) {
-          const firstGoalId = portfolio.projects[0].goals[0].id;
-          setSelectedGoalId(firstGoalId);
-        }
-      }
-    }
-  }, [portfolio, selectedProjectId, selectedGoalId]);
-
-  const handleDeepLink = (data: Portfolio) => {
-    const deepLink = parseDeepLink(pathname, searchParams.toString());
-    
-    if (deepLink.type === 'record' && deepLink.recordId) {
-      const record = findRecordById(data.projects, deepLink.recordId);
-      if (record) {
-        setSelectedRecordId(deepLink.recordId);
-      }
-    } else if (deepLink.type === 'project' && deepLink.projectId) {
-      const project = findProjectBySlug(data.projects, deepLink.projectId);
-      if (project && deepLink.goalId) {
-        const goal = findGoalBySlug(project, deepLink.goalId);
-        if (goal && goal.records.length > 0) {
-          setSelectedRecordId(goal.records[0].id);
-        }
-      }
+  const initSelection = (data: Portfolio) => {
+    if (data.projects.length > 0) {
+      setSelectedProjectId(data.projects[0].id);
+      setSelectedGoalId(null);
     }
   };
 
-  const handleSelectFolder = async () => {
+  const doConnect = useCallback(async (data: Portfolio) => {
+    setPortfolio(data);
+    setConnected(true);
+    localStorage.setItem(CONNECTED_KEY, '1');
+    setSelectedGoalId(null);
+    setSelectedRecordId(null);
+    setSelectedMindset([]);
+    setSelectedTools([]);
+    setSearchKeyword('');
+    initSelection(data);
+  }, []);
+
+  const handleConnect = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-
     try {
-      const handle = await selectFolder();
-      if (!handle) {
-        setError('No folder selected');
-        setIsLoading(false);
-        return;
+      // Try real folder picker; fall back to mock (prototype demo data).
+      let scanned: Portfolio | null = null;
+      try {
+        const handle = await selectFolder();
+        if (handle) {
+          const ok = await verifyFolderPermission(handle);
+          if (ok) {
+            await saveFolderHandleToStorage(handle);
+            const data = await scanFolderStructure(handle);
+            if (data.projects.length > 0) scanned = data;
+          }
+        }
+      } catch {
+        // File System Access API unavailable or dismissed — use mock.
       }
-
-      const hasPermission = await verifyFolderPermission(handle);
-      if (!hasPermission) {
-        setError('Permission denied. Please grant access to the folder.');
-        setIsLoading(false);
-        return;
-      }
-
-      await saveFolderHandleToStorage(handle);
-
-      const data = await scanFolderStructure(handle);
-      setPortfolio(data);
-      setCachedPortfolio(data);
-      setSelectedRecordId(null);
-      setSelectedProjectId(null);
-      setSelectedGoalId(null);
-      setSearchKeyword('');
-      setHasFolder(true);
+      await doConnect(scanned || convertMockToPortfolio());
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to select folder';
-      setError(`Error: ${message}`);
+      setError(err instanceof Error ? err.message : '연결에 실패했습니다');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [doConnect]);
 
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-
     try {
       const handle = await loadFolderHandleFromStorage();
-      if (!handle) {
-        setError('No portfolio folder selected');
-        setIsLoading(false);
-        return;
+      if (handle && (await verifyFolderPermission(handle))) {
+        const data = await scanFolderStructure(handle);
+        if (data.projects.length > 0) {
+          setPortfolio(data);
+          setSelectedRecordId(null);
+          setIsLoading(false);
+          return;
+        }
       }
-
-      const hasPermission = await verifyFolderPermission(handle);
-      if (!hasPermission) {
-        setError('Permission denied');
-        setIsLoading(false);
-        return;
-      }
-
-      const data = await scanFolderStructure(handle);
-      setPortfolio(data);
-      setCachedPortfolio(data);
+      // prototype: refresh mock
+      setPortfolio(convertMockToPortfolio());
       setSelectedRecordId(null);
-      setSelectedProjectId(null);
-      setSelectedGoalId(null);
-      setSearchKeyword('');
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to refresh portfolio';
-      setError(`Error: ${message}`);
+      setError(err instanceof Error ? err.message : '새로고침 실패');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  // Get filtered records based on project, goal, and search
+  // ── derived ────────────────────────────────────────────────
+  const filterState: FilterState = useMemo(
+    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: searchKeyword }),
+    [selectedMindset, selectedTools, searchKeyword]
+  );
+
+  const tagOptions = useMemo(
+    () => (portfolio ? buildTagOptions(portfolio) : { mindset: [], tool: [] }),
+    [portfolio]
+  );
+
+  const selectedProject = useMemo(
+    () => portfolio?.projects.find(p => p.id === selectedProjectId),
+    [portfolio, selectedProjectId]
+  );
+
   const filteredRecords = useMemo(() => {
-    if (!portfolio) {
-      return [];
+    if (!portfolio) return [];
+    return scopedRecords(portfolio, selectedProjectId, selectedGoalId, filterState);
+  }, [portfolio, selectedProjectId, selectedGoalId, filterState]);
+
+  const goalCounts = useMemo(
+    () => visibleCountByGoal(selectedProject, filterState),
+    [selectedProject, filterState]
+  );
+
+  const selectedRecord = useMemo(
+    () => filteredRecords.find(r => r.id === selectedRecordId) || null,
+    [filteredRecords, selectedRecordId]
+  );
+
+  // reset card selection if it falls out of the filtered set
+  useEffect(() => {
+    if (selectedRecordId && !filteredRecords.some(r => r.id === selectedRecordId)) {
+      setSelectedRecordId(null);
     }
+  }, [filteredRecords, selectedRecordId]);
 
-    let records: Record[] = [];
+  // ── render ─────────────────────────────────────────────────
+  if (!hydrated) {
+    return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
+  }
 
-    if (selectedProjectId) {
-      const project = portfolio.projects.find(p => p.id === selectedProjectId);
-      if (project) {
-        if (selectedGoalId) {
-          const goal = project.goals.find(g => g.id === selectedGoalId);
-          if (goal) {
-            records = goal.records;
-          }
-        } else {
-          // All goals in project
-          records = project.goals.flatMap(g => g.records);
-        }
-      }
-    } else {
-      // All records
-      records = portfolio.projects.flatMap(p => p.goals.flatMap(g => g.records));
-    }
-
-    // Apply keyword search
-    if (searchKeyword) {
-      const keyword = searchKeyword.toLowerCase();
-      records = records.filter(r =>
-        r.title.toLowerCase().includes(keyword) ||
-        r.summary.toLowerCase().includes(keyword) ||
-        r.tags.some(t => t.toLowerCase().includes(keyword))
-      );
-    }
-
-    return records;
-  }, [portfolio, selectedProjectId, selectedGoalId, searchKeyword]);
-
-  // Get selected record
-  const selectedRecord = filteredRecords.find(r => r.id === selectedRecordId) || null;
-
-  // Portfolio is always initialized, so show the main content
+  if (!connected || !portfolio) {
+    return <OnboardingScreen onSelectFolder={handleConnect} isLoading={isLoading} error={error} />;
+  }
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50">
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden' }}>
       <Header
-        onSelectFolder={handleSelectFolder}
+        projectName={selectedProject?.title}
+        mindsetOptions={tagOptions.mindset}
+        toolOptions={tagOptions.tool}
+        selectedMindset={selectedMindset}
+        selectedTools={selectedTools}
+        onMindsetChange={setSelectedMindset}
+        onToolChange={setSelectedTools}
         onRefresh={handleRefresh}
+        onReconnect={handleConnect}
         isLoading={isLoading}
       />
 
       {error && (
-        <div className="bg-red-50 border-b border-red-200 p-4 text-red-700">
-          <p className="font-medium">{error}</p>
+        <div className="mono" style={{
+          padding: '8px 24px', fontSize: 12, color: 'var(--danger)',
+          background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+        }}>
+          {error}
         </div>
       )}
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Filter Bar - Full Width */}
-        <div className="bg-white border-b border-slate-200">
-          <FilterBar
-            projects={portfolio?.projects || []}
-            selectedProjectId={selectedProjectId}
+      <FilterBar
+        projects={portfolio.projects}
+        selectedProjectId={selectedProjectId}
+        selectedGoalId={selectedGoalId}
+        searchKeyword={searchKeyword}
+        resultCount={filteredRecords.length}
+        onProjectChange={setSelectedProjectId}
+        onGoalChange={setSelectedGoalId}
+        onSearchChange={setSearchKeyword}
+      />
+
+      {/* Main 3-zone */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+        {/* Left: goal list */}
+        <div style={{
+          width: 260, flexShrink: 0, borderRight: '1px solid var(--border)',
+          background: 'var(--bg)', overflow: 'hidden',
+        }} className="goal-col">
+          <GoalList
+            project={selectedProject}
             selectedGoalId={selectedGoalId}
-            searchKeyword={searchKeyword}
-            onProjectChange={setSelectedProjectId}
-            onGoalChange={setSelectedGoalId}
-            onSearchChange={setSearchKeyword}
+            onSelectGoal={setSelectedGoalId}
+            visibleCountByGoal={goalCounts}
           />
         </div>
 
-        {/* Main Content Area - 3 Column Layout */}
-        <div className="flex-1 flex overflow-hidden gap-0">
-          {/* Left Panel: Empty Space or Additional Info */}
-          <div className="hidden lg:flex lg:w-64 bg-white border-r border-slate-200 p-4">
-            <div className="text-sm text-slate-600">
-              {selectedProjectId && portfolio ? (
-                <div>
-                  <p className="font-semibold mb-2">
-                    {portfolio.projects.find(p => p.id === selectedProjectId)?.title}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''} found
-                  </p>
-                </div>
-              ) : (
-                <p>Select a project to start</p>
-              )}
-            </div>
-          </div>
-
-          {/* Center Panel: Card Scrollable */}
-          <div className="flex-1 bg-slate-50 border-r border-slate-200 flex flex-col overflow-hidden">
-            {filteredRecords.length === 0 ? (
-              <div className="flex-1 flex items-center justify-center text-slate-400 p-4">
-                <div className="text-center">
-                  <p className="text-sm">No records found</p>
-                  {searchKeyword && <p className="text-xs mt-2">Try adjusting your search</p>}
-                </div>
-              </div>
-            ) : (
-              <CardScrollable
-                records={filteredRecords}
-                selectedRecordId={selectedRecordId}
-                onSelectRecord={setSelectedRecordId}
-              />
-            )}
-          </div>
-
-          {/* Right Panel: Detail */}
-          <div className="hidden md:flex md:w-96 bg-white overflow-hidden">
-            <DetailPanel record={selectedRecord} />
-          </div>
+        {/* Center: cards */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+          <CardScrollable
+            records={filteredRecords}
+            selectedRecordId={selectedRecordId}
+            onSelectRecord={setSelectedRecordId}
+          />
         </div>
+
+        {/* Right: detail (slides in on selection) */}
+        {selectedRecord && (
+          <div style={{ width: 400, flexShrink: 0, overflow: 'hidden' }} className="detail-col">
+            <DetailPanel record={selectedRecord} onClose={() => setSelectedRecordId(null)} />
+          </div>
+        )}
       </div>
-
-      {/* Mobile Detail Panel - Shows on small screens */}
-      {selectedRecord && (
-        <div className="md:hidden border-t border-slate-200 bg-white max-h-80 overflow-y-auto">
-          <DetailPanel record={selectedRecord} />
-        </div>
-      )}
     </div>
   );
 }
