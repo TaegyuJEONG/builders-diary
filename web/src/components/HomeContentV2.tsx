@@ -60,7 +60,7 @@ export function HomeContentV2() {
   }, [viewMode, selectedProject, selectedGoalId]);
 
   // 프로젝트 변경 시 목표 리셋
-  const handleSelectProject = (projectId: string) => {
+  const handleSelectProject = (projectId: string | null) => {
     setSelectedProjectId(projectId || mockPortfolioV2.projects[0].id);
     setSelectedGoalId('');
     setSelectedCardId(null);
@@ -68,8 +68,8 @@ export function HomeContentV2() {
   };
 
   // 목표 변경 시 카드 리셋
-  const handleSelectGoal = (goalId: string) => {
-    setSelectedGoalId(goalId);
+  const handleSelectGoal = (goalId: string | null) => {
+    setSelectedGoalId(goalId || '');
     setSelectedCardId(null);
   };
 
@@ -85,7 +85,7 @@ export function HomeContentV2() {
   };
 
   if (viewMode === 'onboarding') {
-    return <OnboardingScreen onStart={handleStart} />;
+    return <OnboardingScreen onSelectFolder={handleStart} isLoading={false} />;
   }
 
   return (
@@ -93,9 +93,11 @@ export function HomeContentV2() {
       {/* Header with Filter */}
       <FilterBar
         projects={mockPortfolioV2.projects}
-        selectedProjectId={selectedProjectId}
-        onSelectProject={handleSelectProject}
-        searchQuery={searchQuery}
+        selectedProjectId={selectedProjectId || null}
+        selectedGoalId={selectedGoalId || null}
+        searchKeyword={searchQuery}
+        onProjectChange={handleSelectProject}
+        onGoalChange={handleSelectGoal}
         onSearchChange={setSearchQuery}
       />
 
