@@ -10,17 +10,15 @@ COPY requirements.txt .
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy ONLY wsgi.py and lib/ for safety
-COPY wsgi.py .
+# Copy ONLY necessary files (HTTP server wrapper + dependencies, NOT mcp_server or tools)
+COPY app.py wsgi.py ./
 COPY lib/ ./lib/
-COPY tools/ ./tools/
 
 # Set PYTHONPATH explicitly
 ENV PYTHONPATH=/app:$PYTHONPATH
-ENV FLASK_APP=wsgi
 
 # Expose port (Railway will route to this)
 EXPOSE 8000
 
-# Use ENTRYPOINT to force gunicorn execution (prevents auto-detection of app.py)
+# Use ENTRYPOINT to force gunicorn execution
 ENTRYPOINT ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "wsgi:app"]
