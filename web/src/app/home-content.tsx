@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Header } from '@/components/Header';
 import { FilterBar } from '@/components/FilterBar';
 import { CardScrollable } from '@/components/CardScrollable';
@@ -12,6 +12,7 @@ import { extractAllTags, filterByTags, findRecordById, findProjectBySlug, findGo
 import { parseDeepLink } from '@/utils/resumeLink';
 import { getCachedPortfolio, setCachedPortfolio } from '@/utils/cache';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { mockPortfolioV2 } from '@/lib/mockData';
 
 export function HomeContent() {
   const router = useRouter();
@@ -27,6 +28,33 @@ export function HomeContent() {
   const [error, setError] = useState<string | null>(null);
   const [hasFolder, setHasFolder] = useState(false);
 
+  // Convert mockPortfolioV2 to Portfolio format
+  const convertMockToPortfolio = (): Portfolio => {
+    return {
+      path: '/mock',
+      projects: mockPortfolioV2.projects.map(proj => ({
+        id: proj.id,
+        slug: proj.id.replace(/^project-/, ''),
+        title: proj.title,
+        goals: proj.goals.map(goal => ({
+          id: goal.id,
+          slug: goal.id.replace(/^goal-/, ''),
+          title: goal.title,
+          records: goal.cards.map(card => ({
+            id: card.id,
+            title: card.title,
+            summary: card.summary,
+            tags: card.tags,
+            created_at: card.created_at,
+            status: card.status,
+            content: card.summary,
+            file_path: `/mock/${proj.id}/${goal.id}/${card.id}`
+          }))
+        }))
+      }))
+    };
+  };
+
   // Initialize portfolio on mount
   useEffect(() => {
     const initialize = async () => {
@@ -34,6 +62,11 @@ export function HomeContent() {
       setError(null);
 
       try {
+        // Use mockData as default/fallback portfolio
+        const mockPortfolio = convertMockToPortfolio();
+        setPortfolio(mockPortfolio);
+        setHasFolder(true);
+        
         // Try to load cached portfolio first
         const cached = getCachedPortfolio();
         if (cached) {
@@ -67,10 +100,15 @@ export function HomeContent() {
           }
         }
 
-        setHasFolder(false);
+        // Fallback to mock data
+        handleDeepLink(mockPortfolio);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to load portfolio';
         console.error('Portfolio load error:', err);
+        // Still show mock data on error
+        const mockPortfolio = convertMockToPortfolio();
+        setPortfolio(mockPortfolio);
+        setHasFolder(true);
       } finally {
         setIsLoading(false);
       }
@@ -295,18 +333,4 @@ export function HomeContent() {
       )}
     </div>
   );
-}
-
-function useMemo<T>(factory: () => T, deps: React.DependencyList): T {
-  const ref = useState(() => ({ deps, value: factory() }))[0];
-  
-  const depsChanged = deps.length !== ref.deps.length || 
-    deps.some((dep, i) => dep !== ref.deps[i]);
-  
-  if (depsChanged) {
-    ref.deps = deps;
-    ref.value = factory();
-  }
-  
-  return ref.value;
 }
