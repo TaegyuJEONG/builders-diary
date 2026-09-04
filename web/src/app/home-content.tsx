@@ -6,177 +6,64 @@ import { FilterBar } from '@/components/FilterBar';
 import { CardScrollable } from '@/components/CardScrollable';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
-import { Portfolio, Project, Record, Goal } from '@/lib/types';
-import { selectFolder, scanFolderStructure, verifyFolderPermission, loadFolderHandleFromStorage, saveFolderHandleToStorage } from '@/lib/fileSystem';
-import { extractAllTags, filterByTags, findRecordById, findProjectBySlug, findGoalBySlug } from '@/lib/filter';
-import { parseDeepLink } from '@/utils/resumeLink';
-import { getCachedPortfolio, setCachedPortfolio } from '@/utils/cache';
-import { useRouter, useSearchParams, usePathname } from 'next/navigation';
+import { mockPortfolioV2, CardData, GoalData, ProjectData } from '@/lib/mockData';
+
+// Convert mockData to match Record interface
+interface MockRecord {
+  id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  created_at: string;
+  status?: 'in_progress' | 'completed' | 'blocked';
+  content: string;
+  file_path: string;
+  updated_at?: string;
+}
 
 export function HomeContent() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasFolder, setHasFolder] = useState(false);
+  const [hasFolder, setHasFolder] = useState(true); // Mock data is always available
 
-  // Initialize portfolio on mount
-  useEffect(() => {
-    const initialize = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        // Try to load cached portfolio first
-        const cached = getCachedPortfolio();
-        if (cached) {
-          setPortfolio(cached);
-          setHasFolder(true);
-
-          // Try to load folder handle for refresh capability
-          const handle = await loadFolderHandleFromStorage();
-          if (handle) {
-            await verifyFolderPermission(handle);
-          }
-
-          // Handle deep links
-          handleDeepLink(cached);
-          return;
-        }
-
-        // Try to restore folder from storage
-        const handle = await loadFolderHandleFromStorage();
-        if (handle) {
-          const hasPermission = await verifyFolderPermission(handle);
-          if (hasPermission) {
-            const data = await scanFolderStructure(handle);
-            setPortfolio(data);
-            setCachedPortfolio(data);
-            setHasFolder(true);
-
-            // Handle deep links
-            handleDeepLink(data);
-            return;
-          }
-        }
-
-        setHasFolder(false);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Failed to load portfolio';
-        console.error('Portfolio load error:', err);
-      } finally {
-        setIsLoading(false);
-      }
+  // Convert CardData to MockRecord
+  const convertCardToRecord = (card: CardData): MockRecord => {
+    return {
+      id: card.id,
+      title: card.title,
+      summary: card.summary,
+      tags: card.tags,
+      created_at: card.created_at,
+      status: card.status,
+      content: card.summary, // Use summary as content for now
+      file_path: `/mock/${card.id}`,
+      updated_at: card.created_at
     };
-
-    initialize();
-  }, []);
-
-  const handleDeepLink = (data: Portfolio) => {
-    const deepLink = parseDeepLink(pathname, searchParams.toString());
-    
-    if (deepLink.type === 'record' && deepLink.recordId) {
-      const record = findRecordById(data.projects, deepLink.recordId);
-      if (record) {
-        setSelectedRecordId(deepLink.recordId);
-      }
-    } else if (deepLink.type === 'project' && deepLink.projectId) {
-      const project = findProjectBySlug(data.projects, deepLink.projectId);
-      if (project && deepLink.goalId) {
-        const goal = findGoalBySlug(project, deepLink.goalId);
-        if (goal && goal.records.length > 0) {
-          setSelectedRecordId(goal.records[0].id);
-        }
-      }
-    }
   };
 
-  const handleSelectFolder = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const handle = await selectFolder();
-      if (!handle) {
-        setError('No folder selected');
-        setIsLoading(false);
-        return;
-      }
-
-      const hasPermission = await verifyFolderPermission(handle);
-      if (!hasPermission) {
-        setError('Permission denied. Please grant access to the folder.');
-        setIsLoading(false);
-        return;
-      }
-
-      await saveFolderHandleToStorage(handle);
-
-      const data = await scanFolderStructure(handle);
-      setPortfolio(data);
-      setCachedPortfolio(data);
-      setSelectedRecordId(null);
-      setSelectedProjectId(null);
-      setSelectedGoalId(null);
-      setSearchKeyword('');
-      setHasFolder(true);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to select folder';
-      setError(`Error: ${message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleRefresh = async () => {
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const handle = await loadFolderHandleFromStorage();
-      if (!handle) {
-        setError('No portfolio folder selected');
-        setIsLoading(false);
-        return;
-      }
-
-      const hasPermission = await verifyFolderPermission(handle);
-      if (!hasPermission) {
-        setError('Permission denied');
-        setIsLoading(false);
-        return;
-      }
-
-      const data = await scanFolderStructure(handle);
-      setPortfolio(data);
-      setCachedPortfolio(data);
-      setSelectedRecordId(null);
-      setSelectedProjectId(null);
-      setSelectedGoalId(null);
-      setSearchKeyword('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to refresh portfolio';
-      setError(`Error: ${message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // Convert mockData to component structure
+  const projectsForUI = mockPortfolioV2.projects.map((project: ProjectData) => ({
+    id: project.id,
+    slug: project.id,
+    title: project.title,
+    goals: project.goals.map((goal: GoalData) => ({
+      id: goal.id,
+      slug: goal.id,
+      title: goal.title,
+      records: goal.cards.map(convertCardToRecord)
+    }))
+  }));
 
   // Get filtered records based on project, goal, and search
   const filteredRecords = useMemo(() => {
-    if (!portfolio) return [];
-
-    let records: Record[] = [];
+    let records: MockRecord[] = [];
 
     if (selectedProjectId) {
-      const project = portfolio.projects.find(p => p.id === selectedProjectId);
+      const project = projectsForUI.find(p => p.id === selectedProjectId);
       if (project) {
         if (selectedGoalId) {
           const goal = project.goals.find(g => g.id === selectedGoalId);
@@ -190,7 +77,7 @@ export function HomeContent() {
       }
     } else {
       // All records
-      records = portfolio.projects.flatMap(p => p.goals.flatMap(g => g.records));
+      records = projectsForUI.flatMap(p => p.goals.flatMap(g => g.records));
     }
 
     // Apply keyword search
@@ -204,15 +91,35 @@ export function HomeContent() {
     }
 
     return records;
-  }, [portfolio, selectedProjectId, selectedGoalId, searchKeyword]);
+  }, [selectedProjectId, selectedGoalId, searchKeyword, projectsForUI]);
 
   // Get selected record
   const selectedRecord = filteredRecords.find(r => r.id === selectedRecordId) || null;
 
-  // If no folder is selected, show onboarding
-  if (!hasFolder) {
-    return <OnboardingScreen onSelectFolder={handleSelectFolder} isLoading={isLoading} />;
-  }
+  const handleSelectFolder = async () => {
+    // Mock implementation - just select the first project
+    if (projectsForUI.length > 0) {
+      setSelectedProjectId(projectsForUI[0].id);
+      setSelectedGoalId(null);
+      setSelectedRecordId(null);
+      setSearchKeyword('');
+    }
+  };
+
+  const handleRefresh = async () => {
+    // Mock implementation - just clear selections
+    setSelectedProjectId(null);
+    setSelectedGoalId(null);
+    setSelectedRecordId(null);
+    setSearchKeyword('');
+  };
+
+  // Auto-select first project on mount
+  useEffect(() => {
+    if (!selectedProjectId && projectsForUI.length > 0) {
+      setSelectedProjectId(projectsForUI[0].id);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -229,10 +136,10 @@ export function HomeContent() {
       )}
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Filter Bar - Full Width */}
+        {/* Filter Bar - Top Left */}
         <div className="bg-white border-b border-slate-200">
           <FilterBar
-            projects={portfolio?.projects || []}
+            projects={projectsForUI}
             selectedProjectId={selectedProjectId}
             selectedGoalId={selectedGoalId}
             searchKeyword={searchKeyword}
@@ -244,22 +151,33 @@ export function HomeContent() {
 
         {/* Main Content Area - 3 Column Layout */}
         <div className="flex-1 flex overflow-hidden gap-0">
-          {/* Left Panel: Empty Space or Additional Info */}
-          <div className="hidden lg:flex lg:w-64 bg-white border-r border-slate-200 p-4">
-            <div className="text-sm text-slate-600">
-              {selectedProjectId && portfolio ? (
-                <div>
-                  <p className="font-semibold mb-2">
-                    {portfolio.projects.find(p => p.id === selectedProjectId)?.title}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {filteredRecords.length} record{filteredRecords.length !== 1 ? 's' : ''} found
-                  </p>
-                </div>
-              ) : (
-                <p>Select a project to start</p>
-              )}
+          {/* Left Panel: Goals List */}
+          <div className="hidden lg:flex lg:w-64 bg-white border-r border-slate-200 flex-col overflow-hidden">
+            <div className="p-4 border-b border-slate-200">
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                {selectedProjectId 
+                  ? `${filteredRecords.length} Cards`
+                  : 'Select a Project'
+                }
+              </p>
             </div>
+            {selectedProjectId && projectsForUI.find(p => p.id === selectedProjectId) && (
+              <div className="flex-1 overflow-y-auto p-2">
+                {projectsForUI.find(p => p.id === selectedProjectId)?.goals.map(goal => (
+                  <button
+                    key={goal.id}
+                    onClick={() => setSelectedGoalId(goal.id === selectedGoalId ? null : goal.id)}
+                    className={`w-full text-left px-3 py-2 mb-1 rounded text-sm transition-colors ${
+                      goal.id === selectedGoalId
+                        ? 'bg-emerald-100 text-emerald-900 font-semibold'
+                        : 'text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {goal.title}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Center Panel: Card Scrollable */}
@@ -267,7 +185,7 @@ export function HomeContent() {
             {filteredRecords.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-slate-400 p-4">
                 <div className="text-center">
-                  <p className="text-sm">No records found</p>
+                  <p className="text-sm">No cards found</p>
                   {searchKeyword && <p className="text-xs mt-2">Try adjusting your search</p>}
                 </div>
               </div>
@@ -281,7 +199,7 @@ export function HomeContent() {
           </div>
 
           {/* Right Panel: Detail */}
-          <div className="hidden md:flex md:w-96 bg-white overflow-hidden">
+          <div className="hidden md:flex md:w-96 bg-white overflow-hidden flex-col">
             <DetailPanel record={selectedRecord} />
           </div>
         </div>
