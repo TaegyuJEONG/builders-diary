@@ -46,7 +46,7 @@ export function HomeContentV2() {
   );
 
   // 선택된 카드 가져오기
-  const selectedCard: CardData | undefined = filteredCards.find(
+  const selectedCard = filteredCards.find(
     (c) => c.id === selectedCardId
   ) || null;
 
