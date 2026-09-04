@@ -1,18 +1,19 @@
 # Use official Python runtime as a base image
 FROM python:3.11.16-slim
 
-# Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
-COPY requirements.txt .
+# Install only gunicorn and Flask
+RUN pip install --no-cache-dir gunicorn==21.2.0 flask==3.0.0
 
-# Install dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy ONLY wsgi.py (NO app.py, mcp_server.py, or tools!)
+COPY wsgi.py /app/
+COPY app.py /app/
+COPY lib/ /app/lib/
 
-# Copy application code
-COPY . .
+ENV PYTHONPATH=/app
 
-# MCP Server runs on stdio (no port exposure needed)
-# The server reads JSON-RPC messages from stdin and writes responses to stdout
-CMD ["python", "app.py"]
+EXPOSE 8000
+
+# Force explicit gunicorn call - NO Python auto-discovery
+CMD exec gunicorn --bind 0.0.0.0:8000 --workers 1 --timeout 120 wsgi:app
