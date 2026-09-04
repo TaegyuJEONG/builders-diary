@@ -14,12 +14,42 @@ import { getCachedPortfolio, setCachedPortfolio } from '@/utils/cache';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { mockPortfolioV2 } from '@/lib/mockData';
 
+// Convert mockPortfolioV2 to Portfolio format (outside component for initial state)
+const convertMockToPortfolio = (): Portfolio => {
+  return {
+    path: '/mock',
+    projects: mockPortfolioV2.projects.map(proj => ({
+      id: proj.id,
+      slug: proj.id.replace(/^project-/, ''),
+      title: proj.title,
+      goals: proj.goals.map(goal => ({
+        id: goal.id,
+        slug: goal.id.replace(/^goal-/, ''),
+        title: goal.title,
+        records: goal.cards.map(card => ({
+          id: card.id,
+          title: card.title,
+          summary: card.summary,
+          tags: card.tags,
+          created_at: card.created_at,
+          status: card.status,
+          content: card.summary,
+          file_path: `/mock/${proj.id}/${goal.id}/${card.id}`
+        }))
+      }))
+    }))
+  };
+};
+
+// Initialize with mock portfolio data so it shows immediately
+const initialPortfolio = convertMockToPortfolio();
+
 export function HomeContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   
-  const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [portfolio, setPortfolio] = useState<Portfolio>(initialPortfolio);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
@@ -27,33 +57,6 @@ export function HomeContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasFolder, setHasFolder] = useState(false);
-
-  // Convert mockPortfolioV2 to Portfolio format
-  const convertMockToPortfolio = (): Portfolio => {
-    return {
-      path: '/mock',
-      projects: mockPortfolioV2.projects.map(proj => ({
-        id: proj.id,
-        slug: proj.id.replace(/^project-/, ''),
-        title: proj.title,
-        goals: proj.goals.map(goal => ({
-          id: goal.id,
-          slug: goal.id.replace(/^goal-/, ''),
-          title: goal.title,
-          records: goal.cards.map(card => ({
-            id: card.id,
-            title: card.title,
-            summary: card.summary,
-            tags: card.tags,
-            created_at: card.created_at,
-            status: card.status,
-            content: card.summary,
-            file_path: `/mock/${proj.id}/${goal.id}/${card.id}`
-          }))
-        }))
-      }))
-    };
-  };
 
   // Initialize portfolio on mount
   useEffect(() => {
@@ -116,6 +119,22 @@ export function HomeContent() {
 
     initialize();
   }, []);
+
+  // Initialize project and goal selection when portfolio loads
+  useEffect(() => {
+    if (portfolio && portfolio.projects.length > 0) {
+      // Only set if not already set
+      if (!selectedProjectId) {
+        const firstProjectId = portfolio.projects[0].id;
+        setSelectedProjectId(firstProjectId);
+        // Also set the first goal of the first project
+        if (portfolio.projects[0].goals.length > 0 && !selectedGoalId) {
+          const firstGoalId = portfolio.projects[0].goals[0].id;
+          setSelectedGoalId(firstGoalId);
+        }
+      }
+    }
+  }, [portfolio, selectedProjectId, selectedGoalId]);
 
   const handleDeepLink = (data: Portfolio) => {
     const deepLink = parseDeepLink(pathname, searchParams.toString());
@@ -209,7 +228,9 @@ export function HomeContent() {
 
   // Get filtered records based on project, goal, and search
   const filteredRecords = useMemo(() => {
-    if (!portfolio) return [];
+    if (!portfolio) {
+      return [];
+    }
 
     let records: Record[] = [];
 
@@ -247,10 +268,7 @@ export function HomeContent() {
   // Get selected record
   const selectedRecord = filteredRecords.find(r => r.id === selectedRecordId) || null;
 
-  // If no folder is selected, show onboarding
-  if (!hasFolder) {
-    return <OnboardingScreen onSelectFolder={handleSelectFolder} isLoading={isLoading} />;
-  }
+  // Portfolio is always initialized, so show the main content
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
