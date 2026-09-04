@@ -7,10 +7,14 @@ Gunicorn compatible WSGI application
 import json
 import logging
 import sys
+import os
 from pathlib import Path
 from flask import Flask, request, jsonify
 
-# Add mcp-server directory to path
+# Add mcp-server directory to path (both local and Railway /app)
+app_dir = os.environ.get('APP_DIR', str(Path(__file__).parent))
+sys.path.insert(0, app_dir)
+sys.path.insert(0, '/app')
 sys.path.insert(0, str(Path(__file__).parent))
 
 from mcp_server import BuildersDiaryMCPServer
