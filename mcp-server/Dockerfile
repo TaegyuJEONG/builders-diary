@@ -13,6 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# MCP Server runs on stdio (no port exposure needed)
-# The server reads JSON-RPC messages from stdin and writes responses to stdout
-CMD ["python", "app.py"]
+# Set PYTHONPATH explicitly
+ENV PYTHONPATH=/app:$PYTHONPATH
+
+# Expose port (Railway will route to this)
+EXPOSE 8000
+
+# Start HTTP server with Gunicorn (not MCP stdio)
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120", "wsgi:app"]
