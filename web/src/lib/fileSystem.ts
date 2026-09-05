@@ -108,6 +108,22 @@ export async function loadFolderHandleFromStorage(): Promise<FileSystemDirectory
   });
 }
 
+/**
+ * Read the install marker the npx installer drops into the data folder.
+ * Returns the parsed marker, or null if this folder wasn't set up by the installer.
+ */
+export async function readInstallMarker(
+  handle: FileSystemDirectoryHandle
+): Promise<{ version?: string; tools?: string[] } | null> {
+  try {
+    const fh = await handle.getFileHandle('.builders-diary.json');
+    const file = await fh.getFile();
+    return JSON.parse(await file.text());
+  } catch {
+    return null;
+  }
+}
+
 export async function verifyFolderPermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
   try {
     const permission = await (handle as any).queryPermission?.({ mode: 'read' });

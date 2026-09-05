@@ -128,9 +128,29 @@ function cmdInstall(args) {
 
   if (args.dryRun) {
     console.log('Re-run without --dry-run to install.');
-  } else {
-    console.log('Done. Restart your AI tool, then type @builders-diary at the end of a session.');
+    return;
   }
+
+  // Create the data folder the skill saves to, and drop an install marker
+  // so the web app can verify the install when the user connects the folder.
+  const dataRoot = path.join(os.homedir(), SKILL_NAME);
+  fs.mkdirSync(dataRoot, { recursive: true });
+
+  const markerPath = path.join(dataRoot, '.builders-diary.json');
+  let marker = {};
+  try { marker = JSON.parse(fs.readFileSync(markerPath, 'utf8')); } catch { /* first install */ }
+  const mergedTools = Array.from(new Set([...(marker.tools || []), ...tools]));
+  let version = '0.0.0';
+  try { version = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version; } catch { /* ignore */ }
+  fs.writeFileSync(markerPath, JSON.stringify({
+    version,
+    tools: mergedTools,
+    root: dataRoot,
+    installed_at: new Date().toISOString(),
+  }, null, 2) + '\n');
+
+  console.log(`\u2713 Data folder ready \u2192 ~/${SKILL_NAME}`);
+  console.log('\nDone. Restart your AI tool, then connect the folder in the web app.');
 }
 
 function main() {

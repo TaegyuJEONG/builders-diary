@@ -1,12 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   loadFolderHandleFromStorage,
-  hasFolderPermission,
-  scanFolderStructure,
+  readInstallMarker,
 } from '@/lib/fileSystem';
-import { Portfolio } from '@/lib/types';
 import { detectOS, terminalHint } from '@/lib/os';
 
 interface OnboardingScreenProps {
@@ -16,6 +14,8 @@ interface OnboardingScreenProps {
   error?: string | null;
   /** True once a folder handle is connected (set by parent after picker). */
   folderConnected?: boolean;
+  /** Increments every time a folder is (re)connected — re-triggers verification. */
+  connectNonce?: number;
   folderPath?: string;
   /** Selected AI tools, lifted to parent so they persist + drive the header later. */
   selectedClients: string[];
@@ -34,47 +34,41 @@ const CLIENTS = [
 ];
 
 type Phase = 'select' | 'steps';
+type MarkerStatus = 'unchecked' | 'checking' | 'ok' | 'missing';
 
 export function OnboardingScreen({
-  onSelectFolder, isLoading, error, folderConnected, folderPath,
+  onSelectFolder, isLoading, error, folderConnected, connectNonce = 0, folderPath,
   selectedClients, setSelectedClients, onComplete,
 }: OnboardingScreenProps) {
   const [phase, setPhase] = useState<Phase>('select');
-  // Step 1 = connect folder, Step 2 = install skill (+detect), Step 3 = done
-  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [copied, setCopied] = useState<string | null>(null);
-  const [firstRecord, setFirstRecord] = useState<Portfolio | null>(null);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [markerStatus, setMarkerStatus] = useState<MarkerStatus>('unchecked');
 
   const hint = terminalHint(detectOS());
 
-  // Folder connected (on Step 1) → advance to Step 2 (install skill). Do NOT leave onboarding.
+  // When a folder gets connected (or re-connected), verify it's the installer's folder.
   useEffect(() => {
-    if (folderConnected && step === 1) setStep(2);
-  }, [folderConnected, step]);
-
-  // While on Step 2, poll the connected folder for the first record → auto-advance to Step 3.
-  useEffect(() => {
-    if (step !== 2) return;
-    pollingRef.current = setInterval(async () => {
+    if (!folderConnected) return;
+    let cancelled = false;
+    (async () => {
+      setMarkerStatus('checking');
       try {
         const handle = await loadFolderHandleFromStorage();
-        if (!handle) return;
-        const ok = await hasFolderPermission(handle);
-        if (!ok) return;
-        const data = await scanFolderStructure(handle);
-        const hasRecords = data.projects.some(p =>
-          p.goals.some(g => g.records.length > 0)
-        );
-        if (hasRecords) {
-          setFirstRecord(data);
-          setStep(3);
-          if (pollingRef.current) clearInterval(pollingRef.current);
+        const marker = handle ? await readInstallMarker(handle) : null;
+        if (cancelled) return;
+        if (marker) {
+          setMarkerStatus('ok');
+          // Brief beat so the user sees the confirmation, then enter the portfolio.
+          setTimeout(() => { if (!cancelled) onComplete(); }, 900);
+        } else {
+          setMarkerStatus('missing');
         }
-      } catch { /* ignore */ }
-    }, 3000);
-    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
-  }, [step]);
+      } catch {
+        if (!cancelled) setMarkerStatus('missing');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [folderConnected, connectNonce, onComplete]);
 
   // Install snippet — one command installs the skill for all selected tools
   const toolFlag = selectedClients.join(',');
@@ -97,13 +91,8 @@ export function OnboardingScreen({
 
   function goBackToSelect() {
     setPhase('select');
-    setStep(1);
-    setFirstRecord(null);
-    if (pollingRef.current) clearInterval(pollingRef.current);
+    setMarkerStatus('unchecked');
   }
-
-  const toolName = CLIENTS.find(c => selectedClients.includes(c.id))?.label ?? 'your AI tool';
-  const isClaude = selectedClients.includes('claude');
 
   return (
     <div style={{
@@ -249,137 +238,112 @@ export function OnboardingScreen({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-              {/* ── STEP 1: Connect folder ── */}
-              <StepCard n={1} active={step === 1} done={step > 1} title="Pick a folder for your records">
-                {step >= 1 && (
-                  <>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 20px' }}>
-                      This is where your work records will live — on your computer.
-                      A new folder called <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>builders-diary</code> in
-                      your home folder works great.
-                    </p>
-                    {step === 1 && (
-                      <button
-                        onClick={onSelectFolder}
-                        disabled={isLoading}
-                        className="mono"
-                        style={{
-                          padding: '10px 24px',
-                          background: isLoading ? 'var(--border)' : 'var(--accent)',
-                          color: isLoading ? 'var(--text3)' : 'var(--bg)',
-                          border: 'none', borderRadius: 4,
-                          fontSize: 12, fontWeight: 600, letterSpacing: '0.05em',
-                          cursor: isLoading ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {isLoading ? 'Connecting…' : 'Choose folder'}
-                      </button>
-                    )}
-                    {error && (
-                      <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>
-                    )}
-                    {step > 1 && (
-                      <div className="mono" style={{ fontSize: 11, color: 'var(--accent)' }}>
-                        ✓ {folderPath || 'folder connected'}
-                      </div>
-                    )}
-                  </>
-                )}
+              {/* ── STEP 1: Install (the npx command is the hero) ── */}
+              <StepCard n={1} active={!folderConnected} done={markerStatus === 'ok'} title="Install the skill">
+                {/* install command — hero */}
+                <div style={{
+                  background: 'var(--bg)',
+                  border: '1px solid var(--accent)',
+                  borderRadius: 6, padding: '14px 16px',
+                  display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12,
+                }}>
+                  <code className="mono" style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
+                    <span style={{ color: 'var(--text3)' }}>$ </span>{installSnippet}
+                  </code>
+                  <button
+                    onClick={() => copy(installSnippet, 'install')}
+                    className="mono"
+                    style={{
+                      flexShrink: 0,
+                      padding: '7px 16px', fontSize: 12, fontWeight: 600,
+                      background: copied === 'install' ? 'var(--tag-active-bg)' : 'var(--accent)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: 4,
+                      color: copied === 'install' ? 'var(--accent)' : 'var(--bg)',
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {copied === 'install' ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
+
+                {/* OS-aware terminal hint */}
+                <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.7 }}>
+                  {hint.label}: press{' '}
+                  <span style={{
+                    color: 'var(--text2)', border: '1px solid var(--border)',
+                    borderRadius: 3, padding: '1px 6px',
+                  }}>{hint.keys}</span>
+                  {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}, then paste.
+                </div>
               </StepCard>
 
-              {/* ── STEP 2: Install skill (+ terminal hint + detection) ── */}
-              <StepCard n={2} active={step === 2} done={step > 2} title="Install the skill" locked={step < 2}>
-                {step >= 2 && (
-                  <>
-                    {/* install command — the hero of this step */}
-                    <div style={{
-                      background: 'var(--bg)',
-                      border: '1px solid var(--accent)',
-                      borderRadius: 6, padding: '14px 16px',
-                      display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12,
-                    }}>
-                      <code className="mono" style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
-                        <span style={{ color: 'var(--text3)' }}>$ </span>{installSnippet}
-                      </code>
-                      <button
-                        onClick={() => copy(installSnippet, 'install')}
-                        className="mono"
-                        style={{
-                          flexShrink: 0,
-                          padding: '7px 16px', fontSize: 12, fontWeight: 600,
-                          background: copied === 'install' ? 'var(--tag-active-bg)' : 'var(--accent)',
-                          border: '1px solid var(--accent)',
-                          borderRadius: 4,
-                          color: copied === 'install' ? 'var(--accent)' : 'var(--bg)',
-                          cursor: 'pointer', whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {copied === 'install' ? '✓ Copied' : 'Copy'}
-                      </button>
-                    </div>
+              {/* ── STEP 2: Connect the folder the installer created ── */}
+              <StepCard n={2} active={!!folderConnected || markerStatus !== 'unchecked'} done={markerStatus === 'ok'} title="Connect your folder">
+                <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
+                  The installer just created a{' '}
+                  <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>builders-diary</code>{' '}
+                  folder in your home folder. Pick it.
+                </p>
 
-                    {/* OS-aware terminal hint */}
-                    <div className="mono" style={{
-                      fontSize: 11, color: 'var(--text3)', lineHeight: 1.7,
-                    }}>
-                      {hint.label}: press{' '}
-                      <span style={{
-                        color: 'var(--text2)', border: '1px solid var(--border)',
-                        borderRadius: 3, padding: '1px 6px',
-                      }}>{hint.keys}</span>
-                      {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}, then paste.
-                    </div>
+                {markerStatus !== 'ok' && (
+                  <button
+                    onClick={onSelectFolder}
+                    disabled={isLoading || markerStatus === 'checking'}
+                    className="mono"
+                    style={{
+                      padding: '10px 24px',
+                      background: (isLoading || markerStatus === 'checking') ? 'var(--border)' : 'var(--accent)',
+                      color: (isLoading || markerStatus === 'checking') ? 'var(--text3)' : 'var(--bg)',
+                      border: 'none', borderRadius: 4,
+                      fontSize: 12, fontWeight: 600, letterSpacing: '0.05em',
+                      cursor: (isLoading || markerStatus === 'checking') ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {isLoading ? 'Connecting…'
+                      : markerStatus === 'checking' ? 'Checking…'
+                      : markerStatus === 'missing' ? 'Choose folder again'
+                      : 'Choose folder'}
+                  </button>
+                )}
 
-                    {/* detection status */}
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8, marginTop: 18 }}>
-                      <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }}>⟳</span>
-                      Waiting for your first record…
-                    </div>
+                {error && (
+                  <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>
+                )}
 
-                    {/* escape hatch */}
+                {/* verified */}
+                {markerStatus === 'ok' && (
+                  <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>
+                    ✓ Install verified — opening your portfolio…
+                  </div>
+                )}
+
+                {/* failure caught: wrong folder or install never ran */}
+                {markerStatus === 'missing' && (
+                  <div style={{
+                    marginTop: 14,
+                    background: 'var(--surface)',
+                    border: '1px solid var(--danger)',
+                    borderRadius: 6, padding: '12px 14px',
+                  }}>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>
+                      That folder wasn&apos;t set up by the installer{folderPath ? ` (you picked “${folderPath}”)` : ''}.
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.7 }}>
+                      Make sure the command in step 1 ran without errors, then pick the{' '}
+                      <code className="mono" style={{ fontSize: 11.5, color: 'var(--text)' }}>builders-diary</code>{' '}
+                      folder in your home folder.
+                    </div>
                     <button
                       onClick={onComplete}
                       className="mono"
                       style={{
-                        marginTop: 14, background: 'none', border: 'none',
-                        color: 'var(--text3)', fontSize: 11, cursor: 'pointer',
+                        marginTop: 10, background: 'none', border: 'none',
+                        color: 'var(--text3)', fontSize: 10.5, cursor: 'pointer',
                         padding: 0, textDecoration: 'underline',
                       }}
                     >
-                      Skip for now — take me to my portfolio
-                    </button>
-                  </>
-                )}
-              </StepCard>
-
-              {/* ── STEP 3: Done ── */}
-              <StepCard n={3} active={step === 3} done={!!firstRecord} title="You're all set" locked={step < 3}>
-                {step >= 3 && (
-                  <div style={{
-                    background: 'var(--surface)', border: '1px solid var(--accent)',
-                    borderRadius: 6, padding: '16px 18px',
-                  }}>
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8 }}>
-                      ✓ First record detected!
-                    </div>
-                    {firstRecord?.projects[0]?.goals[0]?.records[0] && (
-                      <p style={{ fontSize: 13, color: 'var(--text)', margin: '0 0 6px', fontWeight: 600 }}>
-                        {firstRecord.projects[0].goals[0].records[0].title}
-                      </p>
-                    )}
-                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.7, margin: '0 0 14px' }}>
-                      This is what recruiters will see. Keep building and it fills in on its own.
-                    </p>
-                    <button
-                      onClick={onComplete}
-                      className="mono"
-                      style={{
-                        padding: '8px 18px', fontSize: 12, fontWeight: 600,
-                        background: 'var(--accent)', color: 'var(--bg)',
-                        border: 'none', borderRadius: 4, cursor: 'pointer',
-                      }}
-                    >
-                      View my portfolio →
+                      I know what I&apos;m doing — use this folder anyway
                     </button>
                   </div>
                 )}
@@ -389,10 +353,6 @@ export function OnboardingScreen({
           </>
         )}
       </div>
-
-      <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
     </div>
   );
 }
@@ -410,7 +370,7 @@ function StepCard({ n, active, done, locked, title, children }: {
       opacity: locked ? 0.35 : 1,
       transition: 'opacity 0.3s, border-color 0.3s',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: (active || done) ? 14 : 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
         <div style={{
           width: 22, height: 22, borderRadius: 4, flexShrink: 0,
           border: `1px solid ${done ? 'var(--accent)' : active ? 'var(--accent)' : 'var(--border)'}`,
@@ -421,7 +381,7 @@ function StepCard({ n, active, done, locked, title, children }: {
         }} className="mono">
           {done ? '✓' : n}
         </div>
-        <h3 style={{ fontSize: 13, fontWeight: 600, color: active || done ? 'var(--text)' : 'var(--text3)', margin: 0 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', margin: 0 }}>
           {title}
         </h3>
       </div>

@@ -30,6 +30,8 @@ export function HomeContent() {
 
   // AI tools the user selected in onboarding (drives --tools + header manager)
   const [selectedClients, setSelectedClientsState] = useState<string[]>([]);
+  // Bumped on every successful folder connect so onboarding re-verifies the marker.
+  const [connectNonce, setConnectNonce] = useState(0);
 
   // selection
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -134,6 +136,7 @@ export function HomeContent() {
   const doConnect = useCallback(async (data: Portfolio) => {
     setPortfolio(data);
     setConnected(true);
+    setConnectNonce(n => n + 1);
     localStorage.setItem(CONNECTED_KEY, '1');
     setSelectedGoalId(null);
     setSelectedRecordId(null);
@@ -247,6 +250,7 @@ export function HomeContent() {
         isLoading={isLoading}
         error={error}
         folderConnected={connected}
+        connectNonce={connectNonce}
         folderPath={portfolio?.path}
         selectedClients={selectedClients}
         setSelectedClients={setSelectedClients}
