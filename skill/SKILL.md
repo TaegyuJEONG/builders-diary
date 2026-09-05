@@ -1,86 +1,195 @@
 ---
 name: builders-diary
-description: 끝난 작업 하나를 리크루터가 읽을 수 있는 한 편의 이야기로 기록한다. 빌더가 직접 쓰지 않는다 — 이미 오간 대화와 실행 흔적에서 만든다. 어떤 작업 흐름이 일단락됐을 때, 또는 빌더가 기록/정리/회고를 요청할 때 호출한다.
+version: 2.0.0
+description: Record what you actually judged in a work session — not just what got built. Saves locally to ~/builders-diary/. Works for any builder (research, design, sales, engineering), not just coders.
+triggers:
+  - "@builders-diary"
+  - "/builders-diary"
+  - "record my work"
+  - "save my work"
+  - "builders diary"
+allowed-tools:
+  - Read
+  - Write
+  - Bash
+  - Glob
 ---
 
-# builders-diary
+## What this skill is for
 
-작업 하나가 끝났을 때, **이미 있는 흔적에서** 한 편을 만든다.
-빌더에게 다시 물어보지 않는다. 빌더는 바쁘고, 물어보면 안 쓴다.
+At the end of a work session, capture what the builder actually did — from the traces
+already in this conversation. **Do not ask the builder to write anything.** They are busy;
+if you ask, they won't record.
 
-## 재료
+**The single most valuable thing to capture is judgment**, not output. In 2026, AI-generated
+output is cheap and proves little. What a recruiter can't get anywhere else — and what an AI
+can't fake — is the moment a human **rejected or changed** what the AI proposed, and why.
+A session where the AI suggested five options and the builder killed two and picked one is
+worth more than a session that just shipped code. Hunt for that moment first.
 
-이 세션의 대화가 1차 재료다. 여기에 대화 안에서 언급된 것만 추가로 연다:
-- 만들거나 고친 파일, 실행한 명령과 그 출력
-- 커밋 메시지, 이슈/티켓 코멘트, 로그 줄
-- 에이전트가 남긴 실행 기록
+This works for **any builder**, not just coders: a user-interview analysis, a sales-email
+rewrite, a design critique, a research synthesis. Evidence is not just commits and screenshots.
 
-대화에 안 나온 걸 찾아 나서지 마라. 흔적에 없으면 그 장면은 없는 것이다.
+---
 
-## 산출물
+## Step 0 — Mode
 
-`entries/YYYY-MM-DD-NN-<slug>.md` 하나. 600~1000 단어.
+Check the invocation for `--dry-run`:
+- **`--dry-run` present** → dry-run mode: extract and show what *would* be recorded, then STOP.
+  Write nothing.
+- **no flag** → normal mode: run all steps through saving.
+
+---
+
+## Step 1 — Extract the distinct work items from this session
+
+Read the whole conversation. Additionally open only what the conversation itself references:
+files touched, commands run and their output, commit messages, pasted material (transcripts,
+briefs, logs), issue/PR links. **Do not go hunting for things not in the session.** If a trace
+isn't here, that scene didn't happen.
+
+**A session can contain more than one work item.** People don't always keep one project per
+window. Split into separate items when the *intent* differs — different problem, different
+project, or work that stands on its own. Same file edited five times for one purpose = one item.
+
+For each work item, determine:
+
+| Field | What it is |
+|-------|------------|
+| **title** | What was attempted (the intent, not a status) |
+| **project** | Which project it belongs to |
+| **goal** | Which goal under that project |
+| **category** | One of: `Planning` `Design` `Engineering` `Research` `Growth` |
+| **judgment** | The AI-proposed option the builder rejected/changed, and why. Empty only if there truly was none. |
+| **evidence** | Traces that prove it happened (see Step 2) |
+
+Then map each item to the existing store (Step 3 checks folders). If a project/goal already
+exists, reuse it; if not, propose a new one.
+
+---
+
+## Step 2 — Gather evidence (from traces only)
+
+Evidence is any trace in the session that proves the work. **Four types**, generalized so
+non-code work counts too. Collect only what's actually present — never fabricate, never ask.
+
+| type | what it captures | dev example | non-dev example |
+|------|------------------|-------------|-----------------|
+| `input` | what the builder started with | error log, failing issue | interview transcript (6 respondents, 12k words) |
+| `judgment` | an AI option rejected/changed + why | "rejected the suggested refactor — out of scope" | "AI ranked 'add tutorial' #1; rejected — one respondent only" |
+| `quote` | a verbatim line from source or output | "31 passed", "Ready in 1846ms" | "Respondent C: 'I dropped off twice in onboarding'" |
+| `artifact` | a produced thing with a link | commit URL + diff stat, PR, deploy URL, screenshot | decision doc, revised roadmap, published spec |
+
+Build a JSON list like this (only include what you found):
+
+```json
+[
+  {"type": "input",    "label": "User interview transcripts", "meta": "6 respondents, 12k words"},
+  {"type": "judgment", "label": "Rejected AI's #1 ranking",    "detail": "based on a single respondent"},
+  {"type": "quote",    "label": "Respondent C",               "quote": "I dropped off twice in onboarding"},
+  {"type": "artifact", "label": "commit a1b2c3",               "url": "https://github.com/…/commit/a1b2c3", "meta": "+412 −80, 7 files"}
+]
+```
+
+If the host tool can capture a screenshot of a running localhost/deploy URL, add one artifact
+with a local image path. If it can't, skip silently.
+
+---
+
+## Step 3 — Dry-run output (only when `--dry-run`)
+
+Print this and STOP. Write nothing.
 
 ```
----
-date:
-title:          # 무엇을 하려 했는가. 결과가 아니라 시도로 쓴다
-tags: []        # 3~6개
-duration:       # 흔적에서 읽히는 실제 소요 (예: 하루, 3시간)
----
+[builders-diary dry-run] N work item(s) found in this session
 
-## 무엇이 문제였나
-왜 이걸 지금 해야 했는지. 만만치 않았던 이유. 3~5문장.
+[1] Title:    <title>
+    Category: <category>
+    Project:  <project> → Goal: <goal>   (existing | NEW)
+    Judgment: <one line, or "— none found">
+    Evidence: input ✓ | judgment ✓ | quote ✓ | artifact ✓   (only the ones found)
 
-## 장면 1..N   (2~4개. 하나가 하나의 판단)
-### <장면 제목>
-- **앞에 있던 것**: 무슨 상황이었나
-- **기준**: 뭘 보면 맞고 뭘 보면 틀린 걸로 쳤나 — 흔적에서 결과보다 **먼저** 나온 것만
-- **한 것**: 실제 명령, 파일, 카드 id
-- **본 것**: 숫자나 로그 줄. 해석 말고 관측
-- **틀린 것**: 없으면 "없음"
+[2] …
 
-## 남은 것
-다음에 같은 일을 할 때 달라지는 것. 재사용 가능한 규칙으로 쓴다.
+Run without --dry-run to record. Reply to drop or merge any item.
 ```
 
-## 규칙
+---
 
-**1. 모든 문장이 흔적으로 되돌아가야 한다.**
-숫자, 파일 경로, 명령어, 인용된 로그 줄 중 하나에 걸려 있어야 한다.
-매끄럽게 만들려고 없는 연결을 지어내지 마라. 흔적이 끊겨 있으면 끊긴 채로 쓴다.
+## Step 4 — Confirm (normal mode)
 
-**2. 기준은 소급해서 만들지 않는다.**
-"기준" 칸은 흔적에서 **결과가 나오기 전에** 등장한 말만 쓴다.
-없으면 `기준 없이 시작함`이라고 쓴다. 그게 이 기록의 가장 정직한 부분이고,
-읽는 사람이 성장을 보는 지점이다. 빈칸을 채우려고 지어내면 이 기록은 쓸모가 없다.
+Show the same list as Step 3 and wait for the builder's reply.
+- "save" / "yes" → save all
+- "drop 2", "merge 1 and 3", corrections → adjust, then save
+- If any item has **no judgment**, that's allowed — but if the session clearly had a
+  rejection/decision you missed, add it before saving.
 
-**3. 틀린 것을 빼지 않는다.**
-잘못 잡은 가설, 헛돈 시간, 되돌린 결정. 이게 없으면 리크루터는 이 글을 믿지 않는다.
-장면 하나 이상에는 반드시 있어야 한다. 정말 없었다면 그 작업이 쉬웠던 것이므로
-"쉬웠다"고 쓴다.
+**Stop and wait for the reply.** Never save before confirmation.
 
-**4. 빌더를 평가하지 않는다.**
-"꼼꼼하게", "체계적으로", "인상적인" 같은 말을 쓰지 마라.
-한 일을 쓰면 읽는 사람이 판단한다. 형용사는 판단을 대신하려는 시도다.
+---
 
-**5. 이야기지 목록이 아니다.**
-장면은 시간 순서로 이어지고, 앞 장면의 결과가 뒤 장면의 상황이 된다.
-연결이 안 되는 조각은 이 편에 속하지 않는 것이다. 빼라.
+## Step 5 — Save each item
 
-**6. 한 편은 하나의 흐름이다.**
-장면이 5개를 넘으면 두 편으로 나눠야 하는 신호다.
-서로 다른 목적의 작업을 한 편에 묶지 마라.
+For each confirmed item:
 
-## 태그
+1. Write the body to a temp markdown file (so special characters survive). Body structure:
 
-기존 어휘집이 있으면 거기서 고른다 (`product_builder_tags.md`).
-없으면 새로 만들되, 태그마다 이 편의 어느 장면이 근거인지를 파일 하단에 적는다.
-태그는 편 단위로 붙인다. 장면마다 붙이지 않는다.
+```markdown
+## What was the problem
+[1-2 sentences — why this work was needed]
 
-## 하지 말 것
+## What was done
+[2-5 sentences — specific actions]
 
-- 빌더에게 질문해서 빈칸 채우기
-- 코드베이스를 훑어서 장면 만들기 (흔적에 없는 건 안 일어난 일이다)
-- 결과가 좋아 보이게 순서 바꾸기
-- 여러 날 작업을 한 편으로 압축하기
+## The judgment call
+[What the AI proposed, what you rejected/changed, and why. The heart of the record.]
+
+## Result
+[Concrete outcome]
+```
+
+2. Write the evidence list to a temp JSON file.
+
+3. Call the script:
+
+```bash
+python3 ~/.claude/skills/builders-diary/scripts/save_record.py \
+  --project  "Project Title" \
+  --goal     "Goal Title" \
+  --title    "Concise title — what was attempted" \
+  --category "Research" \
+  --tags     "tag1,tag2" \
+  --judgment "AI proposed X; rejected because Y; chose Z" \
+  --evidence-file /tmp/bd_evidence.json \
+  --body-file     /tmp/bd_body.md
+```
+
+The script creates project.json / goal.json / record.json with the exact schema the web UI
+reads, reuses existing project/goal folders, and auto-increments the sequence number.
+Storage root is `$BUILDERS_DIARY_PATH` or `~/builders-diary`. Prefer English titles for clean
+folder slugs.
+
+---
+
+## Step 6 — Confirm to the builder
+
+Report each saved item's script output: record_id, category, whether judgment was captured,
+evidence count, and path. Then:
+
+```
+View your portfolio: http://localhost:3111
+```
+
+---
+
+## Rules
+
+- **Judgment first.** The rejection/decision moment is the most valuable thing here. Look for
+  it before anything else. If it exists, it goes in.
+- **Never save without confirmation** (Step 4).
+- **Never fabricate evidence, never ask the builder for it.** Traces only.
+- **Always use save_record.py** — never hand-write JSON. The script owns id generation,
+  slug rules, and sequence counting.
+- **One record per intent** — split multi-intent sessions; don't force one card.
+- **This is not a project-management tool.** No status like done/blocked. Category shows range;
+  the Result section shows outcome.
