@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Builder's Diary — User Flow v2</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: #0d0d0d;
+    color: #e8e8e0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    padding: 36px 40px;
+    line-height: 1.5;
+  }
+  h1 { font-family: Georgia, serif; font-size: 20px; font-weight: 400; color: #e8e8e0; margin-bottom: 3px; }
+  .subtitle { font-size: 10px; color: #444; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 40px; }
+
+  /* ── Architecture banner ── */
+  .arch {
+    display: grid;
+    grid-template-columns: 1fr 32px 1fr 32px 1fr;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 44px;
+    max-width: 760px;
+  }
+  .arch-box {
+    border: 1px solid #222;
+    border-radius: 6px;
+    padding: 14px 16px;
+    background: #111;
+  }
+  .arch-box.local { border-color: #2a5c3a; background: #0c140e; }
+  .arch-box.cloud { border-color: #2a3060; background: #0c0e1a; }
+  .arch-box.web   { border-color: #5c3a1a; background: #1a100a; }
+  .arch-label { font-size: 10px; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 5px; }
+  .arch-label.green { color: #4caf6a; }
+  .arch-label.blue  { color: #5a7acc; }
+  .arch-label.amber { color: #c49a3c; }
+  .arch-title { font-size: 13px; color: #ccc; margin-bottom: 4px; }
+  .arch-body  { font-size: 11px; color: #555; line-height: 1.5; }
+  .arch-arrow { text-align: center; font-size: 18px; color: #333; }
+
+  /* ── Two-persona section ── */
+  .personas { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; max-width: 900px; }
+
+  /* ── Flow column ── */
+  .flow-col {}
+  .flow-heading {
+    font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+    color: #555; margin-bottom: 18px;
+    padding-bottom: 8px; border-bottom: 1px solid #1e1e1e;
+  }
+  .flow-heading span { font-size: 16px; margin-right: 6px; }
+
+  /* ── Step card ── */
+  .step {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 4px;
+    position: relative;
+  }
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 15px; top: 36px; bottom: -4px;
+    width: 1px; background: #1e1e1e;
+  }
+  .step-num {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid #222; background: #111;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: #444; flex-shrink: 0;
+  }
+  .step-num.green { border-color: #2a5c3a; color: #4caf6a; background: #0c140e; }
+  .step-num.amber { border-color: #4a3a1a; color: #c49a3c; background: #16120a; }
+  .step-num.blue  { border-color: #2a3060; color: #5a7acc; background: #0c0e1a; }
+  .step-content { padding-bottom: 18px; flex: 1; }
+  .step-title { font-size: 12px; font-weight: 600; color: #ccc; margin-bottom: 3px; }
+  .step-body  { font-size: 11px; color: #555; line-height: 1.55; }
+  .step-body code { color: #4caf6a; }
+  .step-body .dim { color: #3a3a3a; }
+
+  /* ── Pill tag ── */
+  .pill {
+    display: inline-block; margin-top: 6px;
+    padding: 2px 8px; border-radius: 20px; font-size: 10px;
+    letter-spacing: .04em;
+  }
+  .pill.green { background: #0c140e; border: 1px solid #2a5c3a; color: #4caf6a; }
+  .pill.amber { background: #16120a; border: 1px solid #4a3a1a; color: #c49a3c; }
+  .pill.blue  { background: #0c0e1a; border: 1px solid #2a3060; color: #5a7acc; }
+  .pill.gray  { background: #141414; border: 1px solid #222; color: #555; }
+
+  /* ── Callout ── */
+  .callout {
+    margin-top: 8px; padding: 8px 12px;
+    border-radius: 0 4px 4px 0; font-size: 11px; line-height: 1.5;
+  }
+  .callout.green { background: #0c140e; border-left: 2px solid #2a5c3a; color: #555; }
+  .callout.amber { background: #16120a; border-left: 2px solid #4a3a1a; color: #c49a3c; }
+  .callout.blue  { background: #0c0e1a; border-left: 2px solid #2a3060; color: #5a7acc; }
+  .callout strong.g { color: #4caf6a; }
+  .callout strong.a { color: #c49a3c; }
+
+  /* ── Divider ── */
+  hr { border: none; border-top: 1px solid #181818; margin: 32px 0; }
+
+  /* ── Decision box ── */
+  .decision-row { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; max-width: 760px; }
+  .decision-card {
+    flex: 1; min-width: 200px;
+    border: 1px solid #222; border-radius: 6px; padding: 14px;
+    background: #111;
+  }
+  .decision-card.open { border-color: #4a3a1a; background: #16120a; }
+  .dc-label { font-size: 10px; color: #444; letter-spacing: .07em; text-transform: uppercase; margin-bottom: 6px; }
+  .dc-label.amber { color: #c49a3c; }
+  .dc-title { font-size: 12px; color: #999; margin-bottom: 4px; font-weight: 600; }
+  .dc-body  { font-size: 11px; color: #555; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<h1>Builder's Diary — User Flow v2</h1>
+<p class="subtitle">Local MCP + Vercel Public · 2026-09-04</p>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- ARCHITECTURE                               -->
+<!-- ══════════════════════════════════════════ -->
+<div class="arch">
+  <div class="arch-box local">
+    <div class="arch-label green">Local (private)</div>
+    <div class="arch-title">MCP Server</div>
+    <div class="arch-body">
+      stdio 프로세스<br>
+      로컬 마크다운 파일<br>
+      ~/builders-diary/ 자동생성
+    </div>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box cloud">
+    <div class="arch-label blue">Cloud</div>
+    <div class="arch-title">Supabase</div>
+    <div class="arch-body">
+      Public 기록만 동기화<br>
+      user_id 기반 프로필<br>
+      태그 인덱스 (검색용)
+    </div>
+  </div>
+  <div class="arch-arrow">→</div>
+  <div class="arch-box web">
+    <div class="arch-label amber">Public (Vercel)</div>
+    <div class="arch-title">builders-diary.com</div>
+    <div class="arch-body">
+      빌더 포트폴리오 뷰<br>
+      리크루터 태그 검색<br>
+      이력서 딥링크 타겟
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- TWO PERSONAS                               -->
+<!-- ══════════════════════════════════════════ -->
+<div class="personas">
+
+  <!-- ── BUILDER FLOW ── -->
+  <div class="flow-col">
+    <div class="flow-heading"><span>🧱</span>Builder Flow</div>
+
+    <!-- 1 -->
+    <div class="step">
+      <div class="step-num green">1</div>
+      <div class="step-content">
+        <div class="step-title">Landing or GitHub</div>
+        <div class="step-body">
+          builders-diary.com 또는 GitHub README에서 유입<br>
+          <span class="dim">— 여기서 가치 확인 후 설치 결정</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="step">
+      <div class="step-num green">2</div>
+      <div class="step-content">
+        <div class="step-title">터미널에서 한 줄</div>
+        <div class="step-body">
+          <code>pip install builders-diary</code><br>
+          또는 <code>uvx builders-diary</code><br>
+          <span class="dim">→ PATH에 커맨드 등록</span>
+        </div>
+        <div class="pill green">install</div>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="step">
+      <div class="step-num amber">3</div>
+      <div class="step-content">
+        <div class="step-title">MCP 등록 (1회, 불가피)</div>
+        <div class="step-body">
+          Claude Desktop / Hermes / Cursor config에<br>
+          <code>"builders-diary": {"command": "builders-diary"}</code> 추가<br>
+          <span class="dim">→ 에이전트 재시작</span>
+        </div>
+        <div class="pill amber">config 편집 · ~60초</div>
+        <div class="callout amber" style="margin-top:8px">
+          이게 유일한 마찰 지점. Landing에서 config snippet 복사 버튼 필수.
+        </div>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="step">
+      <div class="step-num green">4</div>
+      <div class="step-content">
+        <div class="step-title">첫 호출 — 자동 셋업</div>
+        <div class="step-body">
+          에이전트에서 <code>@builders-diary</code> 처음 실행<br><br>
+          MCP가 자동으로:<br>
+          · <code>~/builders-diary/</code> 폴더 생성 (Obsidian 방식)<br>
+          · <code>~/.builders-diary/config.json</code> 생성<br>
+          · Supabase에 user_id 등록<br>
+          · 프로필 URL 발급: <code>builders-diary.com/u/[id]</code>
+        </div>
+        <div class="pill green">auto · 사용자 입력 없음</div>
+      </div>
+    </div>
+
+    <!-- 5 -->
+    <div class="step">
+      <div class="step-num green">5</div>
+      <div class="step-content">
+        <div class="step-title">매일: 작업 → 호출 → 확인</div>
+        <div class="step-body">
+          세션 끝에 <code>@builders-diary</code><br><br>
+          <b style="color:#888">Step 1</b> — 자동: 컨텍스트 분석 → 프로젝트·목표·제목·태그 제안<br>
+          <b style="color:#888">Step 2</b> — 30초: "맞아" 또는 수정<br>
+          <b style="color:#888">Step 3</b> — 자동: 로컬 파일 생성 + Supabase 동기화
+        </div>
+        <div class="pill green">반복 루프</div>
+      </div>
+    </div>
+
+    <!-- 6 -->
+    <div class="step">
+      <div class="step-num blue">6</div>
+      <div class="step-content">
+        <div class="step-title">이력서에 링크 삽입</div>
+        <div class="step-body">
+          MCP가 Step 3에서 반환:<br>
+          <code>builders-diary.com/r/[record-id]</code><br><br>
+          이걸 이력서 불렛 옆 링크로 붙임<br>
+          <span class="dim">→ 리크루터가 클릭하면 기록으로 바로 이동</span>
+        </div>
+        <div class="pill blue">share</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── RECRUITER FLOW ── -->
+  <div class="flow-col">
+    <div class="flow-heading"><span>🔍</span>Recruiter Flow</div>
+
+    <!-- R1 -->
+    <div class="step">
+      <div class="step-num blue">A</div>
+      <div class="step-content">
+        <div class="step-title">진입 경로 ①: 이력서 링크</div>
+        <div class="step-body">
+          이력서 불렛 옆 링크 클릭<br>
+          <code>builders-diary.com/r/[record-id]</code><br>
+          → 해당 기록 바로 보기
+        </div>
+        <div class="pill blue">deeplink</div>
+      </div>
+    </div>
+
+    <!-- R2 -->
+    <div class="step">
+      <div class="step-num blue">B</div>
+      <div class="step-content">
+        <div class="step-title">진입 경로 ②: 직접 검색</div>
+        <div class="step-body">
+          builders-diary.com 랜딩에서<br>
+          도구 / 마인드셋 태그로 빌더 검색<br>
+          예: <code>claude-code</code> <code>end-to-end</code> <code>supabase</code>
+        </div>
+        <div class="pill blue">discovery</div>
+      </div>
+    </div>
+
+    <!-- R3 -->
+    <div class="step">
+      <div class="step-num blue">C</div>
+      <div class="step-content">
+        <div class="step-title">빌더 프로필 탐색</div>
+        <div class="step-body">
+          <code>builders-diary.com/u/[id]</code><br><br>
+          · 프로젝트 → 목표 → 기록 3층<br>
+          · 판단이 보이는 카드 (형용사 없음)<br>
+          · 태그 필터로 관련 기록만 추출
+        </div>
+        <div class="pill blue">read-only</div>
+      </div>
+    </div>
+
+    <!-- R4 -->
+    <div class="step">
+      <div class="step-num blue">D</div>
+      <div class="step-content">
+        <div class="step-title">기록 단건 열기</div>
+        <div class="step-body">
+          HEAD: 무엇을 하려 했고 왜 어려웠나<br>
+          SCENES: 상황 → 판단기준 → 결과<br>
+          TAIL: 다음에 달라지는 것<br><br>
+          <span class="dim">→ "이 사람이 어떻게 판단하는지" 읽힘</span>
+        </div>
+        <div class="pill blue">FORMAT.md 구조</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<hr>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- OPEN QUESTIONS                             -->
+<!-- ══════════════════════════════════════════ -->
+<div style="font-size:10px;color:#444;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;">
+  미결 / 다음 결정
+</div>
+<div class="decision-row">
+
+  <div class="decision-card open">
+    <div class="dc-label amber">미결</div>
+    <div class="dc-title">로컬 → Supabase 동기화 시점</div>
+    <div class="dc-body">
+      옵션 A: MCP Step 3에서 즉시 업로드 (public 기록만)<br>
+      옵션 B: <code>builders-diary sync</code> 명령으로 수동<br>
+      옵션 C: GitHub repo를 중간 레이어로
+    </div>
+  </div>
+
+  <div class="decision-card open">
+    <div class="dc-label amber">미결</div>
+    <div class="dc-title">캡처 창 놓침 방지</div>
+    <div class="dc-body">
+      빌더가 세션 닫으면 컨텍스트 소멸<br>
+      → 세션 종료 감지 / 주기 넛지 / 자동 훅<br>
+      지금은 습관에 의존
+    </div>
+  </div>
+
+  <div class="decision-card open">
+    <div class="dc-label amber">미결</div>
+    <div class="dc-title">슬래시 커맨드</div>
+    <div class="dc-body">
+      현재 mcp_server.py에 Tool만 있음<br>
+      <code>/builders-diary</code> 슬래시 커맨드는<br>
+      MCP Prompt 핸들러 추가해야 동작
+    </div>
+  </div>
+
+  <div class="decision-card">
+    <div class="dc-label">결정됨</div>
+    <div class="dc-title">온보딩 UX 간소화</div>
+    <div class="dc-body">
+      폴더 연결 / 웹 뷰어 설치 없음<br>
+      첫 호출이 모든 셋업 처리<br>
+      마찰 지점 = MCP config 1회만
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
