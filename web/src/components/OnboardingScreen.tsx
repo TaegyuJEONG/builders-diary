@@ -283,7 +283,7 @@ export function OnboardingScreen({
                 <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
                   The installer just created a{' '}
                   <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>builders-diary</code>{' '}
-                  folder in your home folder. Pick it.
+                  folder in your <strong>Documents</strong>. Pick it — the picker opens right there.
                 </p>
 
                 {markerStatus !== 'ok' && (
@@ -332,7 +332,7 @@ export function OnboardingScreen({
                     <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.7 }}>
                       Make sure the command in step 1 ran without errors, then pick the{' '}
                       <code className="mono" style={{ fontSize: 11.5, color: 'var(--text)' }}>builders-diary</code>{' '}
-                      folder in your home folder.
+                      folder in your Documents.
                     </div>
                     <button
                       onClick={onComplete}

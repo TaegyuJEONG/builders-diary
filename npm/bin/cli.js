@@ -133,7 +133,11 @@ function cmdInstall(args) {
 
   // Create the data folder the skill saves to, and drop an install marker
   // so the web app can verify the install when the user connects the folder.
-  const dataRoot = path.join(os.homedir(), SKILL_NAME);
+  // Root rule (shared with the skill + web): ~/Documents/builders-diary when
+  // ~/Documents exists, else ~/builders-diary. Documents is used because the
+  // browser folder picker can open directly inside it (startIn: 'documents').
+  const docs = path.join(os.homedir(), 'Documents');
+  const dataRoot = path.join(fs.existsSync(docs) ? docs : os.homedir(), SKILL_NAME);
   fs.mkdirSync(dataRoot, { recursive: true });
 
   const markerPath = path.join(dataRoot, '.builders-diary.json');
@@ -149,8 +153,9 @@ function cmdInstall(args) {
     installed_at: new Date().toISOString(),
   }, null, 2) + '\n');
 
-  console.log(`\u2713 Data folder ready \u2192 ~/${SKILL_NAME}`);
-  console.log('\nDone. Restart your AI tool, then connect the folder in the web app.');
+  const shownRoot = dataRoot.replace(os.homedir(), '~');
+  console.log(`\u2713 Data folder ready \u2192 ${shownRoot}`);
+  console.log('\nDone. Go back to the web page and pick that folder.');
 }
 
 function main() {

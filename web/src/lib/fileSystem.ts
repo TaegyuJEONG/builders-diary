@@ -26,7 +26,12 @@ export async function selectFolder(): Promise<FileSystemDirectoryHandle | null> 
     if (!('showDirectoryPicker' in window)) {
       throw new Error('File System Access API is not supported in this browser');
     }
-    const handle = await (window as any).showDirectoryPicker();
+    const handle = await (window as any).showDirectoryPicker({
+      // Open the picker inside Documents — where the npx installer creates
+      // builders-diary — so the user just clicks the folder and hits Select.
+      id: 'builders-diary-root',
+      startIn: 'documents',
+    });
     return handle;
   } catch (error: any) {
     if (error.name === 'AbortError') {

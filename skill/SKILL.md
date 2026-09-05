@@ -1,7 +1,7 @@
 ---
 name: builders-diary
 version: 2.0.0
-description: Record what you actually judged in a work session — not just what got built. Saves locally to ~/builders-diary/. Works for any builder (research, design, sales, engineering), not just coders.
+description: Record what you actually judged in a work session — not just what got built. Saves locally to ~/Documents/builders-diary/. Works for any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "@builders-diary"
   - "/builders-diary"
@@ -166,7 +166,8 @@ python3 ~/.claude/skills/builders-diary/scripts/save_record.py \
 
 The script creates project.json / goal.json / record.json with the exact schema the web UI
 reads, reuses existing project/goal folders, and auto-increments the sequence number.
-Storage root is `$BUILDERS_DIARY_PATH` or `~/builders-diary`. Prefer English titles for clean
+Storage root is `$BUILDERS_DIARY_PATH`, else `~/Documents/builders-diary` (falls back to
+`~/builders-diary` when no Documents folder exists). Prefer English titles for clean
 folder slugs.
 
 ---

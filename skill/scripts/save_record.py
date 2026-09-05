@@ -38,6 +38,15 @@ import uuid
 # Work categories — replace PM-style status. Shows the builder's range at a glance.
 CATEGORIES = ["Planning", "Design", "Engineering", "Research", "Growth"]
 
+
+def default_root() -> str:
+    """Data root shared with the web app and npx installer:
+    ~/Documents/builders-diary when ~/Documents exists (typical desktop OS),
+    else ~/builders-diary."""
+    docs = os.path.expanduser("~/Documents")
+    base = docs if os.path.isdir(docs) else os.path.expanduser("~")
+    return os.path.join(base, "builders-diary")
+
 # Evidence types — generalized to cover non-developer work, not just code.
 #   input    → what the builder started with (interview transcript, error log, brief)
 #   judgment → an AI-proposed option the builder rejected/changed, and why
@@ -154,7 +163,7 @@ def main() -> int:
     root = (
         args.root
         or os.environ.get("BUILDERS_DIARY_PATH")
-        or os.path.expanduser("~/builders-diary")
+        or default_root()
     )
     root = os.path.expanduser(root)
 
