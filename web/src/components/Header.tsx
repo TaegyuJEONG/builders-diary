@@ -20,6 +20,8 @@ interface HeaderProps {
   onReconnect: () => void;
   onSelectRecord: (id: string) => void;
   isLoading?: boolean;
+  /** AI tools the user has installed the skill for (from onboarding). */
+  selectedClients?: string[];
 }
 
 /** Small pill badge showing a count. */
@@ -163,6 +165,143 @@ function FilterPopover({
   );
 }
 
+// Known AI tools for the manager popover (mirror of onboarding list).
+const TOOL_LABELS: { [id: string]: string } = {
+  claude: 'Claude Code',
+  cursor: 'Cursor',
+  windsurf: 'Windsurf',
+  cline: 'Cline',
+  codex: 'Codex CLI',
+  chatgpt: 'ChatGPT',
+};
+const ADDABLE_TOOLS = ['claude', 'cursor', 'windsurf', 'cline'];
+
+/** Tools manager popover — shows connected tools + a command to add another. */
+function ToolsPopover({
+  selectedClients,
+  onClose,
+}: {
+  selectedClients: string[];
+  onClose: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [addTool, setAddTool] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [onClose]);
+
+  const snippet = `npx builders-diary@latest install --tools ${addTool ?? 'claude'}`;
+  const copy = () => {
+    navigator.clipboard.writeText(snippet).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const notYetAdded = ADDABLE_TOOLS.filter(t => !selectedClients.includes(t));
+
+  return (
+    <div ref={ref} style={{
+      position: 'absolute',
+      top: 'calc(100% + 8px)',
+      right: 0,
+      width: 320,
+      background: 'var(--surface)',
+      border: '1px solid var(--border2)',
+      borderRadius: 6,
+      boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+      zIndex: 200,
+      overflow: 'hidden',
+    }}>
+      <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
+        <span style={{ fontSize: 11, color: 'var(--text2)', fontFamily: 'IBM Plex Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+          Your tools
+        </span>
+      </div>
+
+      {/* Connected tools */}
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+        {selectedClients.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono, monospace' }}>No tools yet.</div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {selectedClients.map(t => (
+              <span key={t} className="mono" style={{
+                fontSize: 11, padding: '3px 9px', borderRadius: 3,
+                background: 'var(--tag-active-bg)', color: 'var(--accent)',
+                border: '1px solid var(--accent-dim)',
+              }}>
+                ✓ {TOOL_LABELS[t] ?? t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add another */}
+      <div style={{ padding: '10px 14px' }}>
+        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'IBM Plex Mono, monospace' }}>
+          Add another
+        </div>
+        {notYetAdded.length === 0 ? (
+          <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'IBM Plex Mono, monospace' }}>All set — every tool added.</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {notYetAdded.map(t => (
+                <button
+                  key={t}
+                  onClick={() => setAddTool(t)}
+                  className="mono"
+                  style={{
+                    fontSize: 11, padding: '4px 10px', borderRadius: 3,
+                    border: `1px solid ${addTool === t ? 'var(--accent)' : 'var(--border)'}`,
+                    background: addTool === t ? 'var(--tag-active-bg)' : 'transparent',
+                    color: addTool === t ? 'var(--accent)' : 'var(--text2)',
+                    cursor: 'pointer', transition: 'all 0.15s',
+                  }}
+                >
+                  {TOOL_LABELS[t] ?? t}
+                </button>
+              ))}
+            </div>
+            {addTool && (
+              <div style={{
+                background: 'var(--bg)', border: '1px solid var(--border)',
+                borderRadius: 4, padding: '8px 10px',
+                display: 'flex', alignItems: 'flex-start', gap: 10,
+              }}>
+                <code className="mono" style={{ fontSize: 10.5, color: 'var(--text2)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
+                  <span style={{ color: 'var(--text3)' }}>$ </span>{snippet}
+                </code>
+                <button
+                  onClick={copy}
+                  className="mono"
+                  style={{
+                    flexShrink: 0, padding: '4px 10px', fontSize: 10.5,
+                    background: copied ? 'var(--tag-active-bg)' : 'transparent',
+                    border: '1px solid var(--border)', borderRadius: 3,
+                    color: copied ? 'var(--accent)' : 'var(--text3)',
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >
+                  {copied ? '✓' : 'Copy'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function Header({
   projects,
   selectedProjectId,
@@ -179,8 +318,10 @@ export function Header({
   onReconnect,
   onSelectRecord,
   isLoading = false,
+  selectedClients = [],
 }: HeaderProps) {
   const [filterOpen, setFilterOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const filterBtnRef = useRef<HTMLDivElement>(null);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
@@ -323,6 +464,37 @@ export function Header({
             onToolChange={onToolChange}
             onClose={() => setFilterOpen(false)}
           />
+        )}
+      </div>
+
+      {/* Tools manager icon button */}
+      <div style={{ position: 'relative', flexShrink: 0 }}>
+        <button
+          onClick={() => setToolsOpen(o => !o)}
+          title="Your AI tools"
+          style={{
+            width: 32,
+            height: 32,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: toolsOpen ? 'var(--tag-active-bg)' : 'transparent',
+            border: `1px solid ${toolsOpen ? 'var(--accent)' : 'var(--border)'}`,
+            borderRadius: 4,
+            color: toolsOpen ? 'var(--accent)' : 'var(--text2)',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={e => { if (!toolsOpen) { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--text)'; }}}
+          onMouseLeave={e => { if (!toolsOpen) { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)'; }}}
+        >
+          {/* Plug / tools icon */}
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 1v3M10 1v3M3 4h8v2a4 4 0 01-8 0V4zM7 10v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+        {toolsOpen && (
+          <ToolsPopover selectedClients={selectedClients} onClose={() => setToolsOpen(false)} />
         )}
       </div>
 

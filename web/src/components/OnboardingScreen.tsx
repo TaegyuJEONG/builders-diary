@@ -7,13 +7,21 @@ import {
   scanFolderStructure,
 } from '@/lib/fileSystem';
 import { Portfolio } from '@/lib/types';
+import { detectOS, terminalHint } from '@/lib/os';
 
 interface OnboardingScreenProps {
+  /** Opens the native folder picker; resolves when a folder is connected. */
   onSelectFolder: () => void;
   isLoading: boolean;
   error?: string | null;
+  /** True once a folder handle is connected (set by parent after picker). */
   folderConnected?: boolean;
   folderPath?: string;
+  /** Selected AI tools, lifted to parent so they persist + drive the header later. */
+  selectedClients: string[];
+  setSelectedClients: (tools: string[]) => void;
+  /** Called when the user finishes onboarding and enters the portfolio. */
+  onComplete: () => void;
 }
 
 const CLIENTS = [
@@ -29,22 +37,25 @@ type Phase = 'select' | 'steps';
 
 export function OnboardingScreen({
   onSelectFolder, isLoading, error, folderConnected, folderPath,
+  selectedClients, setSelectedClients, onComplete,
 }: OnboardingScreenProps) {
   const [phase, setPhase] = useState<Phase>('select');
+  // Step 1 = connect folder, Step 2 = install skill (+detect), Step 3 = done
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  const [selectedClients, setSelectedClients] = useState<string[]>([]);
   const [copied, setCopied] = useState<string | null>(null);
   const [firstRecord, setFirstRecord] = useState<Portfolio | null>(null);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // folder connected (step 2) → advance to step 3
+  const hint = terminalHint(detectOS());
+
+  // Folder connected (on Step 1) → advance to Step 2 (install skill). Do NOT leave onboarding.
   useEffect(() => {
-    if (folderConnected && step === 2) setStep(3);
+    if (folderConnected && step === 1) setStep(2);
   }, [folderConnected, step]);
 
-  // step 3 → poll for first record
+  // While on Step 2, poll the connected folder for the first record → auto-advance to Step 3.
   useEffect(() => {
-    if (step !== 3) return;
+    if (step !== 2) return;
     pollingRef.current = setInterval(async () => {
       try {
         const handle = await loadFolderHandleFromStorage();
@@ -57,7 +68,8 @@ export function OnboardingScreen({
         );
         if (hasRecords) {
           setFirstRecord(data);
-          clearInterval(pollingRef.current!);
+          setStep(3);
+          if (pollingRef.current) clearInterval(pollingRef.current);
         }
       } catch { /* ignore */ }
     }, 3000);
@@ -76,8 +88,10 @@ export function OnboardingScreen({
   }
 
   function toggleClient(id: string) {
-    setSelectedClients(prev =>
-      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    setSelectedClients(
+      selectedClients.includes(id)
+        ? selectedClients.filter(c => c !== id)
+        : [...selectedClients, id]
     );
   }
 
@@ -89,6 +103,7 @@ export function OnboardingScreen({
   }
 
   const toolName = CLIENTS.find(c => selectedClients.includes(c.id))?.label ?? 'your AI tool';
+  const isClaude = selectedClients.includes('claude');
 
   return (
     <div style={{
@@ -121,8 +136,8 @@ export function OnboardingScreen({
           marginBottom: 48,
           lineHeight: 1.8,
         }}>
-          All records are stored locally on your machine.<br />
-          Only what you explicitly share is sent to our servers and shown to recruiters.
+          Everything stays on your computer.<br />
+          Only the records you choose to share are ever sent to us.
         </div>
 
         {/* ════ PHASE: SELECT ════ */}
@@ -132,7 +147,7 @@ export function OnboardingScreen({
               fontSize: 10, color: 'var(--text3)',
               textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16,
             }}>
-              I use
+              Which AI tools do you use?
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 32 }}>
@@ -209,8 +224,8 @@ export function OnboardingScreen({
               }}
             >
               {selectedClients.length === 0
-                ? 'Select at least one tool to continue'
-                : `Continue with ${selectedClients.map(id => CLIENTS.find(c => c.id === id)?.label).join(', ')} →`}
+                ? 'Pick at least one to continue'
+                : `Continue →`}
             </button>
           </>
         )}
@@ -234,19 +249,71 @@ export function OnboardingScreen({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-              {/* ── STEP 1: Install Skill ── */}
-              <StepCard n={1} active={step === 1} done={step > 1} title="Install the skill">
+              {/* ── STEP 1: Connect folder ── */}
+              <StepCard n={1} active={step === 1} done={step > 1} title="Pick a folder for your records">
                 {step >= 1 && (
                   <>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
-                      Run this in your terminal. It adds the Builder&apos;s Diary skill to {toolName} so you can type <code className="mono" style={{ color: 'var(--accent)', fontSize: 12 }}>@builders-diary</code> at the end of any session.
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 20px' }}>
+                      This is where your work records will live — on your computer.
+                      A new folder called <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>builders-diary</code> in
+                      your home folder works great.
                     </p>
+                    {step === 1 && (
+                      <button
+                        onClick={onSelectFolder}
+                        disabled={isLoading}
+                        className="mono"
+                        style={{
+                          padding: '10px 24px',
+                          background: isLoading ? 'var(--border)' : 'var(--accent)',
+                          color: isLoading ? 'var(--text3)' : 'var(--bg)',
+                          border: 'none', borderRadius: 4,
+                          fontSize: 12, fontWeight: 600, letterSpacing: '0.05em',
+                          cursor: isLoading ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {isLoading ? 'Connecting…' : 'Choose folder'}
+                      </button>
+                    )}
+                    {error && (
+                      <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>
+                    )}
+                    {step > 1 && (
+                      <div className="mono" style={{ fontSize: 11, color: 'var(--accent)' }}>
+                        ✓ {folderPath || 'folder connected'}
+                      </div>
+                    )}
+                  </>
+                )}
+              </StepCard>
+
+              {/* ── STEP 2: Install skill (+ terminal hint + detection) ── */}
+              <StepCard n={2} active={step === 2} done={step > 2} title="Teach your AI the command" locked={step < 2}>
+                {step >= 2 && (
+                  <>
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 14px' }}>
+                      Paste this one line into a terminal. It teaches {toolName} the{' '}
+                      <code className="mono" style={{ color: 'var(--accent)', fontSize: 12 }}>@builders-diary</code> command.
+                    </p>
+
+                    {/* OS-aware terminal hint */}
+                    <div className="mono" style={{
+                      fontSize: 11, color: 'var(--text3)', lineHeight: 1.7,
+                      marginBottom: 14,
+                    }}>
+                      Not sure how? {hint.label}: press{' '}
+                      <span style={{
+                        color: 'var(--text2)', border: '1px solid var(--border)',
+                        borderRadius: 3, padding: '1px 6px',
+                      }}>{hint.keys}</span>
+                      {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}.
+                    </div>
 
                     {/* install command */}
                     <div style={{
                       background: 'var(--bg)', border: '1px solid var(--border)',
                       borderRadius: 4, padding: '12px 14px',
-                      display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 20,
+                      display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16,
                     }}>
                       <code className="mono" style={{ fontSize: 11, color: 'var(--text2)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
                         <span style={{ color: 'var(--text3)' }}>$ </span>{installSnippet}
@@ -268,135 +335,64 @@ export function OnboardingScreen({
                       </button>
                     </div>
 
-                    {step === 1 && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                        <button
-                          onClick={() => setStep(2)}
-                          className="mono"
-                          style={{
-                            padding: '9px 20px', fontSize: 12, fontWeight: 600,
-                            background: 'var(--accent)', color: 'var(--bg)',
-                            border: 'none', borderRadius: 4, cursor: 'pointer',
-                          }}
-                        >
-                          Done, I ran it →
-                        </button>
-                        <span className="mono" style={{ fontSize: 11, color: 'var(--text3)' }}>
-                          then restart {selectedClients.includes('claude') ? 'Claude Code' : toolName}
-                        </span>
-                      </div>
-                    )}
-
-                    {step > 1 && (
-                      <div className="mono" style={{ fontSize: 11, color: 'var(--accent)' }}>✓ Skill installed</div>
-                    )}
-                  </>
-                )}
-              </StepCard>
-
-              {/* ── STEP 2: Connect Folder ── */}
-              <StepCard n={2} active={step === 2} done={step > 2} title="Connect your folder" locked={step < 2}>
-                {step >= 2 && (
-                  <>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 20px' }}>
-                      Choose the folder where your work records will be saved — and visualised here. We suggest <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>~/builders-diary</code>.
+                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.7, margin: '0 0 16px' }}>
+                      After it runs, restart {isClaude ? 'Claude Code' : toolName}. Then finish any
+                      work session and type{' '}
+                      <code className="mono" style={{ color: 'var(--accent)', fontSize: 12 }}>@builders-diary</code>.
+                      We&apos;ll spot your first record automatically.
                     </p>
-                    {step === 2 && (
-                      <button
-                        onClick={onSelectFolder}
-                        disabled={isLoading}
-                        className="mono"
-                        style={{
-                          padding: '10px 24px',
-                          background: isLoading ? 'var(--border)' : 'var(--accent)',
-                          color: isLoading ? 'var(--text3)' : 'var(--bg)',
-                          border: 'none', borderRadius: 4,
-                          fontSize: 12, fontWeight: 600, letterSpacing: '0.05em',
-                          cursor: isLoading ? 'not-allowed' : 'pointer',
-                        }}
-                      >
-                        {isLoading ? 'Connecting…' : 'Choose Folder'}
-                      </button>
-                    )}
-                    {error && (
-                      <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>
-                    )}
-                    {step > 2 && (
-                      <div className="mono" style={{ fontSize: 11, color: 'var(--accent)' }}>
-                        ✓ {folderPath || 'folder connected'}
-                      </div>
-                    )}
-                  </>
-                )}
-              </StepCard>
 
-              {/* ── STEP 3: First Record ── */}
-              <StepCard n={3} active={step === 3} done={!!firstRecord} title="Make your first record" locked={step < 3}>
-                {step >= 3 && (
-                  <>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
-                      In {selectedClients.includes('claude') ? 'Claude Code' : toolName}, finish any work session and type:
-                    </p>
-                    <div style={{
-                      background: 'var(--bg)', border: '1px solid var(--border)',
-                      borderRadius: 4, padding: '12px 16px',
-                      display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16,
-                    }}>
-                      <code className="mono" style={{ fontSize: 14, color: 'var(--accent)', flex: 1 }}>
-                        @builders-diary
-                      </code>
-                      <button
-                        onClick={() => copy('@builders-diary', 'skill')}
-                        className="mono"
-                        style={{
-                          flexShrink: 0,
-                          padding: '5px 12px', fontSize: 11,
-                          background: copied === 'skill' ? 'var(--tag-active-bg)' : 'transparent',
-                          border: '1px solid var(--border)',
-                          borderRadius: 3,
-                          color: copied === 'skill' ? 'var(--accent)' : 'var(--text3)',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        {copied === 'skill' ? '✓ Copied' : 'Copy'}
-                      </button>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }}>⟳</span>
+                      Watching your folder for the first record…
                     </div>
-                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.7, margin: '0 0 24px' }}>
-                      The AI will ask a few questions, summarise the session, and save a work record to your folder. Your card will appear here automatically.
-                    </p>
 
-                    {!firstRecord ? (
-                      <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }}>⟳</span>
-                        Waiting for your first record…
-                      </div>
-                    ) : (
-                      <div style={{
-                        background: 'var(--surface)', border: '1px solid var(--accent)',
-                        borderRadius: 6, padding: '16px 18px',
-                      }}>
-                        <div className="mono" style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8 }}>
-                          ✓ First record saved!
-                        </div>
-                        {firstRecord.projects[0]?.goals[0]?.records[0] && (
-                          <p style={{ fontSize: 13, color: 'var(--text)', margin: '0 0 14px' }}>
-                            {firstRecord.projects[0].goals[0].records[0].title}
-                          </p>
-                        )}
-                        <button
-                          onClick={() => window.location.reload()}
-                          className="mono"
-                          style={{
-                            padding: '8px 18px', fontSize: 12, fontWeight: 600,
-                            background: 'var(--accent)', color: 'var(--bg)',
-                            border: 'none', borderRadius: 4, cursor: 'pointer',
-                          }}
-                        >
-                          View my portfolio →
-                        </button>
-                      </div>
-                    )}
+                    {/* escape hatch */}
+                    <button
+                      onClick={onComplete}
+                      className="mono"
+                      style={{
+                        marginTop: 16, background: 'none', border: 'none',
+                        color: 'var(--text3)', fontSize: 11, cursor: 'pointer',
+                        padding: 0, textDecoration: 'underline',
+                      }}
+                    >
+                      Skip for now — take me to my portfolio
+                    </button>
                   </>
+                )}
+              </StepCard>
+
+              {/* ── STEP 3: Done ── */}
+              <StepCard n={3} active={step === 3} done={!!firstRecord} title="You're all set" locked={step < 3}>
+                {step >= 3 && (
+                  <div style={{
+                    background: 'var(--surface)', border: '1px solid var(--accent)',
+                    borderRadius: 6, padding: '16px 18px',
+                  }}>
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--accent)', marginBottom: 8 }}>
+                      ✓ First record detected!
+                    </div>
+                    {firstRecord?.projects[0]?.goals[0]?.records[0] && (
+                      <p style={{ fontSize: 13, color: 'var(--text)', margin: '0 0 6px', fontWeight: 600 }}>
+                        {firstRecord.projects[0].goals[0].records[0].title}
+                      </p>
+                    )}
+                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.7, margin: '0 0 14px' }}>
+                      This is what recruiters will see. Keep building and it fills in on its own.
+                    </p>
+                    <button
+                      onClick={onComplete}
+                      className="mono"
+                      style={{
+                        padding: '8px 18px', fontSize: 12, fontWeight: 600,
+                        background: 'var(--accent)', color: 'var(--bg)',
+                        border: 'none', borderRadius: 4, cursor: 'pointer',
+                      }}
+                    >
+                      View my portfolio →
+                    </button>
+                  </div>
                 )}
               </StepCard>
 

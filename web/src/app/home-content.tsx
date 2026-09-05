@@ -5,6 +5,7 @@ import { Header } from '@/components/Header';
 import { CardTimeline } from '@/components/CardTimeline';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
+import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { Portfolio, Record } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission,
@@ -16,13 +17,19 @@ import {
 } from '@/lib/portfolio';
 
 const CONNECTED_KEY = 'builders-diary-connected';
+const ONBOARDING_DONE_KEY = 'builders-diary-onboarding-done';
+const TOOLS_KEY = 'builders-diary-tools';
 
 export function HomeContent() {
   const [connected, setConnected] = useState(false);
+  const [onboardingDone, setOnboardingDone] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // AI tools the user selected in onboarding (drives --tools + header manager)
+  const [selectedClients, setSelectedClientsState] = useState<string[]>([]);
 
   // selection
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -33,6 +40,17 @@ export function HomeContent() {
   const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
 
+  // Persist selected AI tools so the header manager can show them post-onboarding.
+  const setSelectedClients = useCallback((tools: string[]) => {
+    setSelectedClientsState(tools);
+    try { localStorage.setItem(TOOLS_KEY, JSON.stringify(tools)); } catch { /* ignore */ }
+  }, []);
+
+  const completeOnboarding = useCallback(() => {
+    setOnboardingDone(true);
+    try { localStorage.setItem(ONBOARDING_DONE_KEY, '1'); } catch { /* ignore */ }
+  }, []);
+
   useEffect(() => {
     const forceDemo = typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).get('demo') === '1';
@@ -40,9 +58,17 @@ export function HomeContent() {
     const forceReset = typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).get('reset') === '1';
 
+    // Always restore selected tools (used by onboarding + header manager).
+    try {
+      const savedTools = localStorage.getItem(TOOLS_KEY);
+      if (savedTools) setSelectedClientsState(JSON.parse(savedTools));
+    } catch { /* ignore */ }
+
     if (forceReset) {
       localStorage.removeItem(CONNECTED_KEY);
+      localStorage.removeItem(ONBOARDING_DONE_KEY);
       setConnected(false);
+      setOnboardingDone(false);
       setPortfolio(null);
       setHydrated(true);
       // Remove ?reset=1 from URL without reload
@@ -55,16 +81,17 @@ export function HomeContent() {
       const data = convertMockToPortfolio();
       setPortfolio(data);
       setConnected(true);
+      setOnboardingDone(true);
       initSelection(data);
       setHydrated(true);
       return;
     }
 
-    const wasConnected = typeof window !== 'undefined'
-      && localStorage.getItem(CONNECTED_KEY) === '1';
+    const wasDone = typeof window !== 'undefined'
+      && localStorage.getItem(ONBOARDING_DONE_KEY) === '1';
 
-    if (wasConnected) {
-      // 이전에 연결된 적 있으면 IndexedDB에서 폴더 핸들 복원 시도
+    if (wasDone) {
+      // 온보딩을 마친 적 있으면 IndexedDB에서 폴더 핸들 복원 시도
       (async () => {
         try {
           const handle = await loadFolderHandleFromStorage();
@@ -75,17 +102,19 @@ export function HomeContent() {
               // 실제 데이터가 있으면 그걸 쓰고, 빈 폴더면 빈 portfolio 그대로 표시
               setPortfolio(data);
               setConnected(true);
+              setOnboardingDone(true);
               initSelection(data);
               setHydrated(true);
               return;
             }
           }
         } catch {
-          // 권한 만료 등 — 연결 해제 상태로 되돌림
+          // 권한 만료 등 — 온보딩 다시 시작
         }
-        // 핸들 없거나 권한 없으면 연결 해제
-        localStorage.removeItem(CONNECTED_KEY);
+        // 핸들 없거나 권한 없으면 온보딩으로 되돌림 (도구 선택은 유지)
+        localStorage.removeItem(ONBOARDING_DONE_KEY);
         setConnected(false);
+        setOnboardingDone(false);
         setPortfolio(null);
         setHydrated(true);
       })();
@@ -185,6 +214,15 @@ export function HomeContent() {
     return scopedRecords(portfolio, selectedProjectId, selectedGoalId, filterState);
   }, [portfolio, selectedProjectId, selectedGoalId, filterState]);
 
+  // Total records across the whole portfolio (ignores filters) — drives the empty banner.
+  const totalRecordCount = useMemo(() => {
+    if (!portfolio) return 0;
+    return portfolio.projects.reduce(
+      (sum, p) => sum + p.goals.reduce((gs, g) => gs + g.records.length, 0),
+      0
+    );
+  }, [portfolio]);
+
   const selectedRecord = useMemo(
     () => filteredRecords.find(r => r.id === selectedRecordId) || null,
     [filteredRecords, selectedRecordId]
@@ -202,7 +240,7 @@ export function HomeContent() {
     return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
   }
 
-  if (!connected || !portfolio) {
+  if (!onboardingDone) {
     return (
       <OnboardingScreen
         onSelectFolder={handleConnect}
@@ -210,8 +248,16 @@ export function HomeContent() {
         error={error}
         folderConnected={connected}
         folderPath={portfolio?.path}
+        selectedClients={selectedClients}
+        setSelectedClients={setSelectedClients}
+        onComplete={completeOnboarding}
       />
     );
+  }
+
+  // Onboarding done but portfolio not yet loaded (edge case) — keep a neutral canvas.
+  if (!portfolio) {
+    return <div style={{ minHeight: '100vh', background: 'var(--bg)' }} />;
   }
 
   return (
@@ -232,7 +278,13 @@ export function HomeContent() {
         onReconnect={handleConnect}
         onSelectRecord={setSelectedRecordId}
         isLoading={isLoading}
+        selectedClients={selectedClients}
       />
+
+      {/* First-record nudge — shown only when the whole portfolio is empty */}
+      {totalRecordCount === 0 && (
+        <FirstRecordBanner toolName={selectedClients.includes('claude') ? 'Claude Code' : undefined} />
+      )}
 
       {error && (
         <div className="mono" style={{
