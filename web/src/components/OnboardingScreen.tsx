@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   loadFolderHandleFromStorage,
-  verifyFolderPermission,
+  hasFolderPermission,
   scanFolderStructure,
 } from '@/lib/fileSystem';
 import { Portfolio } from '@/lib/types';
@@ -60,7 +60,7 @@ export function OnboardingScreen({
       try {
         const handle = await loadFolderHandleFromStorage();
         if (!handle) return;
-        const ok = await verifyFolderPermission(handle);
+        const ok = await hasFolderPermission(handle);
         if (!ok) return;
         const data = await scanFolderStructure(handle);
         const hasRecords = data.projects.some(p =>
@@ -288,34 +288,17 @@ export function OnboardingScreen({
               </StepCard>
 
               {/* ── STEP 2: Install skill (+ terminal hint + detection) ── */}
-              <StepCard n={2} active={step === 2} done={step > 2} title="Teach your AI the command" locked={step < 2}>
+              <StepCard n={2} active={step === 2} done={step > 2} title="Install the skill" locked={step < 2}>
                 {step >= 2 && (
                   <>
-                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 14px' }}>
-                      Paste this one line into a terminal. It teaches {toolName} the{' '}
-                      <code className="mono" style={{ color: 'var(--accent)', fontSize: 12 }}>@builders-diary</code> command.
-                    </p>
-
-                    {/* OS-aware terminal hint */}
-                    <div className="mono" style={{
-                      fontSize: 11, color: 'var(--text3)', lineHeight: 1.7,
-                      marginBottom: 14,
-                    }}>
-                      Not sure how? {hint.label}: press{' '}
-                      <span style={{
-                        color: 'var(--text2)', border: '1px solid var(--border)',
-                        borderRadius: 3, padding: '1px 6px',
-                      }}>{hint.keys}</span>
-                      {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}.
-                    </div>
-
-                    {/* install command */}
+                    {/* install command — the hero of this step */}
                     <div style={{
-                      background: 'var(--bg)', border: '1px solid var(--border)',
-                      borderRadius: 4, padding: '12px 14px',
-                      display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16,
+                      background: 'var(--bg)',
+                      border: '1px solid var(--accent)',
+                      borderRadius: 6, padding: '14px 16px',
+                      display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12,
                     }}>
-                      <code className="mono" style={{ fontSize: 11, color: 'var(--text2)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
+                      <code className="mono" style={{ fontSize: 12.5, color: 'var(--text)', flex: 1, wordBreak: 'break-all', lineHeight: 1.6 }}>
                         <span style={{ color: 'var(--text3)' }}>$ </span>{installSnippet}
                       </code>
                       <button
@@ -323,11 +306,11 @@ export function OnboardingScreen({
                         className="mono"
                         style={{
                           flexShrink: 0,
-                          padding: '5px 12px', fontSize: 11,
-                          background: copied === 'install' ? 'var(--tag-active-bg)' : 'transparent',
-                          border: '1px solid var(--border)',
-                          borderRadius: 3,
-                          color: copied === 'install' ? 'var(--accent)' : 'var(--text3)',
+                          padding: '7px 16px', fontSize: 12, fontWeight: 600,
+                          background: copied === 'install' ? 'var(--tag-active-bg)' : 'var(--accent)',
+                          border: '1px solid var(--accent)',
+                          borderRadius: 4,
+                          color: copied === 'install' ? 'var(--accent)' : 'var(--bg)',
                           cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >
@@ -335,16 +318,22 @@ export function OnboardingScreen({
                       </button>
                     </div>
 
-                    <p style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.7, margin: '0 0 16px' }}>
-                      After it runs, restart {isClaude ? 'Claude Code' : toolName}. Then finish any
-                      work session and type{' '}
-                      <code className="mono" style={{ color: 'var(--accent)', fontSize: 12 }}>@builders-diary</code>.
-                      We&apos;ll spot your first record automatically.
-                    </p>
+                    {/* OS-aware terminal hint */}
+                    <div className="mono" style={{
+                      fontSize: 11, color: 'var(--text3)', lineHeight: 1.7,
+                    }}>
+                      {hint.label}: press{' '}
+                      <span style={{
+                        color: 'var(--text2)', border: '1px solid var(--border)',
+                        borderRadius: 3, padding: '1px 6px',
+                      }}>{hint.keys}</span>
+                      {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}, then paste.
+                    </div>
 
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* detection status */}
+                    <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', display: 'flex', alignItems: 'center', gap: 8, marginTop: 18 }}>
                       <span style={{ display: 'inline-block', animation: 'spin 1.2s linear infinite' }}>⟳</span>
-                      Watching your folder for the first record…
+                      Waiting for your first record…
                     </div>
 
                     {/* escape hatch */}
@@ -352,7 +341,7 @@ export function OnboardingScreen({
                       onClick={onComplete}
                       className="mono"
                       style={{
-                        marginTop: 16, background: 'none', border: 'none',
+                        marginTop: 14, background: 'none', border: 'none',
                         color: 'var(--text3)', fontSize: 11, cursor: 'pointer',
                         padding: 0, textDecoration: 'underline',
                       }}

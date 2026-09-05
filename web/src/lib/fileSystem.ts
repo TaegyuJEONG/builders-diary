@@ -125,6 +125,20 @@ export async function verifyFolderPermission(handle: FileSystemDirectoryHandle):
   }
 }
 
+/**
+ * Read-only permission check for polling contexts (no user gesture available).
+ * Never calls requestPermission — that would silently fail outside a click handler
+ * and break background detection. Returns true only if permission is already granted.
+ */
+export async function hasFolderPermission(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  try {
+    const permission = await (handle as any).queryPermission?.({ mode: 'read' });
+    return permission === 'granted';
+  } catch {
+    return false;
+  }
+}
+
 export async function saveRecordToFile(
   record: { file_path: string; title: string; summary?: string; content?: string; result?: string; status?: string; updated_at?: string; tags?: string[] },
 ): Promise<void> {
