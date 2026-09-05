@@ -2,19 +2,17 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Header } from '@/components/Header';
-import { FilterBar } from '@/components/FilterBar';
-import { GoalList } from '@/components/GoalList';
-import { CardScrollable } from '@/components/CardScrollable';
+import { CardTimeline } from '@/components/CardTimeline';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
-import { Portfolio } from '@/lib/types';
+import { Portfolio, Record } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission,
-  loadFolderHandleFromStorage, saveFolderHandleToStorage,
+  loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
-  scopedRecords, visibleCountByGoal, FilterState,
+  scopedRecords, FilterState,
 } from '@/lib/portfolio';
 
 const CONNECTED_KEY = 'builders-diary-connected';
@@ -34,20 +32,66 @@ export function HomeContent() {
   // filters
   const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const [searchKeyword, setSearchKeyword] = useState('');
 
-  // Restore "connected" state on mount (prototype: mock data)
   useEffect(() => {
     const forceDemo = typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).get('demo') === '1';
-    const wasConnected = typeof window !== 'undefined'
-      && localStorage.getItem(CONNECTED_KEY) === '1';
-    if (forceDemo || wasConnected) {
+
+    const forceReset = typeof window !== 'undefined'
+      && new URLSearchParams(window.location.search).get('reset') === '1';
+
+    if (forceReset) {
+      localStorage.removeItem(CONNECTED_KEY);
+      setConnected(false);
+      setPortfolio(null);
+      setHydrated(true);
+      // Remove ?reset=1 from URL without reload
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (forceDemo) {
+      // ?demo=1 이면 무조건 목 데이터
       const data = convertMockToPortfolio();
       setPortfolio(data);
       setConnected(true);
       initSelection(data);
+      setHydrated(true);
+      return;
     }
+
+    const wasConnected = typeof window !== 'undefined'
+      && localStorage.getItem(CONNECTED_KEY) === '1';
+
+    if (wasConnected) {
+      // 이전에 연결된 적 있으면 IndexedDB에서 폴더 핸들 복원 시도
+      (async () => {
+        try {
+          const handle = await loadFolderHandleFromStorage();
+          if (handle) {
+            const ok = await verifyFolderPermission(handle);
+            if (ok) {
+              const data = await scanFolderStructure(handle);
+              // 실제 데이터가 있으면 그걸 쓰고, 빈 폴더면 빈 portfolio 그대로 표시
+              setPortfolio(data);
+              setConnected(true);
+              initSelection(data);
+              setHydrated(true);
+              return;
+            }
+          }
+        } catch {
+          // 권한 만료 등 — 연결 해제 상태로 되돌림
+        }
+        // 핸들 없거나 권한 없으면 연결 해제
+        localStorage.removeItem(CONNECTED_KEY);
+        setConnected(false);
+        setPortfolio(null);
+        setHydrated(true);
+      })();
+      return;
+    }
+
     setHydrated(true);
   }, []);
 
@@ -66,7 +110,6 @@ export function HomeContent() {
     setSelectedRecordId(null);
     setSelectedMindset([]);
     setSelectedTools([]);
-    setSearchKeyword('');
     initSelection(data);
   }, []);
 
@@ -74,7 +117,6 @@ export function HomeContent() {
     setIsLoading(true);
     setError(null);
     try {
-      // Try real folder picker; fall back to mock (prototype demo data).
       let scanned: Portfolio | null = null;
       try {
         const handle = await selectFolder();
@@ -82,49 +124,55 @@ export function HomeContent() {
           const ok = await verifyFolderPermission(handle);
           if (ok) {
             await saveFolderHandleToStorage(handle);
-            const data = await scanFolderStructure(handle);
-            if (data.projects.length > 0) scanned = data;
+            scanned = await scanFolderStructure(handle);
           }
         }
       } catch {
-        // File System Access API unavailable or dismissed — use mock.
+        // File System Access API unavailable or dismissed
       }
-      await doConnect(scanned || convertMockToPortfolio());
+      // Never fall back to mock data — show real folder contents (even if empty)
+      if (scanned === null) return; // user cancelled picker
+      await doConnect(scanned);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '연결에 실패했습니다');
+      setError(err instanceof Error ? err.message : 'Connection failed');
     } finally {
       setIsLoading(false);
     }
   }, [doConnect]);
 
-  const handleRefresh = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const handle = await loadFolderHandleFromStorage();
-      if (handle && (await verifyFolderPermission(handle))) {
-        const data = await scanFolderStructure(handle);
-        if (data.projects.length > 0) {
-          setPortfolio(data);
-          setSelectedRecordId(null);
-          setIsLoading(false);
-          return;
-        }
-      }
-      // prototype: refresh mock
-      setPortfolio(convertMockToPortfolio());
-      setSelectedRecordId(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '새로고침 실패');
-    } finally {
-      setIsLoading(false);
-    }
+  // ── Save edited record ──────────────────────────────────────
+  const handleSaveRecord = useCallback(async (updated: Record) => {
+    // Write to file (no-op in demo mode if no folder handle)
+    await saveRecordToFile({
+      file_path:  updated.file_path,
+      title:      updated.title,
+      summary:    updated.summary,
+      content:    updated.content,
+      result:     updated.result,
+      status:     updated.status,
+      updated_at: updated.updated_at,
+      tags:       updated.tags,
+    });
+    // Patch in-memory portfolio so card list reflects changes immediately
+    setPortfolio(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        projects: prev.projects.map(p => ({
+          ...p,
+          goals: p.goals.map(g => ({
+            ...g,
+            records: g.records.map(r => r.id === updated.id ? updated : r),
+          })),
+        })),
+      };
+    });
   }, []);
 
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
-    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: searchKeyword }),
-    [selectedMindset, selectedTools, searchKeyword]
+    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '' }),
+    [selectedMindset, selectedTools]
   );
 
   const tagOptions = useMemo(
@@ -132,20 +180,10 @@ export function HomeContent() {
     [portfolio]
   );
 
-  const selectedProject = useMemo(
-    () => portfolio?.projects.find(p => p.id === selectedProjectId),
-    [portfolio, selectedProjectId]
-  );
-
   const filteredRecords = useMemo(() => {
     if (!portfolio) return [];
     return scopedRecords(portfolio, selectedProjectId, selectedGoalId, filterState);
   }, [portfolio, selectedProjectId, selectedGoalId, filterState]);
-
-  const goalCounts = useMemo(
-    () => visibleCountByGoal(selectedProject, filterState),
-    [selectedProject, filterState]
-  );
 
   const selectedRecord = useMemo(
     () => filteredRecords.find(r => r.id === selectedRecordId) || null,
@@ -165,72 +203,61 @@ export function HomeContent() {
   }
 
   if (!connected || !portfolio) {
-    return <OnboardingScreen onSelectFolder={handleConnect} isLoading={isLoading} error={error} />;
+    return (
+      <OnboardingScreen
+        onSelectFolder={handleConnect}
+        isLoading={isLoading}
+        error={error}
+        folderConnected={connected}
+        folderPath={portfolio?.path}
+      />
+    );
   }
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden' }}>
       <Header
-        projectName={selectedProject?.title}
+        projects={portfolio.projects}
+        selectedProjectId={selectedProjectId}
+        selectedGoalId={selectedGoalId}
+        resultCount={filteredRecords.length}
         mindsetOptions={tagOptions.mindset}
         toolOptions={tagOptions.tool}
         selectedMindset={selectedMindset}
         selectedTools={selectedTools}
+        onProjectChange={(v) => { setSelectedProjectId(v); setSelectedGoalId(null); setSelectedRecordId(null); }}
+        onGoalChange={(v) => { setSelectedGoalId(v); setSelectedRecordId(null); }}
         onMindsetChange={setSelectedMindset}
         onToolChange={setSelectedTools}
-        onRefresh={handleRefresh}
         onReconnect={handleConnect}
+        onSelectRecord={setSelectedRecordId}
         isLoading={isLoading}
       />
 
       {error && (
         <div className="mono" style={{
-          padding: '8px 24px', fontSize: 12, color: 'var(--danger)',
+          padding: '7px 20px', fontSize: 11, color: 'var(--danger)',
           background: 'var(--surface)', borderBottom: '1px solid var(--border)',
         }}>
           {error}
         </div>
       )}
 
-      <FilterBar
-        projects={portfolio.projects}
-        selectedProjectId={selectedProjectId}
-        selectedGoalId={selectedGoalId}
-        searchKeyword={searchKeyword}
-        resultCount={filteredRecords.length}
-        onProjectChange={setSelectedProjectId}
-        onGoalChange={setSelectedGoalId}
-        onSearchChange={setSearchKeyword}
-      />
-
-      {/* Main 3-zone */}
+      {/* Main 2-zone: timeline + optional detail panel */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-        {/* Left: goal list */}
-        <div style={{
-          width: 260, flexShrink: 0, borderRight: '1px solid var(--border)',
-          background: 'var(--bg)', overflow: 'hidden',
-        }} className="goal-col">
-          <GoalList
-            project={selectedProject}
-            selectedGoalId={selectedGoalId}
-            onSelectGoal={setSelectedGoalId}
-            visibleCountByGoal={goalCounts}
-          />
-        </div>
-
-        {/* Center: cards */}
+        {/* Timeline (takes remaining width) */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <CardScrollable
+          <CardTimeline
             records={filteredRecords}
             selectedRecordId={selectedRecordId}
             onSelectRecord={setSelectedRecordId}
           />
         </div>
 
-        {/* Right: detail (slides in on selection) */}
+        {/* Right: detail panel (slides in on selection) */}
         {selectedRecord && (
           <div style={{ width: 400, flexShrink: 0, overflow: 'hidden' }} className="detail-col">
-            <DetailPanel record={selectedRecord} onClose={() => setSelectedRecordId(null)} />
+            <DetailPanel record={selectedRecord} onClose={() => setSelectedRecordId(null)} onSave={handleSaveRecord} />
           </div>
         )}
       </div>

@@ -3,3 +3,7 @@
 node_modules
 .shots
 *.tsbuildinfo
+
+.env.local
+.env*.local
+.vercel

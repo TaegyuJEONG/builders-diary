@@ -22,6 +22,12 @@
   --status-completed: #4ade80;
   --status-progress: #60a5fa;
   --status-blocked: #f87171;
+  /* Work categories — muted, one hue each. Shows builder range at a glance. */
+  --cat-planning: #a78bfa;
+  --cat-design: #f0abfc;
+  --cat-engineering: #60a5fa;
+  --cat-research: #fbbf24;
+  --cat-growth: #4ade80;
 }
 
 * {

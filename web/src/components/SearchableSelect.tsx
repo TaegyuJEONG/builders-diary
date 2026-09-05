@@ -5,7 +5,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 export interface SelectOption {
   value: string;
   label: string;
-  group?: string;   // category header (e.g. 마인드셋 / 도구)
+  group?: string;   // category header (e.g. Mindset / Tools)
   count?: number;   // optional count badge
 }
 
@@ -16,7 +16,7 @@ interface SearchableSelectProps {
   multiple?: boolean;
   placeholder?: string;          // shown on the trigger when nothing selected
   searchPlaceholder?: string;    // shown in the keyword input
-  allOptionLabel?: string;       // single-select only: a synthetic "전체" option
+  allOptionLabel?: string;       // single-select only: a synthetic "All" option
   minWidth?: number;
   emptyText?: string;
 }
@@ -26,11 +26,11 @@ export function SearchableSelect({
   value,
   onChange,
   multiple = false,
-  placeholder = '선택...',
-  searchPlaceholder = '검색...',
+  placeholder = 'Select…',
+  searchPlaceholder = 'Search…',
   allOptionLabel,
   minWidth = 180,
-  emptyText = '결과 없음',
+  emptyText = 'No results',
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -88,9 +88,9 @@ export function SearchableSelect({
       if (selectedArr.length === 0) return placeholder;
       if (selectedArr.length === 1) {
         const o = options.find(o => o.value === selectedArr[0]);
-        return o ? o.label : `${selectedArr.length}개 선택`;
+        return o ? o.label : `${selectedArr.length} selected`;
       }
-      return `${selectedArr.length}개 선택`;
+      return `${selectedArr.length} selected`;
     }
     if (!value || value === '__all__') return allOptionLabel || placeholder;
     const o = options.find(o => o.value === value);
@@ -288,7 +288,7 @@ export function SearchableSelect({
               justifyContent: 'space-between',
               alignItems: 'center',
             }}>
-              <span style={{ fontSize: 11, color: 'var(--text3)' }}>{selectedArr.length}개 선택됨</span>
+              <span style={{ fontSize: 11, color: 'var(--text3)' }}>{selectedArr.length} selected</span>
               <button
                 onClick={() => onChange([])}
                 style={{
@@ -296,7 +296,7 @@ export function SearchableSelect({
                   fontSize: 11, cursor: 'pointer', padding: '2px 6px',
                 }}
               >
-                초기화
+                Clear
               </button>
             </div>
           )}
