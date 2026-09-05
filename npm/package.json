@@ -1,0 +1,29 @@
+{
+  "name": "builders-diary",
+  "version": "1.0.0",
+  "description": "Record what you actually judged in a work session — a local, judgment-first portfolio for AI-native builders. Installs a skill into Claude Code, Cursor, Windsurf, or Codex.",
+  "bin": {
+    "builders-diary": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "skill/"
+  ],
+  "engines": {
+    "node": ">=16"
+  },
+  "author": "Taegyu Jeong <taegyujeong@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TaegyuJEONG/builders-diary.git"
+  },
+  "keywords": [
+    "mcp",
+    "skill",
+    "portfolio",
+    "claude",
+    "cursor",
+    "ai-builder"
+  ],
+  "license": "MIT"
+}
