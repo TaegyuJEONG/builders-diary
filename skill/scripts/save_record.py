@@ -59,6 +59,24 @@ def now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat()
 
 
+def build_judgment(args):
+    """Structured judgment {ai, builder, why} when any three-part flag is set;
+    else the legacy single string; else None. Web UI accepts both shapes."""
+    ai = (getattr(args, "judgment_ai", "") or "").strip()
+    builder = (getattr(args, "judgment_builder", "") or "").strip()
+    why = (getattr(args, "judgment_why", "") or "").strip()
+    if ai or builder or why:
+        j = {}
+        if ai:
+            j["ai"] = ai
+        if builder:
+            j["builder"] = builder
+        if why:
+            j["why"] = why
+        return j
+    return args.judgment or None
+
+
 def today_stamp() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%d")
 
@@ -153,9 +171,14 @@ def main() -> int:
     ap.add_argument("--category", default="", choices=["", *CATEGORIES],
                     help=f"Work category, one of: {', '.join(CATEGORIES)}")
     ap.add_argument("--judgment", default="",
-                    help="The judgment call: what the AI proposed and what the builder "
-                         "rejected/changed and why. The most valuable field — leave empty "
-                         "only if the session had no real human judgment moment.")
+                    help="Single-string judgment (legacy). Prefer the three-part form below.")
+    ap.add_argument("--judgment-ai", default="",
+                    help="What the AI proposed, near-verbatim. The three-part form renders as "
+                         "an AI-vs-builder contrast in the portfolio — the strongest signal.")
+    ap.add_argument("--judgment-builder", default="",
+                    help="What the builder decided (rejected/changed/overrode), in their words.")
+    ap.add_argument("--judgment-why", default="",
+                    help="The builder's reasoning, one line.")
     ap.add_argument("--evidence-file", help="Path to a JSON file: a list of evidence items "
                     "(each {type, label, ...}). type ∈ input|judgment|quote|artifact.")
     args = ap.parse_args()
@@ -206,7 +229,7 @@ def main() -> int:
         "category": args.category or None,
         "tags": tags,
         "body": body,
-        "judgment": args.judgment or None,
+        "judgment": build_judgment(args),
         "evidence": evidence,
         "project_id": project["id"],
         "project_slug": project["slug"],

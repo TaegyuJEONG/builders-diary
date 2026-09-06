@@ -1,3 +1,7 @@
+/** The decisive moment. Legacy records carry a single string; new records carry
+ *  a structured AI-vs-builder contrast {ai, builder, why}. The UI renders both. */
+export type Judgment = string | { ai?: string; builder?: string; why?: string };
+
 export interface Evidence {
   label: string;
   url?: string;
@@ -27,7 +31,7 @@ export interface Record {
   updated_at?: string;
   content: string;           // work detail (side panel body)
   body?: string;             // raw markdown body from record.json
-  judgment?: string | null;  // the AI-proposed option rejected/changed + why
+  judgment?: Judgment | null; // the decisive moment (string = legacy, object = AI-vs-builder)
   category?: string | null;  // Planning | Design | Engineering | Research | Growth
   result?: string;           // result one-liner
   file_path: string;

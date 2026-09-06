@@ -332,13 +332,66 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
               }}>
                 <div className="mono" style={{
                   fontSize: 10, color: 'var(--accent)', textTransform: 'uppercase',
-                  letterSpacing: '0.08em', marginBottom: 7, display: 'flex', alignItems: 'center', gap: 6,
+                  letterSpacing: '0.08em', marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6,
                 }}>
                   ◆ The judgment call
                 </div>
-                <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
-                  {record.judgment}
-                </p>
+
+                {typeof record.judgment === 'string' ? (
+                  /* Legacy records: single string */
+                  <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
+                    {record.judgment}
+                  </p>
+                ) : (
+                  /* Structured: the AI-vs-builder contrast — the product's core claim.
+                     The agent in the chat is the witness: it knows what it proposed
+                     and what the builder did with it. */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {record.judgment.ai && (
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <div className="mono" style={{
+                          flexShrink: 0, width: 88, fontSize: 9.5, color: 'var(--text3)',
+                          textTransform: 'uppercase', letterSpacing: '0.06em', paddingTop: 2,
+                        }}>
+                          AI proposed
+                        </div>
+                        <p style={{
+                          fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6, margin: 0,
+                          textDecoration: record.judgment.builder ? 'line-through' : 'none',
+                          textDecorationColor: 'var(--text3)', textDecorationThickness: 1,
+                        }}>
+                          {record.judgment.ai}
+                        </p>
+                      </div>
+                    )}
+                    {record.judgment.builder && (
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <div className="mono" style={{
+                          flexShrink: 0, width: 88, fontSize: 9.5, color: 'var(--accent)',
+                          textTransform: 'uppercase', letterSpacing: '0.06em', paddingTop: 2,
+                        }}>
+                          Builder&apos;s call
+                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text)', fontWeight: 600, lineHeight: 1.6, margin: 0 }}>
+                          {record.judgment.builder}
+                        </p>
+                      </div>
+                    )}
+                    {record.judgment.why && (
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <div className="mono" style={{
+                          flexShrink: 0, width: 88, fontSize: 9.5, color: 'var(--text3)',
+                          textTransform: 'uppercase', letterSpacing: '0.06em', paddingTop: 2,
+                        }}>
+                          Why
+                        </div>
+                        <p style={{ fontSize: 12.5, color: 'var(--text2)', lineHeight: 1.6, margin: 0, fontStyle: 'italic' }}>
+                          {record.judgment.why}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

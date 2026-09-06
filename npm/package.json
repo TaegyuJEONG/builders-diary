@@ -1,7 +1,7 @@
 {
   "name": "builders-diary",
-  "version": "1.2.0",
-  "description": "Record what you actually judged in a work session — a local, judgment-first portfolio for AI-native builders. Installs a skill into Claude Code, Cursor, Windsurf, or Codex.",
+  "version": "1.3.0",
+  "description": "Record what you actually judged in a work session \u2014 a local, judgment-first portfolio for AI-native builders. Installs a skill into Claude Code, Cursor, Windsurf, or Codex.",
   "bin": {
     "builders-diary": "bin/cli.js"
   },

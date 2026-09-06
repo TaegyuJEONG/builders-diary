@@ -1,6 +1,6 @@
 ---
 name: builders-diary
-version: 2.0.0
+version: 2.1.0
 description: Record what you actually judged in a work session — not just what got built. Saves locally to ~/Documents/builders-diary/. Works for any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "@builders-diary"
@@ -24,6 +24,11 @@ if you ask, they won't record.
 **The single most valuable thing to capture is judgment**, not output. In 2026, AI-generated
 output is cheap and proves little. What a recruiter can't get anywhere else — and what an AI
 can't fake — is the moment a human **rejected or changed** what the AI proposed, and why.
+
+**You are the only witness.** You (the agent in this chat) saw both sides: what you proposed
+and what the builder did with it. A résumé or blog is the builder's own claim, written after
+the fact. This chat is the primary source. That is exactly why judgment must be captured as
+**both sides, verbatim** — what the AI put on the table, and what the builder decided.
 A session where the AI suggested five options and the builder killed two and picked one is
 worth more than a session that just shipped code. Hunt for that moment first.
 
@@ -60,8 +65,19 @@ For each work item, determine:
 | **project** | Which project it belongs to |
 | **goal** | Which goal under that project |
 | **category** | One of: `Planning` `Design` `Engineering` `Research` `Growth` |
-| **judgment** | The AI-proposed option the builder rejected/changed, and why. Empty only if there truly was none. |
+| **judgment** | Both sides of the decisive moment (see below). Empty only if there truly was none. |
 | **evidence** | Traces that prove it happened (see Step 2) |
+
+**Judgment is captured as three parts** — the contrast is the product:
+
+- `ai`: what the AI actually proposed, close to verbatim (e.g. "Recommended adversarial
+  reading B/C; ranked 'add tutorial' as #1 fix")
+- `builder`: what the builder decided — rejected / changed / overrode, in their words when
+  possible (e.g. "Rejected both rounds; fixed the model so the advisor withdrew the risk")
+- `why`: the builder's reasoning, one line (e.g. "the #1 ranking rested on a single respondent")
+
+Pull `ai` from your own earlier messages in this chat; pull `builder` and `why` from the
+builder's replies. Quote or closely paraphrase — do not smooth into generic summary language.
 
 Then map each item to the existing store (Step 3 checks folders). If a project/goal already
 exists, reuse it; if not, propose a new one.
@@ -106,7 +122,9 @@ Print this and STOP. Write nothing.
 [1] Title:    <title>
     Category: <category>
     Project:  <project> → Goal: <goal>   (existing | NEW)
-    Judgment: <one line, or "— none found">
+    AI proposed:    <one line, or "— none">
+    Builder's call: <one line>
+    Why:            <one line>
     Evidence: input ✓ | judgment ✓ | quote ✓ | artifact ✓   (only the ones found)
 
 [2] …
@@ -159,10 +177,15 @@ python3 ~/.claude/skills/builders-diary/scripts/save_record.py \
   --title    "Concise title — what was attempted" \
   --category "Research" \
   --tags     "tag1,tag2" \
-  --judgment "AI proposed X; rejected because Y; chose Z" \
+  --judgment-ai      "what the AI proposed (near-verbatim)" \
+  --judgment-builder "what the builder decided" \
+  --judgment-why     "the builder's reasoning, one line" \
   --evidence-file /tmp/bd_evidence.json \
   --body-file     /tmp/bd_body.md
 ```
+
+(Older hosts may only support a single `--judgment "…"` string — the script accepts both;
+prefer the three-part form.)
 
 The script creates project.json / goal.json / record.json with the exact schema the web UI
 reads, reuses existing project/goal folders, and auto-increments the sequence number.
