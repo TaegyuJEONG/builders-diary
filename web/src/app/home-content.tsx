@@ -8,7 +8,7 @@ import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { Portfolio, Record } from '@/lib/types';
 import {
-  selectFolder, scanFolderStructure, verifyFolderPermission,
+  selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile,
 } from '@/lib/fileSystem';
 import {
@@ -126,12 +126,35 @@ export function HomeContent() {
     setHydrated(true);
   }, []);
 
-  const initSelection = (data: Portfolio) => {
-    if (data.projects.length > 0) {
-      setSelectedProjectId(data.projects[0].id);
-      setSelectedGoalId(null);
-    }
+  const initSelection = (_data: Portfolio) => {
+    // Default to "All Projects" — never hide sibling projects behind an
+    // auto-picked first project (users read that as "my records are gone").
+    setSelectedProjectId(null);
+    setSelectedGoalId(null);
   };
+
+  // Refresh the portfolio whenever the user returns to this tab — records
+  // saved from an AI session appear without a manual reload. Read-only
+  // permission check (no gesture needed); selection/filters are preserved.
+  useEffect(() => {
+    if (!onboardingDone || !connected) return;
+    const rescan = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const handle = await loadFolderHandleFromStorage();
+        if (!handle) return;
+        if (!(await hasFolderPermission(handle))) return;
+        const data = await scanFolderStructure(handle);
+        setPortfolio(data);
+      } catch { /* transient FS errors — keep current view */ }
+    };
+    window.addEventListener('focus', rescan);
+    document.addEventListener('visibilitychange', rescan);
+    return () => {
+      window.removeEventListener('focus', rescan);
+      document.removeEventListener('visibilitychange', rescan);
+    };
+  }, [onboardingDone, connected]);
 
   const doConnect = useCallback(async (data: Portfolio) => {
     setPortfolio(data);
