@@ -333,10 +333,14 @@ export function Header({
     count: p.goals.reduce((a, g) => a + g.records.length, 0),
   }));
 
-  const goalOptions: SelectOption[] = [
-    ...(selectedProject ? [{ value: '__all__', label: 'All Goals', count: selectedProject.goals.reduce((a, g) => a + g.records.length, 0) }] : []),
-    ...goals.map(g => ({ value: g.id, label: g.title, count: g.records.length })),
-  ];
+  // Goals: scoped to the selected project, or ALL goals across projects
+  // when no project is picked (e.g. "Venture design" across everything).
+  const goalScope = selectedProject ? goals : projects.flatMap(p => p.goals);
+  const goalOptions: SelectOption[] = goalScope.map(g => ({
+    value: g.id,
+    label: g.title,
+    count: g.records.length,
+  }));
 
   // Card search: only cards in the current project+goal scope
   const scopedRecords = selectedProject
@@ -384,10 +388,10 @@ export function Header({
 
       {/* Goal dropdown */}
       <SearchableSelect
-        options={goalOptions.filter(o => o.value !== '__all__')}
+        options={goalOptions}
         value={selectedGoalId}
         onChange={onGoalChange}
-        placeholder={selectedProject ? 'All Goals' : 'Select project first'}
+        placeholder="All Goals"
         searchPlaceholder="Search goals…"
         allOptionLabel="All Goals"
         minWidth={160}
