@@ -1,6 +1,6 @@
 ---
 name: builders-diary
-version: 3.4.0
+version: 3.5.0
 description: At the end of a work session, capture the process behind the output — project → section → task, with the AI-vs-builder judgment and evidence. Saves locally to ~/Documents/builders-diary/. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "builders-diary"
@@ -27,9 +27,11 @@ a design critique, a market研究. Evidence is not only commits and screenshots.
 
 ## Interaction contract
 
-- Use the client's structured question tool for every choice gate when it exists. In Antigravity,
-  call `ask_question` with `questions`, `options`, and `is_multi_select`; do not print numbered
-  options as a sentence and ask the builder to type a number.
+- Use the client's structured question tool for every choice gate when it exists:
+  - **Antigravity:** `ask_question` with `questions`, `options`, and `is_multi_select`.
+  - **Claude Code:** `AskUserQuestion`; each question has `header`, `question`, 2–4
+    `{label, description}` options, and `multiSelect`.
+  Do not print numbered options as a sentence and ask the builder to type a number.
 - On clients without a structured question tool, use a clean Markdown list as the fallback.
 - Keep all option labels and portfolio fields in English. Conversational explanations may match
   the builder's language.
@@ -114,7 +116,7 @@ Match the detected project against saved project names/slugs case-insensitively:
 - No saved match → recommend creating the detected project as a provisional new project.
 - Always keep the other saved projects available as alternatives.
 
-Use `ask_question` when available. For a workspace whose README says `JobSpy` while the saved list
+Use the client-specific structured question tool. For a workspace whose README says `JobSpy` while the saved list
 contains only Adevinta, the single-select options should be:
 
 ```text
@@ -160,8 +162,9 @@ Sections are builder-lifecycle stages: **Think → Plan → Build → Review →
 - **New project** → infer likely stage(s) from the traces, but ask for confirmation.
   In dry-run mode, label a new section **provisional** and do not create its folder or `goal.json`.
 
-Use `ask_question` with `is_multi_select: true` when multiple stages are plausible. Put the inferred
-stage(s) first and mark them Recommended; include `Choose another section`. Wait for confirmation.
+Use `ask_question` with `is_multi_select: true` on Antigravity or `AskUserQuestion` with
+`multiSelect: true` on Claude Code when multiple stages are plausible. Put the inferred stage(s)
+first and mark them Recommended; include `Choose another section`. Wait for confirmation.
 
 ---
 
@@ -181,7 +184,7 @@ Present candidates as a compact Markdown table — titles and one-line purposes 
 3  Plan     Reject 4-day market test → internal setup   ✓          chat
 ```
 
-Then use `ask_question` with `is_multi_select: true`:
+Then use the client's structured question tool in multi-select mode:
 
 ```text
 Question: Which candidate tasks should be kept?
@@ -228,7 +231,7 @@ Four types (generalized for non-code work):
 
 - **Auto-fill** private traces you can find in the chat (generated files, quotes, URLs, commands),
   and show the builder which ones can become approved artifacts.
-- For generated files, use `ask_question` with `is_multi_select: true` and ask which artifacts to
+- For generated files, use the client's structured question tool in multi-select mode and ask which artifacts to
   include in the public evidence bundle. Show safe labels and filenames, not full absolute paths.
   Selected files become approved copies in `record/evidence/`; unselected files remain private traces.
 - **If you can't find it or you're unsure, ASK** — do not fabricate and do not silently skip:
@@ -237,7 +240,7 @@ Four types (generalized for non-code work):
   Builder-approved evidence only. This ask is a feature, not a nuisance — it's what makes the
   card trustworthy.
 
-Show one complete card, then use a single-select `ask_question` with exactly these actions:
+Show one complete card, then use the client's structured question tool in single-select mode with exactly these actions:
 `Approve this card`, `Edit this card`, `Drop this card`. Wait for the answer before moving to the
 next card. If editing, collect the requested changes and show the revised card again.
 
