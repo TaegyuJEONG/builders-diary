@@ -1,7 +1,7 @@
 ---
 name: builders-diary
-version: 3.5.0
-description: At the end of a work session, capture the process behind the output — project → section → task, with the AI-vs-builder judgment and evidence. Saves locally to ~/Documents/builders-diary/. For any builder (research, design, sales, engineering), not just coders.
+version: 3.6.0
+description: Run an interactive, multi-turn Builder's Diary workflow at the end of a work session. Curate candidates, assign each task to a lifecycle section, review third-party-readable portfolio cards, and approve evidence before saving locally. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "builders-diary"
   - "record this work session"
@@ -33,8 +33,11 @@ a design critique, a market研究. Evidence is not only commits and screenshots.
     `{label, description}` options, and `multiSelect`.
   Do not print numbered options as a sentence and ask the builder to type a number.
 - On clients without a structured question tool, use a clean Markdown list as the fallback.
-- Keep all option labels and portfolio fields in English. Conversational explanations may match
-  the builder's language.
+- Candidate curation must offer an explicit **Keep all candidates** option. A native `User Skipped`
+  result is not approval to keep, drop, or modify anything: re-ask with explicit choices or stop.
+- Keep all option labels and public portfolio fields in English: `title`, `section`, `purpose`,
+  `tools`, `mindset`, public highlight summaries, evidence labels, and `body_md`. Conversational
+  explanations may match the builder's language; private verbatim quotes may retain their source language.
 - Ask one decision at a time. Wait for the answer before advancing to the next gate.
 
 ---
@@ -82,10 +85,10 @@ no AI-override still stands on its narrative (e.g. "ran 6 user interviews, found
 ## Step 0 — Mode
 
 Check the invocation for `--dry-run`:
-- **`--dry-run` present** → run **Steps 1–5 in full**, including project choice, section choice,
-  candidate-list curation, and one-card-at-a-time review. All choices are provisional. At Step 6,
-  show the final preview and STOP: write no project/section/task files, copy no evidence, and do
-  not collapse the flow into a one-shot extraction.
+- **`--dry-run` present** → run **Steps 1–5 in full**, including project choice, candidate-list
+  curation, per-task section choice, evidence visibility choice, and one-card-at-a-time review.
+  All choices are provisional. At Step 6, show the final preview and STOP: write no
+  project/section/task files, copy no evidence, and do not collapse the flow into a one-shot extraction.
 - **no flag** → run all steps through saving (but never save before the builder confirms — Steps 4 & 5).
 
 ---
@@ -151,69 +154,93 @@ this is where the real evidence lives, not just the chat bubbles:
 
 ---
 
-## Step 3 — Section (lifecycle stage)
+## Step 3 — Generate candidate tasks (no session-wide section gate)
 
 Sections are builder-lifecycle stages: **Think → Plan → Build → Review → Test → Ship → Reflect**
-(custom allowed). This is the process spine and the cross-project axis.
+(custom allowed). They belong to **tasks**, not to a whole session. A single session can produce a
+Review task and a Build task; do not ask the builder to classify the entire session before they can
+see its candidate tasks.
 
-- **Existing project** → list its current sections and ask which stages this session spans, or whether
-  a new stage is needed. A session can span two stages (e.g. Build + Review); tasks carry their own
-  section.
-- **New project** → infer likely stage(s) from the traces, but ask for confirmation.
-  In dry-run mode, label a new section **provisional** and do not create its folder or `goal.json`.
-
-Use `ask_question` with `is_multi_select: true` on Antigravity or `AskUserQuestion` with
-`multiSelect: true` on Claude Code when multiple stages are plausible. Put the inferred stage(s)
-first and mark them Recommended; include `Choose another section`. Wait for confirmation.
+From the traces, infer a `likely_section` for each candidate. It is a draft recommendation only;
+the builder confirms the actual section for each retained task in Step 5.
 
 ---
 
-## Step 4 — GATE 1: candidate list only (no save, no body yet)
+## Step 4 — GATE 1: candidate list curation (no save, no body yet)
 
 **A session usually contains more than one task.** Split by *intent* — different problem,
 different aim, or work that stands on its own. Same file edited five times for one purpose = one task.
 
-Present candidates as a compact Markdown table — titles and one-line purposes only, no full bodies yet:
+Present candidates as a compact Markdown table — draft section, title, and one-line purpose only;
+no full bodies yet:
 
 ```text
 [builders-diary] N candidate tasks found
 
-#  Section  Task                                      Highlight  Evidence
-1  Think    Reframe email: tool-intro → running proof  ✓          chat, proposal.md
-2  Think    Catch the stale-source claim, re-research   ✓          research.md
-3  Plan     Reject 4-day market test → internal setup   ✓          chat
+#  Draft section  Task                                      Highlight  Evidence
+1  Think          Reframe email: tool-intro → running proof  ✓          chat, proposal.md
+2  Think          Catch the stale-source claim, re-research   ✓          research.md
+3  Plan           Reject 4-day market test → internal setup   ✓          chat
 ```
 
-Then use the client's structured question tool in multi-select mode:
+First use the client's structured question tool in single-select mode:
 
 ```text
-Question: Which candidate tasks should be kept?
-Options: one concise option per candidate, plus “I want to modify the list”
+Question: How should these N candidate tasks be curated?
+Options:
+- Keep all N candidates (Recommended)
+- Choose individual candidates
+- Modify the list
+- Stop this dry run
 ```
 
-If the builder chooses modification, ask for merge/split/add/drop edits before showing the updated
-list. Suggest progress per task, but never finalize `done` without confirmation.
+Then follow the answer exactly:
+- **Keep all** → retain every candidate and continue to Step 5.
+- **Choose individual candidates** → ask a follow-up multi-select question with one concise option
+  per candidate plus `I want to modify the list`. Retain only selected candidates.
+- **Modify the list** → ask for merge/split/add/drop edits, then show the revised list and repeat
+  this gate.
+- **Stop this dry run** → report that no candidates were confirmed and stop.
+- **User Skipped** → do not infer a choice. Re-ask this curation question or stop.
+
+Suggest progress per task, but never finalize `done` without confirmation.
 
 **STOP and wait.** This gate is what prevents dumping a pile of half-relevant cards.
 The builder curates the LIST before any body is written.
 
 ---
 
-## Step 5 — GATE 2: per-card body + evidence, one at a time
+## Step 5 — GATE 2: per-task section + card + evidence, one at a time
 
-For each confirmed task, draft the hybrid body and confirm it **card by card**:
+For each confirmed task, run the following sequence before advancing to the next task.
+
+### A. Confirm this task's section
+
+Use the client's structured question tool in single-select mode. Ask which lifecycle stage best
+represents this task, with the inferred `likely_section` first and marked Recommended. Include other
+plausible stages and `Choose another section`. Do not inherit a section from a session-wide choice.
+In dry-run mode, label a new section **provisional** and do not create its folder or `goal.json`.
+
+### B. Draft a complete, third-party-readable card
 
 **Fixed fields** — section, purpose, tools, mindset, progress.
 
 **Highlight** (if present) — the three-part contrast, near-verbatim from the chat.
 
-**body_md** — flexible markdown; choose H2 sections that fit the work type. Examples:
-- product/architecture work → `## Context` / `## How it converged` / `## Result`
+**body_md is required.** Write it for a third party who did not see this chat, does not know the
+project, and does not know the builder. It must explain the starting context, the concrete problem or
+decision, what the builder decided and why, what work occurred, and what evidence supports the result.
+Do not write `in this conversation`, `as discussed`, or unexplained internal file paths as if the
+reader already has context.
+
+Choose H2 sections that fit the work type. Examples:
+- product/architecture work → `## Context` / `## Decision` / `## Work` / `## Verified result`
 - research → `## Question` / `## What I dug into` / `## Finding`
 - marketing → `## Goal` / `## Outreach approach` / `## Outcome`
 - design → `## Problem` / `## Design decisions` / `## Result`
 Keep a concrete Result line when one exists (a number, a shipped artifact) — don't force a metric
-onto work that has none.
+onto work that has none. State only outcomes the evidence proves. If a user-visible effect has not
+been measured, describe the implementation or expected effect instead of claiming it happened.
 
 **Evidence** — the trust layer. Keep private traces separate from recruiter-facing artifacts.
 Every evidence item starts as `visibility: private`. Only after the builder says `include`
@@ -234,13 +261,16 @@ Four types (generalized for non-code work):
 - For generated files, use the client's structured question tool in multi-select mode and ask which artifacts to
   include in the public evidence bundle. Show safe labels and filenames, not full absolute paths.
   Selected files become approved copies in `record/evidence/`; unselected files remain private traces.
+- In dry-run mode, run the same public-evidence selection gate and label selected artifacts
+  **provisionally approved**. Do not copy files or write evidence JSON yet.
 - **If you can't find it or you're unsure, ASK** — do not fabricate and do not silently skip:
   > "This task would be stronger with the result screenshot / the link to X. Do you have one?
   >  Paste it and I'll attach it, or say skip."
   Builder-approved evidence only. This ask is a feature, not a nuisance — it's what makes the
   card trustworthy.
 
-Show one complete card, then use the client's structured question tool in single-select mode with exactly these actions:
+After the section and public-evidence choices, show one complete card, including `body_md`, then use
+the client's structured question tool in single-select mode with exactly these actions:
 `Approve this card`, `Edit this card`, `Drop this card`. Wait for the answer before moving to the
 next card. If editing, collect the requested changes and show the revised card again.
 
@@ -259,9 +289,9 @@ Build the evidence JSON like:
 ## Step 6 — Save each confirmed task (or finish the dry-run preview)
 
 **Dry-run path:** after every confirmed card has been reviewed, report the exact project/section/task
-structure that would be created and STOP. Do **not** call `save_record.py`, write temp body/evidence
-files, create folders, or copy approved artifacts. Say `No files were saved.` The builder can then
-start a normal run when ready to save.
+structure and provisional public-evidence choices that would be created, then STOP. Do **not** call
+`save_record.py`, write temp body/evidence files, create folders, or copy approved artifacts. Say
+`No files were saved.` The builder can then start a normal run when ready to save.
 
 **Normal path:** for each confirmed task:
 
@@ -312,7 +342,8 @@ Saved 3 tasks.
 View your portfolio: http://localhost:3111
 ```
 
-For a dry run, report only the provisional project/section/task count and the exact words:
+For a dry run, report the provisional project, per-task sections, task count, and approved evidence
+count, then use the exact words:
 
 ```
 Dry run complete. No files were saved and no evidence was copied.
@@ -323,8 +354,15 @@ Start a normal Builder's Diary run when you are ready to save these approved car
 
 ## Rules
 
-- **Two gates, always.** List first (Step 4), then per-card body (Step 5). Never dump finished
-  cards in one shot — that produces garbage the builder has to clean up.
+- **Two gates, always.** Curate candidates first (Step 4), then confirm every retained task's
+  section, evidence visibility, and complete card (Step 5). Never dump finished cards in one shot.
+- **Keep all is explicit.** Never treat `User Skipped` as candidate approval; the builder must choose
+  Keep all, choose individually, modify, or stop.
+- **Sections belong to tasks.** Infer a draft section in the candidate table, then ask the builder to
+  confirm the section for every retained task.
+- **Write for an outside reader.** Every public card must stand alone for a third party unfamiliar
+  with the chat, project, or internal filenames. Public portfolio text is English; private source
+  quotes may remain verbatim.
 - **Never save without confirmation.**
 - **Never fabricate evidence.** Auto-fill what's in the chat; ASK for what's missing; accept skip.
 - **Highlight first, but optional.** Hunt the AI-vs-builder moment (it's the differentiator);
