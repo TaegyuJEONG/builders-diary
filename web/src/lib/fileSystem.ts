@@ -1,6 +1,6 @@
 'use client';
 
-import { Portfolio, Project, Goal, Record } from './types';
+import { Portfolio, Project, Goal, Record, NarrativeSection, SECTION_META } from './types';
 
 interface FileSystemDirectoryHandle {
   name: string;
@@ -289,12 +289,22 @@ async function scanProjectFolder(
     if (goal) goals.push(goal);
   }
 
-  goals.sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''));
+  goals.sort((a, b) => {
+    const ao = a.order ?? 999, bo = b.order ?? 999;
+    if (ao !== bo) return ao - bo;
+    return (a.created_at || '').localeCompare(b.created_at || '');
+  });
 
   return {
     id: meta.id || `proj-${slug}`,
     slug: meta.slug || slug,
-    title: meta.title || slug,
+    title: meta.title || meta.name || slug,
+    name: meta.name || meta.title || slug,
+    sector: meta.sector || undefined,
+    oneLiner: meta.one_liner || undefined,
+    role: meta.role || undefined,
+    logo: meta.logo || null,
+    tags: Array.isArray(meta.tags) ? meta.tags : undefined,
     created_at: meta.created_at,
     goals,
   };
@@ -304,9 +314,12 @@ async function scanGoalFolder(
   goalFolder: FileSystemDirectoryHandle,
   slug: string
 ): Promise<Goal | null> {
-  // Must have goal.json to be considered a valid goal
+  // Must have goal.json to be considered a valid section
   const meta = await readJson(goalFolder, 'goal.json');
   if (!meta) return null;
+
+  // Section stage: v3 goal.stage → legacy goal.title.
+  const stage = meta.stage || meta.title || slug;
 
   const records: Record[] = [];
 
@@ -316,19 +329,66 @@ async function scanGoalFolder(
 
     const recordFolder = entry as FileSystemDirectoryHandle;
     const record = await scanRecordFolder(recordFolder, name);
-    if (record) records.push(record);
+    if (record) {
+      // Backfill section from the goal stage when the record itself didn't carry one.
+      if (!record.section) record.section = stage;
+      records.push(record);
+    }
   }
 
   // Sort by folder name (YYYYMMDD-seq-...) ascending
   records.sort((a, b) => (a.folder || '').localeCompare(b.folder || ''));
 
+  const order = typeof meta.order === 'number'
+    ? meta.order
+    : (SECTION_META[stage as string]?.order ?? 999);
+
   return {
     id: meta.id || `goal-${slug}`,
     slug: meta.slug || slug,
     title: meta.title || slug,
+    stage,
+    order,
     created_at: meta.created_at,
     records,
   };
+}
+
+/** Parse markdown into named H2 sections. "## Heading\n body..." → [{heading, body}].
+ *  Text before the first H2 becomes an untitled leading block. This is what fixes
+ *  the legacy PURPOSE=WORK duplication + raw "##" leakage on old records. */
+function parseNarrative(md: string): NarrativeSection[] {
+  const text = (md || '').trim();
+  if (!text) return [];
+  const lines = text.split('\n');
+  const out: NarrativeSection[] = [];
+  let heading = '';
+  let buf: string[] = [];
+  const flush = () => {
+    const body = buf.join('\n').trim();
+    if (heading || body) out.push({ heading, body });
+    buf = [];
+  };
+  for (const line of lines) {
+    const m = line.match(/^\s*##\s+(.*)$/);
+    if (m) { flush(); heading = m[1].trim(); }
+    else buf.push(line);
+  }
+  flush();
+  return out;
+}
+
+/** First narrative block's body → a short card summary (no raw "##"). */
+function summaryFromNarrative(narrative: NarrativeSection[], fallback: string): string {
+  const first = narrative.find(n => n.body) || narrative[0];
+  const src = (first?.body || fallback || '').replace(/^#+\s.*$/gm, '').trim();
+  return src.slice(0, 200);
+}
+
+/** Pull a "Result" narrative block's body, if present, for a one-liner. */
+function resultFromNarrative(narrative: NarrativeSection[]): string | undefined {
+  const r = narrative.find(n => /result|outcome|결과/i.test(n.heading));
+  return r?.body?.trim() || undefined;
 }
 
 async function scanRecordFolder(
@@ -338,19 +398,40 @@ async function scanRecordFolder(
   const meta = await readJson(recordFolder, 'record.json');
   if (!meta) return null;
 
-  // Split body into content + the judgment section (## The judgment call), if present.
-  const body: string = meta.body || '';
+  // v3 prefers body_md; legacy records only have `body`.
+  const body: string = meta.body_md || meta.body || '';
+  const narrative = parseNarrative(body);
+
+  // Section: v3 record.section → legacy goal.stage handled at goal level → category.
+  const section = meta.section || meta.category || undefined;
+
+  // Highlight: v3 `highlight` → legacy `judgment` (string or {ai,builder,why}).
+  const highlight = meta.highlight ?? meta.judgment ?? null;
+
+  // Tools / mindset: v3 explicit fields, else empty.
+  const tools: string[] = Array.isArray(meta.tools) ? meta.tools : [];
+  const mindset: string[] = Array.isArray(meta.mindset) ? meta.mindset : [];
 
   return {
     id: meta.id || folderName,
     folder: meta.folder || folderName,
     title: meta.title || folderName,
     body,
-    // Map body → summary/content for UI compatibility
-    summary: body ? body.slice(0, 200) : '',
+    narrative,
+    // summary/content for UI — summary is now clean (no raw "##" / no dup)
+    summary: summaryFromNarrative(narrative, body),
     content: body,
+    result: resultFromNarrative(narrative),
     category: meta.category || null,
-    judgment: meta.judgment || null,
+    // v3 fields
+    date: meta.date || (meta.created_at ? meta.created_at.slice(0, 10) : ''),
+    section,
+    subPurpose: meta.sub_purpose || null,
+    tools,
+    mindset,
+    progress: meta.progress || null,
+    highlight,
+    judgment: highlight,  // keep old field populated for any component still reading it
     evidence: Array.isArray(meta.evidence) ? meta.evidence : [],
     tags: meta.tags || [],
     created_at: meta.created_at || '',

@@ -1,7 +1,7 @@
 ---
 name: builders-diary
-version: 2.1.0
-description: Record what you actually judged in a work session — not just what got built. Saves locally to ~/Documents/builders-diary/. Works for any builder (research, design, sales, engineering), not just coders.
+version: 3.0.0
+description: At the end of a work session, capture the process behind the output — project → section → task, with the AI-vs-builder judgment and evidence. Saves locally to ~/Documents/builders-diary/. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "@builders-diary"
   - "/builders-diary"
@@ -19,188 +19,233 @@ allowed-tools:
 
 At the end of a work session, capture what the builder actually did — from the traces
 already in this conversation. **Do not ask the builder to write anything.** They are busy;
-if you ask, they won't record.
+if you ask them to write, they won't record.
 
-**The single most valuable thing to capture is judgment**, not output. In 2026, AI-generated
-output is cheap and proves little. What a recruiter can't get anywhere else — and what an AI
-can't fake — is the moment a human **rejected or changed** what the AI proposed, and why.
+**Why this exists.** A résumé or portfolio shows only the distilled outcome — and in 2026,
+AI can generate a polished outcome for anyone. What it cannot show is the *process*: how the
+work converged, and the moments a human **rejected or changed** what the AI proposed. You are
+the only witness to that. You saw both sides — what you proposed and what the builder decided.
+This chat is the primary source. Capture the process and the judgment, not just the result.
 
-**You are the only witness.** You (the agent in this chat) saw both sides: what you proposed
-and what the builder did with it. A résumé or blog is the builder's own claim, written after
-the fact. This chat is the primary source. That is exactly why judgment must be captured as
-**both sides, verbatim** — what the AI put on the table, and what the builder decided.
-A session where the AI suggested five options and the builder killed two and picked one is
-worth more than a session that just shipped code. Hunt for that moment first.
+Works for **any builder**, not just coders: a user-interview analysis, a sales-email rewrite,
+a design critique, a market研究. Evidence is not only commits and screenshots.
 
-This works for **any builder**, not just coders: a user-interview analysis, a sales-email
-rewrite, a design critique, a research synthesis. Evidence is not just commits and screenshots.
+---
+
+## The structure you are filling
+
+Three levels:
+
+```
+Project   — the venture/effort (sector, one-liner, role) — mirrors a portfolio header
+  └ Section — a builder-lifecycle stage: Think → Plan → Build → Review → Test → Ship → Reflect
+              (custom stages allowed; the stage is the cross-project axis)
+       └ Task — one unit of work (sub-purpose, tools, mindset, progress, highlight, evidence, body)
+```
+
+A **Task** carries:
+
+| field | what it is |
+|-------|------------|
+| title | what was attempted (intent, not status) |
+| section | which lifecycle stage (Think/Plan/Build/Review/Test/Ship/Reflect or custom) |
+| sub_purpose | the specific aim of this task, one line |
+| tools | AI tools/stacks used (Hermes, Claude Code, LangChain, GStack, Figma…) |
+| mindset | 1–3 discovery tags (skeptical, first-principles, cost-aware…) |
+| progress | done / ongoing / dropped / undecided |
+| highlight | the AI-vs-builder decisive moment {ai, builder, why} — optional, the differentiator |
+| evidence | traces that prove it (see Step 5) |
+| body_md | flexible markdown narrative; its H2 sections fit the work type |
+
+**highlight is captured as three parts** — the contrast is the product:
+- `ai`: what the AI proposed, near-verbatim (from your own earlier messages)
+- `builder`: what the builder decided — rejected/changed/overrode, in their words
+- `why`: the builder's reasoning, one line
+
+Hunt for the highlight first — it is the strongest signal — but it is **optional**. A task with
+no AI-override still stands on its narrative (e.g. "ran 6 user interviews, found X").
 
 ---
 
 ## Step 0 — Mode
 
 Check the invocation for `--dry-run`:
-- **`--dry-run` present** → dry-run mode: extract and show what *would* be recorded, then STOP.
-  Write nothing.
-- **no flag** → normal mode: run all steps through saving.
+- **`--dry-run` present** → extract and show what *would* be recorded, then STOP. Write nothing.
+- **no flag** → run all steps through saving (but never save before the builder confirms — Steps 4 & 5).
 
 ---
 
-## Step 1 — Extract the distinct work items from this session
+## Step 1 — New or existing project
 
-Read the whole conversation. Additionally open only what the conversation itself references:
-files touched, commands run and their output, commit messages, pasted material (transcripts,
-briefs, logs), issue/PR links. **Do not go hunting for things not in the session.** If a trace
-isn't here, that scene didn't happen.
+List existing projects so the builder can attach this session to one, or start fresh:
 
-**A session can contain more than one work item.** People don't always keep one project per
-window. Split into separate items when the *intent* differs — different problem, different
-project, or work that stands on its own. Same file edited five times for one purpose = one item.
+```bash
+python3 ~/.claude/skills/builders-diary/scripts/save_record.py --list-projects
+```
 
-For each work item, determine:
+Show the result compactly and ask:
 
-| Field | What it is |
-|-------|------------|
-| **title** | What was attempted (the intent, not a status) |
-| **project** | Which project it belongs to |
-| **goal** | Which goal under that project |
-| **category** | One of: `Planning` `Design` `Engineering` `Research` `Growth` |
-| **judgment** | Both sides of the decisive moment (see below). Empty only if there truly was none. |
-| **evidence** | Traces that prove it happened (see Step 2) |
+```
+This session — attach to an existing project, or new?
+  [1] Adevinta AI House EiR · Marketplace · 3 sections, 4 tasks
+  [2] Genkle · EdTech · 2 sections, 5 tasks
+  [n] New project
+```
 
-**Judgment is captured as three parts** — the contrast is the product:
-
-- `ai`: what the AI actually proposed, close to verbatim (e.g. "Recommended adversarial
-  reading B/C; ranked 'add tutorial' as #1 fix")
-- `builder`: what the builder decided — rejected / changed / overrode, in their words when
-  possible (e.g. "Rejected both rounds; fixed the model so the advisor withdrew the risk")
-- `why`: the builder's reasoning, one line (e.g. "the #1 ranking rested on a single respondent")
-
-Pull `ai` from your own earlier messages in this chat; pull `builder` and `why` from the
-builder's replies. Quote or closely paraphrase — do not smooth into generic summary language.
-
-Then map each item to the existing store (Step 3 checks folders). If a project/goal already
-exists, reuse it; if not, propose a new one.
+Wait for the choice.
 
 ---
 
-## Step 2 — Gather evidence (from traces only)
+## Step 2 — Read everything (chat + artifacts)
 
-Evidence is any trace in the session that proves the work. **Four types**, generalized so
-non-code work counts too. Collect only what's actually present — never fabricate, never ask.
+Read the whole conversation. **Additionally read what the session itself produced or opened** —
+this is where the real evidence lives, not just the chat bubbles:
+- files created or edited (design docs, proposals, research notes, code, decision logs)
+- commands run and their output
+- links, artifacts, generated images, PDFs
+- pasted material (transcripts, briefs, logs)
 
-| type | what it captures | dev example | non-dev example |
-|------|------------------|-------------|-----------------|
-| `input` | what the builder started with | error log, failing issue | interview transcript (6 respondents, 12k words) |
-| `judgment` | an AI option rejected/changed + why | "rejected the suggested refactor — out of scope" | "AI ranked 'add tutorial' #1; rejected — one respondent only" |
-| `quote` | a verbatim line from source or output | "31 passed", "Ready in 1846ms" | "Respondent C: 'I dropped off twice in onboarding'" |
-| `artifact` | a produced thing with a link | commit URL + diff stat, PR, deploy URL, screenshot | decision doc, revised roadmap, published spec |
+**Do not go hunting for things outside this session.** If a trace isn't here, that scene didn't happen.
 
-Build a JSON list like this (only include what you found):
+- **New project** → from the traces, propose: `name`, `sector`, `one_liner`, `role`
+  (e.g. Zero-to-One / Product Architect / Researcher). For `logo`, ask if they have one,
+  else the UI uses an initial badge. Confirm before creating.
+- **Existing project** → also read its `project.json`, its sections, and recent tasks, so you
+  inherit its style, sequence numbers, and context. Skip project creation.
 
+---
+
+## Step 3 — Section (lifecycle stage)
+
+Sections are builder-lifecycle stages: **Think → Plan → Build → Review → Test → Ship → Reflect**
+(custom allowed). This is the process spine and the cross-project axis.
+
+- **Existing project** → list its current sections and ask: which stage does this session's work
+  belong to, or a new stage? A session can span two stages (e.g. Think + Plan) — that's fine,
+  tasks carry their own section.
+- **New project** → determine which stage(s) the work falls under from the traces.
+
+---
+
+## Step 4 — GATE 1: candidate list only (no save, no body yet)
+
+**A session usually contains more than one task.** Split by *intent* — different problem,
+different aim, or work that stands on its own. Same file edited five times for one purpose = one task.
+
+Present candidates as a table — titles and one-liners only, no full bodies yet:
+
+```
+[builders-diary] N candidate task(s) found in this session
+
+  #  Section  Task                                      Highlight  Evidence
+  1  Think    Reframe email: tool-intro → running proof  ✓ (AI→you)  chat, proposal.md
+  2  Think    Catch the stale-source claim, re-research   ✓          research.md
+  3  Plan     Reject 4-day market test → internal setup   ✓          chat
+  ...
+
+Reply to curate: keep / drop N / add … / merge N and M / split N.
+I'll set progress per task (default: done) — tell me any that are ongoing/dropped/undecided.
+```
+
+**STOP and wait.** This gate is what prevents dumping a pile of half-relevant cards.
+The builder curates the LIST before any body is written.
+
+---
+
+## Step 5 — GATE 2: per-card body + evidence, one at a time
+
+For each confirmed task, draft the hybrid body and confirm it **card by card**:
+
+**Fixed fields** — section, sub_purpose, tools, mindset, progress.
+
+**Highlight** (if present) — the three-part contrast, near-verbatim from the chat.
+
+**body_md** — flexible markdown; choose H2 sections that fit the work type. Examples:
+- product/architecture work → `## Context` / `## How it converged` / `## Result`
+- research → `## Question` / `## What I dug into` / `## Finding`
+- marketing → `## Goal` / `## Outreach approach` / `## Outcome`
+- design → `## Problem` / `## Design decisions` / `## Result`
+Keep a concrete Result line when one exists (a number, a shipped artifact) — don't force a metric
+onto work that has none.
+
+**Evidence** — the trust layer. Four types (generalized for non-code work):
+
+| type | captures | example |
+|------|----------|---------|
+| `input` | what the builder started with | interview transcript (6 respondents), brief, error log |
+| `judgment` | an AI option rejected/changed + why | "advisor's risk objection withdrawn on the record" |
+| `quote` | a verbatim line from source/output | "31 passed", "Respondent C: 'I dropped off twice'" |
+| `artifact` | a produced thing with a link | commit URL + diff stat, PR, deploy URL, doc, screenshot |
+
+- **Auto-fill** evidence you can find in the chat (generated files, quotes, URLs, commands).
+- **If you can't find it or you're unsure, ASK** — do not fabricate and do not silently skip:
+  > "This task would be stronger with the result screenshot / the link to X. Do you have one?
+  >  Paste it and I'll attach it, or say skip."
+  Builder-approved evidence only. This ask is a feature, not a nuisance — it's what makes the
+  card trustworthy.
+
+Show each card, get "ok / fix this / drop it", then move to the next.
+
+Build the evidence JSON like:
 ```json
 [
-  {"type": "input",    "label": "User interview transcripts", "meta": "6 respondents, 12k words"},
-  {"type": "judgment", "label": "Rejected AI's #1 ranking",    "detail": "based on a single respondent"},
-  {"type": "quote",    "label": "Respondent C",               "quote": "I dropped off twice in onboarding"},
-  {"type": "artifact", "label": "commit a1b2c3",               "url": "https://github.com/…/commit/a1b2c3", "meta": "+412 −80, 7 files"}
+  {"type": "input",    "label": "GStack + Hermes official repos", "meta": "read directly, no stale source"},
+  {"type": "judgment", "label": "Dropped the stale-source claim", "detail": "verified against official repo"},
+  {"type": "quote",    "label": "SECURITY.md", "quote": "the only security boundary is the OS"},
+  {"type": "artifact", "label": "gstack-hermes-research.md", "meta": "research doc produced this session"}
 ]
 ```
 
-If the host tool can capture a screenshot of a running localhost/deploy URL, add one artifact
-with a local image path. If it can't, skip silently.
-
 ---
 
-## Step 3 — Dry-run output (only when `--dry-run`)
+## Step 6 — Save each confirmed task
 
-Print this and STOP. Write nothing.
+For each confirmed task:
 
-```
-[builders-diary dry-run] N work item(s) found in this session
-
-[1] Title:    <title>
-    Category: <category>
-    Project:  <project> → Goal: <goal>   (existing | NEW)
-    AI proposed:    <one line, or "— none">
-    Builder's call: <one line>
-    Why:            <one line>
-    Evidence: input ✓ | judgment ✓ | quote ✓ | artifact ✓   (only the ones found)
-
-[2] …
-
-Run without --dry-run to record. Reply to drop or merge any item.
-```
-
----
-
-## Step 4 — Confirm (normal mode)
-
-Show the same list as Step 3 and wait for the builder's reply.
-- "save" / "yes" → save all
-- "drop 2", "merge 1 and 3", corrections → adjust, then save
-- If any item has **no judgment**, that's allowed — but if the session clearly had a
-  rejection/decision you missed, add it before saving.
-
-**Stop and wait for the reply.** Never save before confirmation.
-
----
-
-## Step 5 — Save each item
-
-For each confirmed item:
-
-1. Write the body to a temp markdown file (so special characters survive). Body structure:
-
-```markdown
-## What was the problem
-[1-2 sentences — why this work was needed]
-
-## What was done
-[2-5 sentences — specific actions]
-
-## The judgment call
-[What the AI proposed, what you rejected/changed, and why. The heart of the record.]
-
-## Result
-[Concrete outcome]
-```
-
+1. Write `body_md` to a temp markdown file (so special characters survive).
 2. Write the evidence list to a temp JSON file.
-
 3. Call the script:
 
 ```bash
 python3 ~/.claude/skills/builders-diary/scripts/save_record.py \
-  --project  "Project Title" \
-  --goal     "Goal Title" \
-  --title    "Concise title — what was attempted" \
-  --category "Research" \
-  --tags     "tag1,tag2" \
-  --judgment-ai      "what the AI proposed (near-verbatim)" \
-  --judgment-builder "what the builder decided" \
-  --judgment-why     "the builder's reasoning, one line" \
+  --project     "Adevinta AI House EiR" \
+  --sector      "Marketplace SaaS" \
+  --one-liner   "AI-native operating setup pitched into a marketplace EiR role" \
+  --role        "Zero-to-One" \
+  --section     "Think" \
+  --title       "Catch the stale-source claim and re-research from official repos" \
+  --sub-purpose "Verify GStack/Hermes claims against primary sources" \
+  --tools       "Hermes,GStack,Web search" \
+  --mindset     "skeptical,source-first" \
+  --progress    "done" \
+  --highlight-ai      "GStack only covers engineering (citing gstacks.org)" \
+  --highlight-builder "Read the official repo directly and confirm" \
+  --highlight-why     "the AI's pre-training data may be stale" \
   --evidence-file /tmp/bd_evidence.json \
   --body-file     /tmp/bd_body.md
 ```
 
-(Older hosts may only support a single `--judgment "…"` string — the script accepts both;
-prefer the three-part form.)
+For an **existing** project, pass only `--project` (the sector/one-liner/role are already stored;
+passing them again just updates). For a **new** project, pass the project fields once.
 
-The script creates project.json / goal.json / record.json with the exact schema the web UI
-reads, reuses existing project/goal folders, and auto-increments the sequence number.
+The script creates project.json / section (goal.json) / record.json with the exact schema the
+web UI reads, reuses existing project/section folders, and auto-increments the sequence number.
 Storage root is `$BUILDERS_DIARY_PATH`, else `~/Documents/builders-diary` (falls back to
-`~/builders-diary` when no Documents folder exists). Prefer English titles for clean
-folder slugs.
+`~/builders-diary` when no Documents folder exists). Prefer English titles for clean folder slugs.
+
+(Back-compat: older flags still work — `--category` maps to `--section`, and a single
+`--judgment "…"` string is accepted in place of the three `--highlight-*` flags.)
 
 ---
 
-## Step 6 — Confirm to the builder
+## Step 7 — Confirm to the builder
 
-Report each saved item's script output: record_id, category, whether judgment was captured,
-evidence count, and path. Then:
+Report each saved task's script output (record_id, section, progress, highlight captured?,
+evidence count, path) and the section rollup:
 
 ```
+Saved 3 tasks.
+  Think: 2 done  ·  Plan: 1 ongoing
 View your portfolio: http://localhost:3111
 ```
 
@@ -208,12 +253,15 @@ View your portfolio: http://localhost:3111
 
 ## Rules
 
-- **Judgment first.** The rejection/decision moment is the most valuable thing here. Look for
-  it before anything else. If it exists, it goes in.
-- **Never save without confirmation** (Step 4).
-- **Never fabricate evidence, never ask the builder for it.** Traces only.
-- **Always use save_record.py** — never hand-write JSON. The script owns id generation,
-  slug rules, and sequence counting.
-- **One record per intent** — split multi-intent sessions; don't force one card.
-- **This is not a project-management tool.** No status like done/blocked. Category shows range;
-  the Result section shows outcome.
+- **Two gates, always.** List first (Step 4), then per-card body (Step 5). Never dump finished
+  cards in one shot — that produces garbage the builder has to clean up.
+- **Never save without confirmation.**
+- **Never fabricate evidence.** Auto-fill what's in the chat; ASK for what's missing; accept skip.
+- **Highlight first, but optional.** Hunt the AI-vs-builder moment (it's the differentiator);
+  if there genuinely wasn't one, the task stands on its narrative.
+- **Use artifacts as material.** The files/links this session created or read are evidence and
+  context, not just the chat text.
+- **Always use save_record.py** — never hand-write JSON. The script owns id/slug/sequence rules.
+- **One task per intent** — split multi-intent sessions; don't force one card.
+- **Not a PM tool.** `progress` is builder-facing (done/ongoing/dropped/undecided), not
+  done/blocked status theater. Section shows the lifecycle; the Result line shows outcome.

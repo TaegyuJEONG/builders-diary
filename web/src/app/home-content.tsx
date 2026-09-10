@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Header } from '@/components/Header';
-import { CardTimeline } from '@/components/CardTimeline';
+import { ProjectSectionView } from '@/components/ProjectSectionView';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
@@ -240,26 +240,34 @@ export function HomeContent() {
     return scopedRecords(portfolio, selectedProjectId, selectedGoalId, filterState);
   }, [portfolio, selectedProjectId, selectedGoalId, filterState]);
 
-  // Total records across the whole portfolio (ignores filters) — drives the empty banner.
-  const totalRecordCount = useMemo(() => {
-    if (!portfolio) return 0;
-    return portfolio.projects.reduce(
-      (sum, p) => sum + p.goals.reduce((gs, g) => gs + g.records.length, 0),
-      0
-    );
+  // All records across the whole portfolio (for detail-panel lookup, independent of the section view).
+  const allRecords = useMemo(() => {
+    if (!portfolio) return [];
+    return portfolio.projects.flatMap(p => p.goals.flatMap(g => g.records));
   }, [portfolio]);
 
+  // Total records across the whole portfolio (ignores filters) — drives the empty banner.
+  const totalRecordCount = allRecords.length;
+
   const selectedRecord = useMemo(
-    () => filteredRecords.find(r => r.id === selectedRecordId) || null,
-    [filteredRecords, selectedRecordId]
+    () => allRecords.find(r => r.id === selectedRecordId) || null,
+    [allRecords, selectedRecordId]
   );
 
-  // reset card selection if it falls out of the filtered set
+  // 3-level view needs a project selected to show its sections — default to the first.
   useEffect(() => {
-    if (selectedRecordId && !filteredRecords.some(r => r.id === selectedRecordId)) {
+    if (!portfolio) return;
+    if (!selectedProjectId && portfolio.projects.length > 0) {
+      setSelectedProjectId(portfolio.projects[0].id);
+    }
+  }, [portfolio, selectedProjectId]);
+
+  // reset card selection if the selected record no longer exists in the portfolio
+  useEffect(() => {
+    if (selectedRecordId && !allRecords.some(r => r.id === selectedRecordId)) {
       setSelectedRecordId(null);
     }
-  }, [filteredRecords, selectedRecordId]);
+  }, [allRecords, selectedRecordId]);
 
   // ── render ─────────────────────────────────────────────────
   if (!hydrated) {
@@ -322,12 +330,14 @@ export function HomeContent() {
         </div>
       )}
 
-      {/* Main 2-zone: timeline + optional detail panel */}
+      {/* Main 2-zone: 3-level project/section view + optional detail panel */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
-        {/* Timeline (takes remaining width) */}
+        {/* 3-level view (takes remaining width) */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
-          <CardTimeline
-            records={filteredRecords}
+          <ProjectSectionView
+            projects={portfolio.projects}
+            selectedProjectId={selectedProjectId}
+            onSelectProject={(id) => { setSelectedProjectId(id); setSelectedRecordId(null); }}
             selectedRecordId={selectedRecordId}
             onSelectRecord={setSelectedRecordId}
           />
