@@ -14,6 +14,9 @@ npx --yes builders-diary@latest install --tools claude
 
 Supported tools: `claude`, `cursor`, `windsurf`, `codex`, `antigravity` (comma-separate several).
 
+`claude` means **Claude Code** (terminal or the Claude Desktop Code tab in a Local environment).
+It does not install or update uploaded skills in Claude Chat or Cowork.
+
 ```bash
 npx --yes builders-diary@latest install --tools claude,cursor
 npx --yes builders-diary@latest install --tools claude --dry-run   # preview, write nothing

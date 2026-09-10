@@ -277,6 +277,16 @@ export function OnboardingScreen({
                   }}>{hint.keys}</span>
                   {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}, then paste.
                 </div>
+
+                {selectedClients.includes('claude') && (
+                  <div className="mono" style={{
+                    fontSize: 10.5, color: 'var(--text2)', lineHeight: 1.65,
+                    marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)',
+                  }}>
+                    Claude Code: use the <strong>Code</strong> tab with a <strong>Local</strong> project.
+                    This installer does not update Claude Chat or Settings → Skills.
+                  </div>
+                )}
               </StepCard>
 
               {/* ── STEP 2: Connect the folder the installer created ── */}
