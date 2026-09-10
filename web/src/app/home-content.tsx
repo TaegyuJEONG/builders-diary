@@ -6,10 +6,12 @@ import { ProjectSectionView, ExploreMode } from '@/components/ProjectSectionView
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
+import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { Portfolio, Record } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile,
+  readInstallMarker,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -19,6 +21,19 @@ import {
 const CONNECTED_KEY = 'builders-diary-connected';
 const ONBOARDING_DONE_KEY = 'builders-diary-onboarding-done';
 const TOOLS_KEY = 'builders-diary-tools';
+// Keep this aligned with npm/package.json when a release is prepared.
+const CURRENT_INSTALLER_VERSION = '1.9.0';
+
+function isOlderVersion(installed: string, current: string): boolean {
+  const parse = (value: string) => value.split('-', 1)[0].split('.').slice(0, 3).map(Number);
+  const a = parse(installed);
+  const b = parse(current);
+  if (a.length !== 3 || b.length !== 3 || [...a, ...b].some(Number.isNaN)) return false;
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i];
+  }
+  return false;
+}
 
 export function HomeContent() {
   const [connected, setConnected] = useState(false);
@@ -27,6 +42,7 @@ export function HomeContent() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [installMarker, setInstallMarker] = useState<{ version?: string; tools?: string[] } | null>(null);
 
   // AI tools the user selected in onboarding (drives --tools + header manager)
   const [selectedClients, setSelectedClientsState] = useState<string[]>([]);
@@ -82,6 +98,10 @@ export function HomeContent() {
     if (forceDemo) {
       // ?demo=1 이면 무조건 목 데이터
       const data = convertMockToPortfolio();
+      const demoInstalledVersion = new URLSearchParams(window.location.search).get('installed');
+      if (demoInstalledVersion) {
+        setInstallMarker({ version: demoInstalledVersion, tools: ['claude'] });
+      }
       setPortfolio(data);
       setConnected(true);
       setOnboardingDone(true);
@@ -101,6 +121,7 @@ export function HomeContent() {
           if (handle) {
             const ok = await verifyFolderPermission(handle);
             if (ok) {
+              setInstallMarker(await readInstallMarker(handle));
               const data = await scanFolderStructure(handle);
               // 실제 데이터가 있으면 그걸 쓰고, 빈 폴더면 빈 portfolio 그대로 표시
               setPortfolio(data);
@@ -145,6 +166,7 @@ export function HomeContent() {
         const handle = await loadFolderHandleFromStorage();
         if (!handle) return;
         if (!(await hasFolderPermission(handle))) return;
+        setInstallMarker(await readInstallMarker(handle));
         const data = await scanFolderStructure(handle);
         setPortfolio(data);
       } catch { /* transient FS errors — keep current view */ }
@@ -180,6 +202,7 @@ export function HomeContent() {
           const ok = await verifyFolderPermission(handle);
           if (ok) {
             await saveFolderHandleToStorage(handle);
+            setInstallMarker(await readInstallMarker(handle));
             scanned = await scanFolderStructure(handle);
           }
         }
@@ -249,6 +272,10 @@ export function HomeContent() {
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
   const totalRecordCount = allRecords.length;
+  const installedVersion = installMarker?.version;
+  const updateAvailable = !!installedVersion
+    && isOlderVersion(installedVersion, CURRENT_INSTALLER_VERSION);
+  const updateTools = installMarker?.tools?.length ? installMarker.tools : selectedClients;
 
   const selectedRecord = useMemo(
     () => allRecords.find(r => r.id === selectedRecordId) || null,
@@ -316,6 +343,14 @@ export function HomeContent() {
         isLoading={isLoading}
         selectedClients={selectedClients}
       />
+
+      {updateAvailable && installedVersion && (
+        <SkillUpdateBanner
+          installedVersion={installedVersion}
+          currentVersion={CURRENT_INSTALLER_VERSION}
+          tools={updateTools}
+        />
+      )}
 
       {/* First-record nudge — shown only when the whole portfolio is empty */}
       {totalRecordCount === 0 && (
