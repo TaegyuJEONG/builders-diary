@@ -28,6 +28,7 @@ const CLIENTS = [
   { id: 'claude',   label: 'Claude Code',  desc: 'Anthropic',         available: true  },
   { id: 'cursor',   label: 'Cursor',        desc: 'Anysphere',         available: true  },
   { id: 'windsurf', label: 'Windsurf',      desc: 'Codeium',           available: true  },
+  { id: 'antigravity', label: 'Antigravity', desc: 'Google',           available: true  },
   { id: 'cline',    label: 'Cline',         desc: 'VS Code extension', available: true  },
   { id: 'chatgpt',  label: 'ChatGPT',       desc: 'OpenAI',            available: false },
   { id: 'codex',    label: 'Codex CLI',     desc: 'OpenAI',            available: false },

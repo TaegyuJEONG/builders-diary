@@ -6,7 +6,7 @@
  * skills directory. No MCP, no config editing: a skill is just files in a folder.
  *
  * Usage:
- *   npx builders-diary install --tools claude,cursor
+ *   npx builders-diary install --tools claude,cursor,antigravity
  *   npx builders-diary install --tools claude --dry-run
  *   npx builders-diary list
  *
@@ -23,6 +23,9 @@ const TOOL_DIRS = {
   cursor:   '~/.cursor/skills',
   windsurf: '~/.codeium/windsurf/skills',
   codex:    '~/.codex/skills',
+  // Google Antigravity IDE global skills. Workspace-specific installation is
+  // intentionally not used here: onboarding must not require a project path.
+  antigravity: '~/.gemini/antigravity/skills',
 };
 
 const SKILL_NAME = 'builders-diary';
@@ -67,7 +70,7 @@ function printHelp() {
   console.log(`builders-diary — record what you actually judged in a work session.
 
 Usage:
-  npx builders-diary install --tools claude,cursor   Install the skill
+  npx builders-diary install --tools claude,cursor,antigravity   Install the skill
   npx builders-diary install --tools claude --dry-run  Preview, write nothing
   npx builders-diary list                            Show supported tools
 

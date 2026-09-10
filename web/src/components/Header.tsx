@@ -172,9 +172,10 @@ const TOOL_LABELS: { [id: string]: string } = {
   windsurf: 'Windsurf',
   cline: 'Cline',
   codex: 'Codex CLI',
+  antigravity: 'Antigravity',
   chatgpt: 'ChatGPT',
 };
-const ADDABLE_TOOLS = ['claude', 'cursor', 'windsurf', 'cline'];
+const ADDABLE_TOOLS = ['claude', 'cursor', 'windsurf', 'antigravity', 'cline'];
 
 /** Tools manager popover — shows connected tools + a command to add another. */
 function ToolsPopover({

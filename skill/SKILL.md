@@ -1,6 +1,6 @@
 ---
 name: builders-diary
-version: 3.0.0
+version: 3.1.0
 description: At the end of a work session, capture the process behind the output — project → section → task, with the AI-vs-builder judgment and evidence. Saves locally to ~/Documents/builders-diary/. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "@builders-diary"
@@ -80,7 +80,16 @@ Check the invocation for `--dry-run`:
 List existing projects so the builder can attach this session to one, or start fresh:
 
 ```bash
-python3 ~/.claude/skills/builders-diary/scripts/save_record.py --list-projects
+BD_SCRIPT=""
+for candidate in \
+  "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
+  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
+  "$HOME/.gemini/config/skills/builders-diary/scripts/save_record.py" \
+  "$PWD/.agents/skills/builders-diary/scripts/save_record.py"; do
+  if [ -f "$candidate" ]; then BD_SCRIPT="$candidate"; break; fi
+done
+[ -n "$BD_SCRIPT" ] || { echo "Builder's Diary save script is not installed."; exit 1; }
+python3 "$BD_SCRIPT" --list-projects
 ```
 
 Show the result compactly and ask:
@@ -207,7 +216,16 @@ For each confirmed task:
 3. Call the script:
 
 ```bash
-python3 ~/.claude/skills/builders-diary/scripts/save_record.py \
+BD_SCRIPT=""
+for candidate in \
+  "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
+  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
+  "$HOME/.gemini/config/skills/builders-diary/scripts/save_record.py" \
+  "$PWD/.agents/skills/builders-diary/scripts/save_record.py"; do
+  if [ -f "$candidate" ]; then BD_SCRIPT="$candidate"; break; fi
+done
+[ -n "$BD_SCRIPT" ] || { echo "Builder's Diary save script is not installed."; exit 1; }
+python3 "$BD_SCRIPT" \
   --project     "Adevinta AI House EiR" \
   --sector      "Marketplace SaaS" \
   --one-liner   "AI-native operating setup pitched into a marketplace EiR role" \
