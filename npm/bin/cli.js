@@ -75,7 +75,7 @@ Usage:
   cd ~ && npx --yes --package=builders-diary@latest builders-diary list                            Show supported tools
 
 Supported tools: ${Object.keys(TOOL_DIRS).join(', ')}
-After installing, restart your AI tool and type @builders-diary at the end of a session.`);
+After installing, restart your AI tool, begin a new conversation, and mention builders-diary by name.`);
 }
 
 function cmdList() {

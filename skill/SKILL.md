@@ -1,13 +1,13 @@
 ---
 name: builders-diary
-version: 3.2.0
+version: 3.3.0
 description: At the end of a work session, capture the process behind the output — project → section → task, with the AI-vs-builder judgment and evidence. Saves locally to ~/Documents/builders-diary/. For any builder (research, design, sales, engineering), not just coders.
 triggers:
-  - "@builders-diary"
-  - "/builders-diary"
-  - "record my work"
-  - "save my work"
-  - "builders diary"
+  - "builders-diary"
+  - "record this work session"
+  - "save this work"
+  - "create a portfolio record"
+  - "dry-run my work record"
 allowed-tools:
   - Read
   - Write
@@ -75,7 +75,10 @@ no AI-override still stands on its narrative (e.g. "ran 6 user interviews, found
 ## Step 0 — Mode
 
 Check the invocation for `--dry-run`:
-- **`--dry-run` present** → extract and show what *would* be recorded, then STOP. Write nothing.
+- **`--dry-run` present** → run **Steps 1–5 in full**, including project choice, section choice,
+  candidate-list curation, and one-card-at-a-time review. All choices are provisional. At Step 6,
+  show the final preview and STOP: write no project/section/task files, copy no evidence, and do
+  not collapse the flow into a one-shot extraction.
 - **no flag** → run all steps through saving (but never save before the builder confirms — Steps 4 & 5).
 
 ---
@@ -124,6 +127,7 @@ this is where the real evidence lives, not just the chat bubbles:
 - **New project** → from the traces, propose only `name`, `sector`, and `one_liner`.
   Do not infer or require a `role`; the builder's resume already carries that context.
   For `logo`, ask if they have one, else the UI uses an initial badge. Confirm before creating.
+  In dry-run mode, label it **provisional** and do not create its folder or `project.json`.
 - **Existing project** → also read its `project.json`, its sections, and recent tasks, so you
   inherit its style, sequence numbers, and context. Skip project creation.
 
@@ -138,6 +142,7 @@ Sections are builder-lifecycle stages: **Think → Plan → Build → Review →
   belong to, or a new stage? A session can span two stages (e.g. Think + Plan) — that's fine,
   tasks carry their own section.
 - **New project** → determine which stage(s) the work falls under from the traces.
+  In dry-run mode, label a new section **provisional** and do not create its folder or `goal.json`.
 
 ---
 
@@ -220,9 +225,14 @@ Build the evidence JSON like:
 
 ---
 
-## Step 6 — Save each confirmed task
+## Step 6 — Save each confirmed task (or finish the dry-run preview)
 
-For each confirmed task:
+**Dry-run path:** after every confirmed card has been reviewed, report the exact project/section/task
+structure that would be created and STOP. Do **not** call `save_record.py`, write temp body/evidence
+files, create folders, or copy approved artifacts. Say `No files were saved.` The builder can then
+start a normal run when ready to save.
+
+**Normal path:** for each confirmed task:
 
 1. Write `body_md` to a temp markdown file (so special characters survive).
 2. Write the evidence list to a temp JSON file.
@@ -271,13 +281,20 @@ Storage root is `$BUILDERS_DIARY_PATH`, else `~/Documents/builders-diary` (falls
 
 ## Step 7 — Confirm to the builder
 
-Report each saved task's script output (record_id, section, progress, highlight captured?,
-evidence count, path) and the section rollup:
+For a normal run, report each saved task's script output (record_id, section, progress, highlight
+captured?, evidence count, path) and the section rollup:
 
 ```
 Saved 3 tasks.
   Think: 2 done  ·  Plan: 1 ongoing
 View your portfolio: http://localhost:3111
+```
+
+For a dry run, report only the provisional project/section/task count and the exact words:
+
+```
+Dry run complete. No files were saved and no evidence was copied.
+Start a normal Builder's Diary run when you are ready to save these approved cards.
 ```
 
 ---

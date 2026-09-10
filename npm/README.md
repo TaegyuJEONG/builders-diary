@@ -24,25 +24,33 @@ This copies a skill into the tool's skills directory. No MCP server, no config e
 
 ## Use
 
-At the end of any work session in your AI tool, type:
+At the end of any work session, begin a new message and mention the skill by name:
 
 ```
-@builders-diary
+Use the builders-diary skill for this conversation.
 ```
 
-The skill extracts the distinct work items, confirms with you, then saves each as a local record under `~/builders-diary/` with the exact structure a portfolio viewer reads:
+This works across AI tools. In Antigravity, skills are discovered when a conversation starts, so
+there is no required slash command or `@` autocomplete.
+
+The skill lists projects, lets you curate candidate tasks, then reviews each card before saving a
+local record under `~/Documents/builders-diary/` with the exact structure the portfolio viewer reads:
 
 ```
-~/builders-diary/{project}/{goal}/{YYYYMMDD-NN-title}/record.json
+~/Documents/builders-diary/{project}/{section}/{YYYYMMDD-NNN-title}/record.json
 ```
 
-Each record captures a **category** (Planning / Design / Engineering / Research / Growth), the **judgment call** you made over the AI's output, and **evidence** pulled from the session (inputs, quotes, artifacts).
+Each record captures a **section** (Think / Plan / Build / Review / Test / Ship / Reflect), the **judgment call** you made over the AI's output, and **evidence** pulled from the session (inputs, quotes, artifacts).
 
-Add `--dry-run` to preview what would be recorded without writing:
+Ask for a dry run to walk through the complete selection and card-review flow without saving:
 
 ```
-@builders-diary --dry-run
+Use the builders-diary skill for this conversation.
+Run a dry run first. Do not save anything yet.
 ```
+
+A dry run still asks you to choose a project and section, curate the candidate task list, and review
+each card. It creates no folders, records, or evidence copies.
 
 ## Privacy
 
