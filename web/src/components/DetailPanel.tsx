@@ -27,6 +27,9 @@ const CATEGORY_OPTIONS = ['Planning', 'Design', 'Engineering', 'Research', 'Grow
 function EvidenceItem({ ev }: { ev: Evidence }) {
   const meta = EVIDENCE_META[ev.type || 'other'] || EVIDENCE_META.other;
   const color = ev.type === 'judgment' ? 'var(--accent)' : 'var(--text2)';
+  const visibility = ev.visibility
+    ? (ev.visibility === 'approved' || ev.artifact_path ? 'Approved artifact' : 'Private trace')
+    : 'Evidence';
 
   const inner = (
     <div style={{
@@ -44,6 +47,9 @@ function EvidenceItem({ ev }: { ev: Evidence }) {
         {ev.meta && (
           <span className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginLeft: 'auto' }}>{ev.meta}</span>
         )}
+        <span className="mono" style={{ fontSize: 8, color: ev.visibility === 'approved' ? 'var(--accent)' : 'var(--text3)', marginLeft: ev.meta ? 0 : 'auto' }}>
+          {visibility}
+        </span>
       </div>
       <div style={{ color: 'var(--text)', fontSize: 12, lineHeight: 1.5 }}>{ev.label}</div>
       {ev.quote && (
@@ -405,10 +411,10 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
               </div>
             )}
 
-            {record.subPurpose && (
+            {(record.purpose || record.subPurpose) && (
               <Section label="Purpose">
                 <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
-                  {record.subPurpose}
+                  {record.purpose || record.subPurpose}
                 </p>
               </Section>
             )}
@@ -429,7 +435,7 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
             ) : (
               // Legacy fallback for records without parseable H2 sections.
               <>
-                {!record.subPurpose && record.summary && (
+                {!(record.purpose || record.subPurpose) && record.summary && (
                   <Section label="Purpose">
                     <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
                       {record.summary}

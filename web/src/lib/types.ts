@@ -40,6 +40,23 @@ export interface Evidence {
   detail?: string;  // for judgment: why it was rejected/changed
   quote?: string;   // verbatim line from source or output
   path?: string;    // local image path for screenshots
+  visibility?: 'private' | 'approved';
+  source_path?: string; // local trace; never shown to recruiters
+  artifact_path?: string; // copied, approved artifact inside the data root
+}
+
+export type ToolCategory =
+  | 'Coding agent'
+  | 'Programming language'
+  | 'Framework / library'
+  | 'Data / backend'
+  | 'Deployment / infrastructure'
+  | 'Research / validation'
+  | 'Other';
+
+export interface ToolboxGroup {
+  category: ToolCategory;
+  tools: string[];
 }
 
 export const CATEGORY_META: { [k: string]: { color: string } } = {
@@ -67,7 +84,8 @@ export interface Record {
   // ── v3 task fields ──
   date?: string;             // YYYY-MM-DD display date
   section?: SectionStage;    // lifecycle stage (Think/Plan/Build/...)
-  subPurpose?: string | null;    // the specific aim of this task
+  purpose?: string | null;       // the specific aim of this task
+  subPurpose?: string | null;    // legacy alias; read-only compatibility
   tools?: string[];          // AI tools/stacks used
   mindset?: string[];        // mindset tags (v3 explicit field)
   progress?: Progress | null;    // done | ongoing | dropped | undecided
@@ -109,7 +127,7 @@ export interface Project {
   name?: string;             // v3 alias of title
   sector?: string;           // v3 — e.g. "Marketplace SaaS"
   oneLiner?: string;         // v3 — one-line description
-  role?: string;             // v3 — e.g. "Zero-to-One"
+  role?: string;             // legacy optional metadata; not inferred or displayed
   logo?: string | null;      // v3 — optional logo path
   tags?: string[];           // v3 — project-level tags
   description?: string;

@@ -31,8 +31,10 @@ import datetime as _dt
 import json
 import os
 import re
+import shutil
 import sys
 import uuid
+from pathlib import Path
 
 
 # Work categories — legacy (v2). Kept for --category back-compat mapping to section.
@@ -130,6 +132,32 @@ def write_json(path: str, data: dict) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def materialize_approved_evidence(record_dir: str, evidence: list[dict]) -> list[dict]:
+    """Copy only builder-approved evidence into the record's public bundle.
+
+    Private traces remain metadata-only. artifact_path is always relative to
+    record_dir, preventing an evidence item from escaping the record folder.
+    """
+    for item in evidence:
+        if item.get("visibility") != "approved":
+            continue
+        source = item.get("source_path")
+        if not source:
+            continue
+        rel = item.get("artifact_path") or os.path.basename(source)
+        rel_path = Path(rel)
+        if rel_path.is_absolute() or ".." in rel_path.parts:
+            raise ValueError(f"artifact_path must stay inside record/evidence: {rel}")
+        destination = Path(record_dir) / "evidence" / rel_path
+        source_path = Path(os.path.expanduser(str(source)))
+        if not source_path.is_file():
+            raise FileNotFoundError(f"approved evidence source not found: {source}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, destination)
+        item["artifact_path"] = str(Path("evidence") / rel_path)
+    return evidence
 
 
 def ensure_project(root: str, title: str, extra: "dict | None" = None) -> dict:
@@ -256,7 +284,6 @@ def list_projects(root: str) -> list:
             "slug": p.get("slug", pslug),
             "name": p.get("name") or p.get("title") or pslug,
             "sector": p.get("sector"),
-            "role": p.get("role"),
             "sections": sections,
         })
     return out
@@ -272,7 +299,7 @@ def main() -> int:
     # Project metadata (optional; written on create, updated on reuse if provided)
     ap.add_argument("--sector", default="", help="Project sector, e.g. 'Marketplace SaaS'")
     ap.add_argument("--one-liner", default="", help="Project one-line description")
-    ap.add_argument("--role", default="", help="Builder's role, e.g. 'Zero-to-One'")
+    ap.add_argument("--role", default="", help="Legacy optional project metadata; never infer")
     ap.add_argument("--logo", default="", help="Optional logo path (else UI shows an initial badge)")
 
     # Section (lifecycle stage). --goal kept as an alias for back-compat.
@@ -280,7 +307,8 @@ def main() -> int:
     ap.add_argument("--goal", default="", help="Alias for --section (legacy)")
 
     ap.add_argument("--title", help="Task title")
-    ap.add_argument("--sub-purpose", default="", help="The specific aim of this task, one line")
+    ap.add_argument("--purpose", default="", help="The specific aim of this task, one line")
+    ap.add_argument("--sub-purpose", default="", help="Legacy alias for --purpose")
     ap.add_argument("--tags", default="", help="Comma-separated tags")
     ap.add_argument("--tools", default="", help="Comma-separated AI tools/stacks used")
     ap.add_argument("--mindset", default="", help="Comma-separated mindset tags (skeptical, cost-aware…)")
@@ -348,7 +376,7 @@ def main() -> int:
 
     project = ensure_project(root, args.project, extra={
         "sector": args.sector, "one_liner": args.one_liner,
-        "role": args.role, "logo": args.logo,
+        "role": args.role or None, "logo": args.logo,
     })
     # Section stored on disk as goal.json (back-compat). order = lifecycle index when known.
     stage = section_title
@@ -362,6 +390,7 @@ def main() -> int:
     rec_path = os.path.join(rec_dir, "record.json")
 
     highlight = build_highlight(args)
+    evidence = materialize_approved_evidence(rec_dir, evidence)
     ts = now_iso()
     record = {
         "id": short_id("r"),
@@ -369,7 +398,7 @@ def main() -> int:
         "title": args.title,
         "date": today_stamp_iso(),
         "section": stage,
-        "sub_purpose": args.sub_purpose or None,
+        "purpose": args.purpose or args.sub_purpose or None,
         "tags": tags,
         "tools": tools,
         "mindset": mindset,

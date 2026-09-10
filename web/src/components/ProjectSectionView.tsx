@@ -1,12 +1,12 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Project, Goal, Record, SECTION_META, PROGRESS_META, Progress } from '@/lib/types';
-import { FilterState, recordPasses } from '@/lib/portfolio';
+import { FilterState, recordPasses, buildProjectToolbox } from '@/lib/portfolio';
 
 // ────────────────────────────────────────────────────────────────────────────
 // 3-level view: Project cards (row) → Section boards → Task cards.
-// The project row is the recruiter's first impression (sector / role / one-liner);
+// The project row is the recruiter's first impression (sector / one-liner);
 // selecting a project reveals its lifecycle sections, each holding its task cards
 // with a progress rollup. Task click opens the right detail panel (handled by parent).
 // ────────────────────────────────────────────────────────────────────────────
@@ -17,6 +17,46 @@ function initials(name: string): string {
     .slice(0, 2)
     .map(w => w[0]?.toUpperCase() || '')
     .join('');
+}
+
+function Toolbox({ project }: { project: Project }) {
+  const [open, setOpen] = useState(false);
+  const groups = buildProjectToolbox(project);
+  const count = groups.reduce((sum, group) => sum + group.tools.length, 0);
+  if (count === 0) return null;
+
+  return (
+    <div style={{ marginTop: 2 }} onClick={e => e.stopPropagation()}>
+      <button
+        className="mono"
+        onClick={() => setOpen(v => !v)}
+        style={{
+          border: '1px solid var(--border)', background: 'transparent', color: 'var(--text3)',
+          borderRadius: 3, padding: '3px 7px', fontSize: 9, cursor: 'pointer',
+        }}
+      >
+        Toolbox · {count} {open ? '⌃' : '⌄'}
+      </button>
+      {open && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 7 }}>
+          {groups.map(group => (
+            <div key={group.category}>
+              <div className="mono" style={{ fontSize: 8.5, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                {group.category}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {group.tools.map(tool => (
+                  <span key={tool} className="mono" style={{ fontSize: 9, color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 3, padding: '2px 5px' }}>
+                    {tool}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── Project card (row 1) ──
@@ -78,15 +118,7 @@ function ProjectCard({
       )}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
-        {project.role && (
-          <span className="mono" style={{
-            fontSize: 9, padding: '2px 7px', borderRadius: 3,
-            background: 'var(--tag-active-bg)', color: 'var(--accent)',
-            border: '1px solid var(--accent-dim)', whiteSpace: 'nowrap',
-          }}>
-            {project.role}
-          </span>
-        )}
+        <Toolbox project={project} />
         <span className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginLeft: 'auto' }}>
           {taskCount} task{taskCount === 1 ? '' : 's'}
         </span>
@@ -174,10 +206,10 @@ function TaskCard({
         {record.title}
       </div>
 
-      {/* sub-purpose */}
-      {record.subPurpose && (
+      {/* purpose */}
+      {(record.purpose || record.subPurpose) && (
         <div style={{ fontSize: 10.5, color: 'var(--text2)', lineHeight: 1.5, marginTop: 5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>
-          {record.subPurpose}
+          {record.purpose || record.subPurpose}
         </div>
       )}
 

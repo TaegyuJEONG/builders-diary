@@ -491,7 +491,8 @@ async function scanRecordFolder(
     // v3 fields
     date: meta.date || (meta.created_at ? meta.created_at.slice(0, 10) : ''),
     section,
-    subPurpose: meta.sub_purpose || null,
+    purpose: meta.purpose || meta.sub_purpose || null,
+    subPurpose: meta.purpose || meta.sub_purpose || null,
     tools,
     toolTags: tools,
     mindset,
