@@ -30,6 +30,7 @@ const TOOL_DIRS = {
 
 const SKILL_NAME = 'builders-diary';
 const PAYLOAD = ['SKILL.md', 'scripts']; // relative to the packaged skill/ dir
+const SCRIPT_TOKEN = '{{BUILDERS_DIARY_SCRIPT}}';
 
 function resolveHome(p) {
   return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
@@ -75,7 +76,7 @@ Usage:
   cd ~ && npx --yes --package=builders-diary@latest builders-diary list                            Show supported tools
 
 Supported tools: ${Object.keys(TOOL_DIRS).join(', ')}
-After installing, restart your AI tool, begin a new conversation, and mention builders-diary by name.`);
+After installing, restart your AI tool. In Antigravity, select /builders-diary from slash autocomplete; on other clients, mention builders-diary by name.`);
 }
 
 function cmdList() {
@@ -121,10 +122,18 @@ function cmdInstall(args) {
         console.log(`  copied ${item} \u2192 ${shownDest}`);
       }
     }
-    // keep the save script executable
+    // Bind this installed SKILL.md to its own helper so another client's
+    // older installation can never shadow it.
     if (!args.dryRun) {
       const script = path.join(dest, 'scripts', 'save_record.py');
+      const skillFile = path.join(dest, 'SKILL.md');
+      const skillText = fs.readFileSync(skillFile, 'utf8');
+      if (!skillText.includes(SCRIPT_TOKEN)) {
+        throw new Error(`Packaged SKILL.md is missing ${SCRIPT_TOKEN}`);
+      }
+      fs.writeFileSync(skillFile, skillText.split(SCRIPT_TOKEN).join(script));
       if (fs.existsSync(script)) fs.chmodSync(script, 0o755);
+      console.log(`  bound helper → ${script.replace(os.homedir(), '~')}`);
     }
     console.log('');
   }

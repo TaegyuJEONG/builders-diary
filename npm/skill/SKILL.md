@@ -1,6 +1,6 @@
 ---
 name: builders-diary
-version: 3.3.0
+version: 3.4.0
 description: At the end of a work session, capture the process behind the output — project → section → task, with the AI-vs-builder judgment and evidence. Saves locally to ~/Documents/builders-diary/. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "builders-diary"
@@ -8,11 +8,6 @@ triggers:
   - "save this work"
   - "create a portfolio record"
   - "dry-run my work record"
-allowed-tools:
-  - Read
-  - Write
-  - Bash
-  - Glob
 ---
 
 ## What this skill is for
@@ -29,6 +24,16 @@ This chat is the primary source. Capture the process and the judgment, not just 
 
 Works for **any builder**, not just coders: a user-interview analysis, a sales-email rewrite,
 a design critique, a market研究. Evidence is not only commits and screenshots.
+
+## Interaction contract
+
+- Use the client's structured question tool for every choice gate when it exists. In Antigravity,
+  call `ask_question` with `questions`, `options`, and `is_multi_select`; do not print numbered
+  options as a sentence and ask the builder to type a number.
+- On clients without a structured question tool, use a clean Markdown list as the fallback.
+- Keep all option labels and portfolio fields in English. Conversational explanations may match
+  the builder's language.
+- Ask one decision at a time. Wait for the answer before advancing to the next gate.
 
 ---
 
@@ -83,33 +88,44 @@ Check the invocation for `--dry-run`:
 
 ---
 
-## Step 1 — New or existing project
+## Step 1 — Detect the current project, then match saved projects
 
-List existing projects so the builder can attach this session to one, or start fresh:
+Before asking anything, identify the project this conversation is actually about from **session-local
+signals**:
+
+1. Current workspace/root and recent command working directories.
+2. The workspace folder name.
+3. The first H1 in the workspace README and project metadata such as `package.json`.
+4. Project names repeatedly mentioned in the conversation.
+
+Use these signals only to make a recommendation; never silently choose for the builder. Then list
+saved Builder's Diary projects. Resolve `scripts/save_record.py` **relative to the SKILL.md file that
+was activated**. Do not search another AI client's skill directory first.
+
+The installer injects the active client's exact helper path into the token below:
 
 ```bash
-BD_SCRIPT=""
-for candidate in \
-  "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
-  "$HOME/.gemini/config/skills/builders-diary/scripts/save_record.py" \
-  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
-  "$PWD/.agents/skills/builders-diary/scripts/save_record.py"; do
-  if [ -f "$candidate" ]; then BD_SCRIPT="$candidate"; break; fi
-done
-[ -n "$BD_SCRIPT" ] || { echo "Builder's Diary save script is not installed."; exit 1; }
-python3 "$BD_SCRIPT" --list-projects
+python3 "{{BUILDERS_DIARY_SCRIPT}}" --list-projects
 ```
 
-Show the result compactly and ask:
+Match the detected project against saved project names/slugs case-insensitively:
 
-```
-This session — attach to an existing project, or new?
-  [1] Adevinta AI House EiR · Marketplace · 3 sections, 4 tasks
-  [2] Genkle · EdTech · 2 sections, 5 tasks
-  [n] New project
+- Exact saved match → recommend attaching to that existing project.
+- No saved match → recommend creating the detected project as a provisional new project.
+- Always keep the other saved projects available as alternatives.
+
+Use `ask_question` when available. For a workspace whose README says `JobSpy` while the saved list
+contains only Adevinta, the single-select options should be:
+
+```text
+Question: Which portfolio project is this session for?
+Options:
+- Create “JobSpy” — detected from the current workspace (Recommended)
+- Adevinta AI House EiR — existing · 3 sections · 4 tasks
+- Choose another project
 ```
 
-Wait for the choice.
+Do not output all options in one paragraph. Wait for the choice.
 
 ---
 
@@ -138,11 +154,14 @@ this is where the real evidence lives, not just the chat bubbles:
 Sections are builder-lifecycle stages: **Think → Plan → Build → Review → Test → Ship → Reflect**
 (custom allowed). This is the process spine and the cross-project axis.
 
-- **Existing project** → list its current sections and ask: which stage does this session's work
-  belong to, or a new stage? A session can span two stages (e.g. Think + Plan) — that's fine,
-  tasks carry their own section.
-- **New project** → determine which stage(s) the work falls under from the traces.
+- **Existing project** → list its current sections and ask which stages this session spans, or whether
+  a new stage is needed. A session can span two stages (e.g. Build + Review); tasks carry their own
+  section.
+- **New project** → infer likely stage(s) from the traces, but ask for confirmation.
   In dry-run mode, label a new section **provisional** and do not create its folder or `goal.json`.
+
+Use `ask_question` with `is_multi_select: true` when multiple stages are plausible. Put the inferred
+stage(s) first and mark them Recommended; include `Choose another section`. Wait for confirmation.
 
 ---
 
@@ -151,20 +170,26 @@ Sections are builder-lifecycle stages: **Think → Plan → Build → Review →
 **A session usually contains more than one task.** Split by *intent* — different problem,
 different aim, or work that stands on its own. Same file edited five times for one purpose = one task.
 
-Present candidates as a table — titles and one-liners only, no full bodies yet:
+Present candidates as a compact Markdown table — titles and one-line purposes only, no full bodies yet:
 
+```text
+[builders-diary] N candidate tasks found
+
+#  Section  Task                                      Highlight  Evidence
+1  Think    Reframe email: tool-intro → running proof  ✓          chat, proposal.md
+2  Think    Catch the stale-source claim, re-research   ✓          research.md
+3  Plan     Reject 4-day market test → internal setup   ✓          chat
 ```
-[builders-diary] N candidate task(s) found in this session
 
-  #  Section  Task                                      Highlight  Evidence
-  1  Think    Reframe email: tool-intro → running proof  ✓ (AI→you)  chat, proposal.md
-  2  Think    Catch the stale-source claim, re-research   ✓          research.md
-  3  Plan     Reject 4-day market test → internal setup   ✓          chat
-  ...
+Then use `ask_question` with `is_multi_select: true`:
 
-Reply to curate: keep / drop N / add … / merge N and M / split N.
-I'll suggest progress per task, but never finalize `done` without the builder's confirmation.
+```text
+Question: Which candidate tasks should be kept?
+Options: one concise option per candidate, plus “I want to modify the list”
 ```
+
+If the builder chooses modification, ask for merge/split/add/drop edits before showing the updated
+list. Suggest progress per task, but never finalize `done` without confirmation.
 
 **STOP and wait.** This gate is what prevents dumping a pile of half-relevant cards.
 The builder curates the LIST before any body is written.
@@ -203,15 +228,18 @@ Four types (generalized for non-code work):
 
 - **Auto-fill** private traces you can find in the chat (generated files, quotes, URLs, commands),
   and show the builder which ones can become approved artifacts.
-- For a generated file, ask: "Include a copy in the public evidence bundle?" If yes, copy the
-  approved file into `record/evidence/`; if no, keep only the private trace.
+- For generated files, use `ask_question` with `is_multi_select: true` and ask which artifacts to
+  include in the public evidence bundle. Show safe labels and filenames, not full absolute paths.
+  Selected files become approved copies in `record/evidence/`; unselected files remain private traces.
 - **If you can't find it or you're unsure, ASK** — do not fabricate and do not silently skip:
   > "This task would be stronger with the result screenshot / the link to X. Do you have one?
   >  Paste it and I'll attach it, or say skip."
   Builder-approved evidence only. This ask is a feature, not a nuisance — it's what makes the
   card trustworthy.
 
-Show each card, get "ok / fix this / drop it", then move to the next.
+Show one complete card, then use a single-select `ask_question` with exactly these actions:
+`Approve this card`, `Edit this card`, `Drop this card`. Wait for the answer before moving to the
+next card. If editing, collect the requested changes and show the revised card again.
 
 Build the evidence JSON like:
 ```json
@@ -239,16 +267,7 @@ start a normal run when ready to save.
 3. Call the script:
 
 ```bash
-BD_SCRIPT=""
-for candidate in \
-  "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
-  "$HOME/.gemini/config/skills/builders-diary/scripts/save_record.py" \
-  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
-  "$PWD/.agents/skills/builders-diary/scripts/save_record.py"; do
-  if [ -f "$candidate" ]; then BD_SCRIPT="$candidate"; break; fi
-done
-[ -n "$BD_SCRIPT" ] || { echo "Builder's Diary save script is not installed."; exit 1; }
-python3 "$BD_SCRIPT" \
+python3 "{{BUILDERS_DIARY_SCRIPT}}" \
   --project     "Adevinta AI House EiR" \
   --sector      "Marketplace SaaS" \
   --one-liner   "AI-native operating setup pitched into a marketplace EiR role" \

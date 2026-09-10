@@ -30,11 +30,12 @@ At the end of any work session, begin a new message and mention the skill by nam
 Use the builders-diary skill for this conversation.
 ```
 
-This works across AI tools. In Antigravity, skills are discovered when a conversation starts, so
-there is no required slash command or `@` autocomplete.
+This works across AI tools. Antigravity exposes the installed skill in slash autocomplete; select
+`/builders-diary` or mention `builders-diary` by name.
 
-The skill lists projects, lets you curate candidate tasks, then reviews each card before saving a
-local record under `~/Documents/builders-diary/` with the exact structure the portfolio viewer reads:
+The skill detects the current workspace, recommends the matching or new portfolio project through
+the client's structured question UI, lets you curate candidate tasks, then reviews each card before
+saving a local record under `~/Documents/builders-diary/` with the exact structure the portfolio viewer reads:
 
 ```
 ~/Documents/builders-diary/{project}/{section}/{YYYYMMDD-NNN-title}/record.json
