@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Header } from '@/components/Header';
-import { ProjectSectionView } from '@/components/ProjectSectionView';
+import { ProjectSectionView, ExploreMode } from '@/components/ProjectSectionView';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
@@ -37,6 +37,7 @@ export function HomeContent() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
+  const [exploreMode, setExploreMode] = useState<ExploreMode>('project');
 
   // filters
   const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
@@ -306,7 +307,7 @@ export function HomeContent() {
         toolOptions={tagOptions.tool}
         selectedMindset={selectedMindset}
         selectedTools={selectedTools}
-        onProjectChange={(v) => { setSelectedProjectId(v); setSelectedGoalId(null); setSelectedRecordId(null); }}
+        onProjectChange={(v) => { setExploreMode('project'); setSelectedProjectId(v); setSelectedGoalId(null); setSelectedRecordId(null); }}
         onGoalChange={(v) => { setSelectedGoalId(v); setSelectedRecordId(null); }}
         onMindsetChange={setSelectedMindset}
         onToolChange={setSelectedTools}
@@ -337,7 +338,11 @@ export function HomeContent() {
           <ProjectSectionView
             projects={portfolio.projects}
             selectedProjectId={selectedProjectId}
-            onSelectProject={(id) => { setSelectedProjectId(id); setSelectedRecordId(null); }}
+            selectedGoalId={selectedGoalId}
+            filterState={filterState}
+            mode={exploreMode}
+            onModeChange={(mode) => { setExploreMode(mode); setSelectedGoalId(null); setSelectedRecordId(null); }}
+            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setSelectedGoalId(null); setSelectedRecordId(null); }}
             selectedRecordId={selectedRecordId}
             onSelectRecord={setSelectedRecordId}
           />

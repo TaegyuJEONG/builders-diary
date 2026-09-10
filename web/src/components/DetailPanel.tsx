@@ -112,6 +112,16 @@ function EditTextarea({
   );
 }
 
+function narrativeLabel(heading: string): string {
+  const h = heading.trim();
+  if (!h) return 'Context';
+  if (/problem|context|situation|question/i.test(h)) return 'Context';
+  if (/done|work|action|converged|approach|what i dug into|design decisions|outreach approach/i.test(h)) return 'Work';
+  if (/result|outcome|finding/i.test(h)) return 'Result';
+  if (/judgment|judgement/i.test(h)) return '';
+  return h;
+}
+
 // ── Main panel ──
 export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
   const [editMode, setEditMode] = useState(false);
@@ -395,28 +405,52 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
               </div>
             )}
 
-            {record.summary && (
+            {record.subPurpose && (
               <Section label="Purpose">
                 <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
-                  {record.summary}
+                  {record.subPurpose}
                 </p>
               </Section>
             )}
 
-            {record.content && (
-              <Section label="Work">
-                <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {record.content}
-                </p>
-              </Section>
-            )}
-
-            {record.result && (
-              <Section label="Result">
-                <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65, margin: 0 }}>
-                  {record.result}
-                </p>
-              </Section>
+            {record.narrative && record.narrative.length > 0 ? (
+              // v3 + parsed legacy body: render named blocks, never the raw markdown blob.
+              record.narrative.map((block, i) => {
+                const label = narrativeLabel(block.heading);
+                if (!label || !block.body) return null;
+                return (
+                  <Section key={`${block.heading}-${i}`} label={label}>
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
+                      {block.body}
+                    </p>
+                  </Section>
+                );
+              })
+            ) : (
+              // Legacy fallback for records without parseable H2 sections.
+              <>
+                {!record.subPurpose && record.summary && (
+                  <Section label="Purpose">
+                    <p style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.65, margin: 0 }}>
+                      {record.summary}
+                    </p>
+                  </Section>
+                )}
+                {record.content && (
+                  <Section label="Work">
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
+                      {record.content}
+                    </p>
+                  </Section>
+                )}
+                {record.result && (
+                  <Section label="Result">
+                    <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.65, margin: 0 }}>
+                      {record.result}
+                    </p>
+                  </Section>
+                )}
+              </>
             )}
           </>
         )}

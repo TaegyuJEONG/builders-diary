@@ -223,11 +223,35 @@ def list_projects(root: str) -> list:
             if gslug.startswith(".") or not os.path.isfile(gjson):
                 continue
             g = load_json(gjson) or {}
-            sections.append({
-                "stage": g.get("stage") or g.get("title") or gslug,
-                "title": g.get("title") or gslug,
-                "tasks": next_seq(gdir),
-            })
+            stage = g.get("stage")
+            if stage:
+                sections.append({
+                    "stage": stage,
+                    "title": g.get("title") or gslug,
+                    "tasks": next_seq(gdir),
+                })
+            else:
+                # Legacy goal folders may contain multiple old categories.
+                # Infer lifecycle sections from their record metadata without
+                # moving files on disk.
+                inferred = {}
+                for name in os.listdir(gdir):
+                    rpath = os.path.join(gdir, name, "record.json")
+                    if not os.path.isfile(rpath):
+                        continue
+                    r = load_json(rpath) or {}
+                    stage_name = r.get("section") or CATEGORY_TO_SECTION.get(r.get("category", ""))
+                    if stage_name:
+                        inferred[stage_name] = inferred.get(stage_name, 0) + 1
+                if inferred:
+                    for stage_name, tasks in sorted(inferred.items()):
+                        sections.append({"stage": stage_name, "title": stage_name, "tasks": tasks})
+                else:
+                    sections.append({
+                        "stage": g.get("title") or gslug,
+                        "title": g.get("title") or gslug,
+                        "tasks": next_seq(gdir),
+                    })
         out.append({
             "slug": p.get("slug", pslug),
             "name": p.get("name") or p.get("title") or pslug,

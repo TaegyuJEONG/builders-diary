@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Project, Goal, Record, SECTION_META, PROGRESS_META, Progress } from '@/lib/types';
+import { FilterState, recordPasses } from '@/lib/portfolio';
 
 // ────────────────────────────────────────────────────────────────────────────
 // 3-level view: Project cards (row) → Section boards → Task cards.
@@ -161,6 +162,13 @@ function TaskCard({
         )}
       </div>
 
+      {/* source project — especially useful in Section/Tool cross-project views */}
+      {record.projectTitle && (
+        <div className="mono" style={{ fontSize: 8.5, color: 'var(--text3)', marginBottom: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {record.projectTitle}
+        </div>
+      )}
+
       {/* title */}
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', lineHeight: 1.4 }}>
         {record.title}
@@ -217,12 +225,47 @@ function TaskCard({
 
 // ── Section board (row 2): one box per lifecycle stage present in the project ──
 function SectionBoard({
-  goals, selectedRecordId, onSelectRecord,
+  goals, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
 }: {
-  goals: Goal[]; selectedRecordId: string | null; onSelectRecord: (id: string) => void;
+  goals: Goal[];
+  selectedGoalId: string | null;
+  filterState: FilterState;
+  selectedRecordId: string | null;
+  onSelectRecord: (id: string) => void;
 }) {
-  // goals are already section-ordered by the scanner
-  const nonEmpty = goals.filter(g => g.records.length > 0);
+  // Older stores used human goal names instead of lifecycle stages. Merge those
+  // records into lifecycle boxes in memory; no on-disk migration is needed.
+  const allRecordsHaveSections = goals.length > 0 && goals.every(g => g.records.every(r => !!r.section));
+  const crossToolGoals = goals.some(g => (g.stage || '').startsWith('Tool ·'));
+  const hasLifecycleGoals = crossToolGoals || goals.some(g => !!SECTION_META[g.stage || '']) || allRecordsHaveSections;
+  const sourceGoals = hasLifecycleGoals ? goals : (() => {
+    const grouped = new Map<string, { source: Goal; records: Record[] }>();
+    for (const goal of goals) {
+      for (const record of goal.records) {
+        const stage = resolveLifecycleStage(record, goal.stage);
+        if (!grouped.has(stage)) grouped.set(stage, { source: goal, records: [] });
+        grouped.get(stage)!.records.push(record);
+      }
+    }
+    return [...grouped.entries()].map(([stage, group]) => ({
+      ...group.source,
+      id: `legacy-section-${stage.toLowerCase()}`,
+      slug: stage.toLowerCase(),
+      title: stage,
+      stage,
+      order: SECTION_META[stage]?.order ?? 999,
+      records: group.records,
+    }));
+  })();
+
+  // Apply the existing Header filters to the cards inside each section.
+  const visibleGoals = sourceGoals.map(g => ({
+    ...g,
+    records: g.records.filter(r => recordPasses(r, filterState)),
+  }));
+  const nonEmpty = visibleGoals
+    .filter(g => !selectedGoalId || g.id === selectedGoalId)
+    .filter(g => g.records.length > 0);
   if (nonEmpty.length === 0) {
     return (
       <div className="mono" style={{ padding: '30px 24px', color: 'var(--text3)', fontSize: 12 }}>
@@ -274,54 +317,131 @@ function SectionBoard({
   );
 }
 
+export type ExploreMode = 'project' | 'section' | 'tool';
+
+function resolveLifecycleStage(record: Record, goalStage?: string): string {
+  if (record.section && SECTION_META[record.section]) return record.section;
+  if (goalStage && SECTION_META[goalStage]) return goalStage;
+  return 'Build';
+}
+
+function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
+  const groups = new Map<string, Record[]>();
+  for (const project of projects) {
+    for (const goal of project.goals) {
+      for (const record of goal.records) {
+        const keys = mode === 'section'
+          ? [resolveLifecycleStage(record, goal.stage)]
+          : ((record.tools && record.tools.length > 0) ? record.tools : ['Unspecified']);
+        for (const key of keys) {
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(record);
+        }
+      }
+    }
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, records]) => ({
+      id: `cross-${mode}-${key.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+      slug: key.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      title: key,
+      stage: mode === 'section' ? key : `Tool · ${key}`,
+      order: SECTION_META[key]?.order ?? 999,
+      records,
+    }));
+}
+
+function ExploreToggle({ mode, onChange }: { mode: ExploreMode; onChange: (mode: ExploreMode) => void }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '9px 20px 0', flexShrink: 0 }}>
+      <span className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginRight: 4 }}>Explore by</span>
+      {([['project', 'Project'], ['section', 'Section'], ['tool', 'Tool']] as const).map(([value, label]) => (
+        <button
+          key={value}
+          onClick={() => onChange(value)}
+          className="mono"
+          style={{
+            border: `1px solid ${mode === value ? 'var(--accent-dim)' : 'var(--border)'}`,
+            background: mode === value ? 'var(--tag-active-bg)' : 'transparent',
+            color: mode === value ? 'var(--accent)' : 'var(--text3)',
+            borderRadius: 3, padding: '3px 8px', fontSize: 9, cursor: 'pointer',
+          }}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 // ── Top-level 3-level view ──
 export function ProjectSectionView({
-  projects, selectedProjectId, onSelectProject,
+  projects, selectedProjectId, selectedGoalId, filterState, mode, onModeChange, onSelectProject,
   selectedRecordId, onSelectRecord,
 }: {
   projects: Project[];
   selectedProjectId: string | null;
+  selectedGoalId: string | null;
+  filterState: FilterState;
+  mode: ExploreMode;
+  onModeChange: (mode: ExploreMode) => void;
   onSelectProject: (id: string) => void;
   selectedRecordId: string | null;
   onSelectRecord: (id: string) => void;
 }) {
   const active = projects.find(p => p.id === selectedProjectId) || null;
+  const crossGoals = mode === 'project' ? [] : crossProjectGoals(projects, mode);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      {/* Row 1: project cards */}
-      <div className="thin-scroll" style={{
-        display: 'flex', gap: 12, padding: '14px 20px',
-        overflowX: 'auto', flexShrink: 0,
-        borderBottom: '1px solid var(--border)',
-      }}>
-        {projects.map(p => (
-          <ProjectCard
-            key={p.id}
-            project={p}
-            selected={p.id === selectedProjectId}
-            onSelect={() => onSelectProject(p.id)}
-          />
-        ))}
-      </div>
+      <ExploreToggle mode={mode} onChange={onModeChange} />
+      {mode === 'project' ? (
+        <>
+          {/* Row 1: project cards */}
+          <div className="thin-scroll" style={{
+            display: 'flex', gap: 12, padding: '9px 20px 14px',
+            overflowX: 'auto', flexShrink: 0,
+            borderBottom: '1px solid var(--border)',
+          }}>
+            {projects.map(p => (
+              <ProjectCard
+                key={p.id}
+                project={p}
+                selected={p.id === selectedProjectId}
+                onSelect={() => onSelectProject(p.id)}
+              />
+            ))}
+          </div>
 
-      {/* Row 2: sections of the selected project */}
-      <div style={{ flex: 1, minHeight: 0 }}>
-        {active ? (
+          {/* Row 2: sections of the selected project */}
+          <div style={{ flex: 1, minHeight: 0 }}>
+            {active ? (
+              <SectionBoard
+                goals={active.goals}
+                selectedGoalId={selectedGoalId}
+                filterState={filterState}
+                selectedRecordId={selectedRecordId}
+                onSelectRecord={onSelectRecord}
+              />
+            ) : (
+              <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)', fontSize: 12 }}>
+                Select a project to see its Think → Ship → Reflect sections
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div style={{ flex: 1, minHeight: 0 }}>
           <SectionBoard
-            goals={active.goals}
+            goals={crossGoals}
+            selectedGoalId={null}
+            filterState={filterState}
             selectedRecordId={selectedRecordId}
             onSelectRecord={onSelectRecord}
           />
-        ) : (
-          <div className="mono" style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            height: '100%', color: 'var(--text3)', fontSize: 12,
-          }}>
-            Select a project to see its Think → Ship → Reflect sections
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
