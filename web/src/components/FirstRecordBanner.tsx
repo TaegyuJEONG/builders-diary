@@ -3,21 +3,32 @@
 import React, { useState } from 'react';
 
 interface FirstRecordBannerProps {
-  toolName?: string;
+  toolId?: string;
 }
+
+const TOOL_PROMPTS: Record<string, { name: string; invocation: string }> = {
+  claude: { name: 'Claude Code', invocation: '/builders-diary --dry-run' },
+  antigravity: { name: 'Antigravity', invocation: '/builders-diary --dry-run' },
+  cursor: { name: 'Cursor', invocation: 'Use the builders-diary skill. Run a dry run first.' },
+  windsurf: { name: 'Windsurf', invocation: 'Use the builders-diary skill. Run a dry run first.' },
+};
 
 /**
  * Shown over the (empty) card view once onboarding is done but no records exist yet.
- * Nudges the user to run @builders-diary. Dismissible for the session.
+ * Nudges the user to preview their first record. Dismissible for the session.
  */
-export function FirstRecordBanner({ toolName = 'your AI tool' }: FirstRecordBannerProps) {
+export function FirstRecordBanner({ toolId = '' }: FirstRecordBannerProps) {
   const [dismissed, setDismissed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const tool = TOOL_PROMPTS[toolId] || {
+    name: 'your AI tool',
+    invocation: 'Use the builders-diary skill. Run a dry run first.',
+  };
 
   if (dismissed) return null;
 
   const copy = () => {
-    navigator.clipboard.writeText('@builders-diary').then(() => {
+    navigator.clipboard.writeText(tool.invocation).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
@@ -33,10 +44,10 @@ export function FirstRecordBanner({ toolName = 'your AI tool' }: FirstRecordBann
       <span style={{ fontSize: 13, color: 'var(--accent)' }}>◆</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <span style={{ fontSize: 12.5, color: 'var(--text)' }}>
-          No cards yet. Finish a session in {toolName} and type{' '}
+          No cards yet. Finish a session in {tool.name}, then preview your first record with{' '}
         </span>
-        <code className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>@builders-diary</code>
-        <span style={{ fontSize: 12.5, color: 'var(--text)' }}> — your first card lands here automatically.</span>
+        <code className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>{tool.invocation}</code>
+        <span style={{ fontSize: 12.5, color: 'var(--text)' }}> — review it before anything is saved.</span>
       </div>
       <button
         onClick={copy}

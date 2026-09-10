@@ -319,7 +319,7 @@ export function HomeContent() {
 
       {/* First-record nudge — shown only when the whole portfolio is empty */}
       {totalRecordCount === 0 && (
-        <FirstRecordBanner toolName={selectedClients.includes('claude') ? 'Claude Code' : undefined} />
+        <FirstRecordBanner toolId={selectedClients[0]} />
       )}
 
       {error && (

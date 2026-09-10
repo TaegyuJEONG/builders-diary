@@ -6,9 +6,9 @@
  * skills directory. No MCP, no config editing: a skill is just files in a folder.
  *
  * Usage:
- *   cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude,cursor,antigravity
- *   cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude --dry-run
- *   cd ~ && npx --yes --package=builders-diary@latest builders-diary list
+ *   npx --yes builders-diary@latest install --tools claude,cursor,antigravity
+ *   npx --yes builders-diary@latest install --tools claude --dry-run
+ *   npx --yes builders-diary@latest list
  *
  * Zero runtime dependencies (only Node core) so npx is fast and can't fail on installs.
  */
@@ -71,12 +71,12 @@ function printHelp() {
   console.log(`builders-diary — record what you actually judged in a work session.
 
 Usage:
-  cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude,cursor,antigravity   Install the skill
-  cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude --dry-run  Preview, write nothing
-  cd ~ && npx --yes --package=builders-diary@latest builders-diary list                            Show supported tools
+  npx --yes builders-diary@latest install --tools claude,cursor,antigravity   Install the skill
+  npx --yes builders-diary@latest install --tools claude --dry-run  Preview, write nothing
+  npx --yes builders-diary@latest list                            Show supported tools
 
 Supported tools: ${Object.keys(TOOL_DIRS).join(', ')}
-After installing, restart your AI tool. In Antigravity, select /builders-diary from slash autocomplete; on other clients, mention builders-diary by name.`);
+After installing, restart your AI tool. In Antigravity or Claude Code, select /builders-diary from slash autocomplete; on other clients, mention builders-diary by name.`);
 }
 
 function cmdList() {

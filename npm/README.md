@@ -9,15 +9,15 @@ Works for **any builder**, not just coders: user research, design, sales, engine
 ## Install
 
 ```bash
-cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude
+npx --yes builders-diary@latest install --tools claude
 ```
 
 Supported tools: `claude`, `cursor`, `windsurf`, `codex`, `antigravity` (comma-separate several).
 
 ```bash
-cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude,cursor
-cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools claude --dry-run   # preview, write nothing
-cd ~ && npx --yes --package=builders-diary@latest builders-diary list                               # show supported tools
+npx --yes builders-diary@latest install --tools claude,cursor
+npx --yes builders-diary@latest install --tools claude --dry-run   # preview, write nothing
+npx --yes builders-diary@latest list                               # show supported tools
 ```
 
 This copies a skill into the tool's skills directory. No MCP server, no config editing.
@@ -30,8 +30,8 @@ At the end of any work session, begin a new message and mention the skill by nam
 Use the builders-diary skill for this conversation.
 ```
 
-This works across AI tools. Antigravity exposes the installed skill in slash autocomplete; select
-`/builders-diary` or mention `builders-diary` by name.
+This works across AI tools. Antigravity and Claude Code expose the installed skill in slash
+autocomplete; select `/builders-diary` or mention `builders-diary` by name.
 
 The skill detects the current workspace, recommends the matching or new portfolio project through
 the client's structured question UI, lets you curate candidate tasks, then reviews each card before
