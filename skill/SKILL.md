@@ -88,8 +88,8 @@ List existing projects so the builder can attach this session to one, or start f
 BD_SCRIPT=""
 for candidate in \
   "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
-  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
   "$HOME/.gemini/config/skills/builders-diary/scripts/save_record.py" \
+  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
   "$PWD/.agents/skills/builders-diary/scripts/save_record.py"; do
   if [ -f "$candidate" ]; then BD_SCRIPT="$candidate"; break; fi
 done
@@ -232,8 +232,8 @@ For each confirmed task:
 BD_SCRIPT=""
 for candidate in \
   "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
-  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
   "$HOME/.gemini/config/skills/builders-diary/scripts/save_record.py" \
+  "$HOME/.gemini/antigravity/skills/builders-diary/scripts/save_record.py" \
   "$PWD/.agents/skills/builders-diary/scripts/save_record.py"; do
   if [ -f "$candidate" ]; then BD_SCRIPT="$candidate"; break; fi
 done

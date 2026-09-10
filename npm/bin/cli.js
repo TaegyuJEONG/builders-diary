@@ -25,7 +25,7 @@ const TOOL_DIRS = {
   codex:    '~/.codex/skills',
   // Google Antigravity IDE global skills. Workspace-specific installation is
   // intentionally not used here: onboarding must not require a project path.
-  antigravity: '~/.gemini/antigravity/skills',
+  antigravity: '~/.gemini/config/skills',
 };
 
 const SKILL_NAME = 'builders-diary';
