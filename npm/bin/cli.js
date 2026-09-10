@@ -6,9 +6,9 @@
  * skills directory. No MCP, no config editing: a skill is just files in a folder.
  *
  * Usage:
- *   npx builders-diary install --tools claude,cursor,antigravity
- *   npx builders-diary install --tools claude --dry-run
- *   npx builders-diary list
+ *   npx --yes --package=builders-diary@latest builders-diary install --tools claude,cursor,antigravity
+ *   npx --yes --package=builders-diary@latest builders-diary install --tools claude --dry-run
+ *   npx --yes --package=builders-diary@latest builders-diary list
  *
  * Zero runtime dependencies (only Node core) so npx is fast and can't fail on installs.
  */
@@ -70,9 +70,9 @@ function printHelp() {
   console.log(`builders-diary — record what you actually judged in a work session.
 
 Usage:
-  npx builders-diary install --tools claude,cursor,antigravity   Install the skill
-  npx builders-diary install --tools claude --dry-run  Preview, write nothing
-  npx builders-diary list                            Show supported tools
+  npx --yes --package=builders-diary@latest builders-diary install --tools claude,cursor,antigravity   Install the skill
+  npx --yes --package=builders-diary@latest builders-diary install --tools claude --dry-run  Preview, write nothing
+  npx --yes --package=builders-diary@latest builders-diary list                            Show supported tools
 
 Supported tools: ${Object.keys(TOOL_DIRS).join(', ')}
 After installing, restart your AI tool and type @builders-diary at the end of a session.`);

@@ -9,15 +9,15 @@ Works for **any builder**, not just coders: user research, design, sales, engine
 ## Install
 
 ```bash
-npx builders-diary install --tools claude
+npx --yes --package=builders-diary@latest builders-diary install --tools claude
 ```
 
-Supported tools: `claude`, `cursor`, `windsurf`, `codex` (comma-separate several).
+Supported tools: `claude`, `cursor`, `windsurf`, `codex`, `antigravity` (comma-separate several).
 
 ```bash
-npx builders-diary install --tools claude,cursor
-npx builders-diary install --tools claude --dry-run   # preview, write nothing
-npx builders-diary list                               # show supported tools
+npx --yes --package=builders-diary@latest builders-diary install --tools claude,cursor
+npx --yes --package=builders-diary@latest builders-diary install --tools claude --dry-run   # preview, write nothing
+npx --yes --package=builders-diary@latest builders-diary list                               # show supported tools
 ```
 
 This copies a skill into the tool's skills directory. No MCP server, no config editing.

@@ -197,7 +197,7 @@ function ToolsPopover({
     return () => document.removeEventListener('mousedown', onDoc);
   }, [onClose]);
 
-  const snippet = `npx builders-diary@latest install --tools ${addTool ?? 'claude'}`;
+  const snippet = `npx --yes --package=builders-diary@latest builders-diary install --tools ${addTool ?? 'claude'}`;
   const copy = () => {
     navigator.clipboard.writeText(snippet).then(() => {
       setCopied(true);
