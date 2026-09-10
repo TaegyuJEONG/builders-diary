@@ -73,7 +73,7 @@ export function OnboardingScreen({
 
   // Install snippet — one command installs the skill for all selected tools
   const toolFlag = selectedClients.join(',');
-  const installSnippet = `npx --yes --package=builders-diary@latest builders-diary install --tools ${toolFlag || 'claude'}`;
+  const installSnippet = `cd ~ && npx --yes --package=builders-diary@latest builders-diary install --tools ${toolFlag || 'claude'}`;
 
   function copy(text: string, key: string) {
     navigator.clipboard.writeText(text).then(() => {
