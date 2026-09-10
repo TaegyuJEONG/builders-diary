@@ -1,6 +1,6 @@
 ---
 name: builders-diary
-version: 3.6.0
+version: 3.7.0
 description: Run an interactive, multi-turn Builder's Diary workflow at the end of a work session. Curate candidates, assign each task to a lifecycle section, review third-party-readable portfolio cards, and approve evidence before saving locally. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "builders-diary"
@@ -24,6 +24,25 @@ This chat is the primary source. Capture the process and the judgment, not just 
 
 Works for **any builder**, not just coders: a user-interview analysis, a sales-email rewrite,
 a design critique, a market研究. Evidence is not only commits and screenshots.
+
+## Step -1 — Fresh invocation boundary
+
+Every `/builders-diary` invocation is a **new workflow**, even in the same conversation. Do not reuse
+a cached Skill body, helper path, project choice, candidate list, card approval, or prior dry-run
+output. Never say or assume “I already read the skill earlier.”
+
+Before any explanation, tool call, or decision:
+
+1. Read the exact `SKILL.md` path supplied by the activated Skill metadata. In Antigravity, this is
+   the path inside the Slash Command’s `<SKILL>` metadata. In Claude Code, this is the file that was
+   activated for the current invocation.
+2. From that file, use only the absolute `python3 "..." --list-projects` helper command shown in
+   Step 1. Never substitute a helper from another AI client (for example, do not use
+   `~/.claude/skills/...` when the activated Skill lives under `~/.gemini/config/skills/...`).
+3. If the exact activated file cannot be read, stop and report the missing path. Do not fall back to
+   a prior Skill version or produce a portfolio preview.
+
+Only after this boundary succeeds may Step 0 begin.
 
 ## Interaction contract
 
