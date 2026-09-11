@@ -1,7 +1,7 @@
 ---
 name: builders-diary
 version: 3.7.0
-description: Run an interactive, multi-turn Builder's Diary workflow at the end of a work session. Curate candidates, assign each task to a lifecycle section, review third-party-readable portfolio cards, and approve evidence before saving locally. For any builder (research, design, sales, engineering), not just coders.
+description: Run an interactive, multi-turn Builder's Diary workflow at the end of a work session. Curate candidates, group tasks under staged purposes, review third-party-readable portfolio cards, and approve evidence before saving locally. For any builder (research, design, sales, engineering), not just coders.
 triggers:
   - "builders-diary"
   - "record this work session"
@@ -67,18 +67,20 @@ Three levels:
 
 ```
 Project   — the venture/effort (sector, one-liner) — mirrors a portfolio header
-  └ Section — a builder-lifecycle stage: Think → Plan → Build → Review → Test → Ship → Reflect
-              (custom stages allowed; the stage is the cross-project axis)
-       └ Task — one unit of work (purpose, tools, mindset, progress, highlight, evidence, body)
+  └ Purpose — a reusable workstream such as Venture Design, Curation Taxonomy, or Market Validation
+       └ Task — one unit of work (stage, task aim, tools, mindset, progress, highlight, evidence, body)
 ```
+
+A Purpose carries one primary lifecycle `stage` — Think → Plan → Build → Review → Test → Ship → Reflect —
+so the web view tells a readable story while Purpose remains searchable across projects.
 
 A **Task** carries:
 
 | field | what it is |
 |-------|------------|
 | title | what was attempted (intent, not status) |
-| section | which lifecycle stage (Think/Plan/Build/Review/Test/Ship/Reflect or custom) |
-| purpose | the specific aim of this task, one line |
+| stage | inherited lifecycle stage from its Purpose (Think/Plan/Build/...; rare task override allowed) |
+| purpose | the task's specific aim, one line |
 | tools | tools actually used in this task; always include the active AI client (e.g. Antigravity) |
 | mindset | 1–3 discovery tags (skeptical, first-principles, cost-aware…) |
 | progress | done / ongoing / dropped / undecided |
@@ -173,15 +175,14 @@ this is where the real evidence lives, not just the chat bubbles:
 
 ---
 
-## Step 3 — Generate candidate tasks (no session-wide section gate)
+## Step 3 — Generate candidate tasks with a Purpose and Stage
 
-Sections are builder-lifecycle stages: **Think → Plan → Build → Review → Test → Ship → Reflect**
-(custom allowed). They belong to **tasks**, not to a whole session. A single session can produce a
-Review task and a Build task; do not ask the builder to classify the entire session before they can
-see its candidate tasks.
+From the session traces, split work by intent. Infer for each candidate:
 
-From the traces, infer a `likely_section` for each candidate. It is a draft recommendation only;
-the builder confirms the actual section for each retained task in Step 5.
+- a reusable **Purpose** (for example, Venture Design, Curation Taxonomy, or Market Validation);
+- its likely lifecycle **stage** (Think → Plan → Build → Review → Test → Ship → Reflect).
+
+Both are draft recommendations only. The builder curates the candidate task list before any full card is written. If a session genuinely spans two Purposes, split it into separate candidates rather than forcing a broad container.
 
 ---
 
@@ -233,12 +234,9 @@ The builder curates the LIST before any body is written.
 
 For each confirmed task, run the following sequence before advancing to the next task.
 
-### A. Confirm this task's section
+### A. Confirm this task's Purpose and Stage
 
-Use the client's structured question tool in single-select mode. Ask which lifecycle stage best
-represents this task, with the inferred `likely_section` first and marked Recommended. Include other
-plausible stages and `Choose another section`. Do not inherit a section from a session-wide choice.
-In dry-run mode, label a new section **provisional** and do not create its folder or `goal.json`.
+Use the client's structured question tool to confirm the Purpose and its lifecycle Stage. Offer the inferred Purpose/Stage first and marked Recommended, plus concise alternatives and `Choose another purpose`. A new Purpose is provisional in dry-run mode and is saved as `goal.json` with its Stage only after approval.
 
 ### B. Draft a complete, third-party-readable card
 
@@ -324,7 +322,8 @@ python3 "{{BUILDERS_DIARY_SCRIPT}}" \
   --sector      "Marketplace SaaS" \
   --one-liner   "AI-native operating setup pitched into a marketplace EiR role" \
 
-  --section     "Think" \
+  --goal        "Curation Taxonomy" \
+  --stage       "Think" \
   --title       "Catch the stale-source claim and re-research from official repos" \
   --purpose     "Verify GStack/Hermes claims against primary sources" \
   --tools       "Hermes,GStack,Web search" \

@@ -334,8 +334,8 @@ export function Header({
     count: p.goals.reduce((a, g) => a + g.records.length, 0),
   }));
 
-  // Goals: scoped to the selected project, or ALL goals across projects
-  // when no project is picked (e.g. "Venture design" across everything).
+  // Purposes: scoped to the selected project, or ALL purposes across projects
+  // when no project is picked (e.g. "Venture Design" across everything).
   const goalScope = selectedProject ? goals : projects.flatMap(p => p.goals);
   const goalOptions: SelectOption[] = goalScope.map(g => ({
     value: g.id,
@@ -387,14 +387,14 @@ export function Header({
         minWidth={180}
       />
 
-      {/* Goal dropdown */}
+      {/* Purpose dropdown */}
       <SearchableSelect
         options={goalOptions}
         value={selectedGoalId}
         onChange={onGoalChange}
-        placeholder="All Goals"
-        searchPlaceholder="Search goals…"
-        allOptionLabel="All Goals"
+        placeholder="All Purposes"
+        searchPlaceholder="Search purposes…"
+        allOptionLabel="All Purposes"
         minWidth={160}
       />
 

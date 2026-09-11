@@ -8,7 +8,9 @@
   "files": [
     "bin/cli.js",
     "skill/SKILL.md",
-    "skill/scripts/save_record.py"
+    "skill/scripts/save_record.py",
+    "skill/scripts/claude_import.py",
+    "import-skill/SKILL.md"
   ],
   "engines": {
     "node": ">=16"

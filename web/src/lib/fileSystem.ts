@@ -1,6 +1,6 @@
 'use client';
 
-import { Portfolio, Project, Goal, Record, NarrativeSection, SECTION_META } from './types';
+import { Portfolio, Project, Goal, Record, NarrativeSection, SECTION_META, ImportRun } from './types';
 
 // Legacy v2 category → v3 lifecycle section. Used only when a record has no
 // explicit v3 `section` and its goal.json has no v3 `stage`.
@@ -286,6 +286,30 @@ async function readJson(folder: FileSystemDirectoryHandle, fileName: string): Pr
   }
 }
 
+/** Read private importer run metadata. Raw chats and source indexes are never loaded by the web UI. */
+export async function scanImportRuns(handle: FileSystemDirectoryHandle): Promise<ImportRun[]> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runs: ImportRun[] = [];
+    for await (const [name, entry] of imports.entries()) {
+      if (entry.kind !== 'directory' || name.startsWith('.')) continue;
+      const manifest = await readJson(entry as FileSystemDirectoryHandle, 'manifest.json');
+      if (!manifest || typeof manifest !== 'object' || !manifest.id) continue;
+      runs.push({
+        id: String(manifest.id),
+        source: String(manifest.source || 'claude'),
+        status: String(manifest.status || 'unknown'),
+        created_at: String(manifest.created_at || ''),
+        counts: manifest.counts || undefined,
+        warnings: Array.isArray(manifest.warnings) ? manifest.warnings : [],
+      });
+    }
+    return runs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  } catch {
+    return [];
+  }
+}
+
 async function scanProjectFolder(
   projectFolder: FileSystemDirectoryHandle,
   slug: string
@@ -426,24 +450,32 @@ function resultFromNarrative(narrative: NarrativeSection[]): string | undefined 
 }
 
 function expandGoalSections(goal: Goal): Goal[] {
+  // New structure: goal.json is a Purpose with a primary lifecycle stage.
+  // Keep its semantic title intact; task-level stage overrides stay on the record.
+  if (goal.stage) {
+    return [{
+      ...goal,
+      order: goal.order ?? SECTION_META[goal.stage]?.order ?? 999,
+    }];
+  }
+
+  // Legacy folders may contain records from multiple old categories. Present
+  // those as virtual lifecycle groups without changing old files on disk.
   const groups = new Map<string, Record[]>();
   for (const record of goal.records) {
-    const stage = record.section || goal.stage || 'Build';
+    const stage = record.section || 'Build';
     if (!groups.has(stage)) groups.set(stage, []);
     groups.get(stage)!.push(record);
   }
   if (groups.size <= 1) {
-    const stage = goal.stage || [...groups.keys()][0] || 'Build';
+    const stage = [...groups.keys()][0] || 'Build';
     return [{
       ...goal,
       stage,
-      title: goal.stage ? goal.title : stage,
+      title: goal.title || stage,
       order: goal.order ?? SECTION_META[stage]?.order ?? 999,
     }];
   }
-
-  // Legacy goal folders can contain records from multiple old categories.
-  // Present them as virtual lifecycle sections without moving files on disk.
   return [...groups.entries()].map(([stage, records]) => ({
     ...goal,
     id: `${goal.id}-${stage.toLowerCase()}`,

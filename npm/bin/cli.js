@@ -31,6 +31,9 @@ const TOOL_DIRS = {
 const SKILL_NAME = 'builders-diary';
 const PAYLOAD = ['SKILL.md', 'scripts']; // relative to the packaged skill/ dir
 const SCRIPT_TOKEN = '{{BUILDERS_DIARY_SCRIPT}}';
+const IMPORT_SKILL_NAME = 'builders-diary-import';
+const IMPORT_PAYLOAD = ['SKILL.md'];
+const IMPORT_SCRIPT_TOKEN = '{{BUILDERS_DIARY_IMPORT_SCRIPT}}';
 
 function resolveHome(p) {
   return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
@@ -39,6 +42,10 @@ function resolveHome(p) {
 // The packaged skill payload lives at ../skill relative to this bin/ file.
 function skillSourceDir() {
   return path.join(__dirname, '..', 'skill');
+}
+
+function importSkillSourceDir() {
+  return path.join(__dirname, '..', 'import-skill');
 }
 
 function copyRecursive(src, dest) {
@@ -91,9 +98,14 @@ function cmdList() {
 
 function cmdInstall(args) {
   const src = skillSourceDir();
+  const importSrc = importSkillSourceDir();
   const missing = PAYLOAD.filter(p => !fs.existsSync(path.join(src, p)));
-  if (missing.length) {
-    console.error(`ERROR: packaged skill is incomplete, missing: ${missing.join(', ')}`);
+  const importMissing = [
+    ...IMPORT_PAYLOAD.filter(p => !fs.existsSync(path.join(importSrc, p))),
+    ...(fs.existsSync(path.join(src, 'scripts', 'claude_import.py')) ? [] : ['skill/scripts/claude_import.py']),
+  ];
+  if (missing.length || importMissing.length) {
+    console.error(`ERROR: packaged skills are incomplete, missing: ${[...missing, ...importMissing].join(', ')}`);
     process.exit(1);
   }
 
@@ -134,6 +146,37 @@ function cmdInstall(args) {
       fs.writeFileSync(skillFile, skillText.split(SCRIPT_TOKEN).join(script));
       if (fs.existsSync(script)) fs.chmodSync(script, 0o755);
       console.log(`  bound helper → ${script.replace(os.homedir(), '~')}`);
+    }
+
+    if (tool === 'claude') {
+      const importDest = path.join(resolveHome(TOOL_DIRS[tool]), IMPORT_SKILL_NAME);
+      console.log(`  [${IMPORT_SKILL_NAME}]`);
+      for (const item of IMPORT_PAYLOAD) {
+        const shownDest = path.join(importDest, item).replace(os.homedir(), '~');
+        if (args.dryRun) {
+          console.log(`    would copy ${item} → ${shownDest}`);
+        } else {
+          const sourceItem = path.join(importSrc, item);
+          const destItem = path.join(importDest, item);
+          if (fs.existsSync(destItem)) fs.rmSync(destItem, { recursive: true, force: true });
+          copyRecursive(sourceItem, destItem);
+          console.log(`    copied ${item} → ${shownDest}`);
+        }
+      }
+      const importScript = path.join(importDest, 'scripts', 'claude_import.py');
+      if (args.dryRun) {
+        console.log(`    would copy claude_import.py → ${importScript.replace(os.homedir(), '~')}`);
+      } else {
+        copyRecursive(path.join(src, 'scripts', 'claude_import.py'), importScript);
+        const importSkillFile = path.join(importDest, 'SKILL.md');
+        const importSkillText = fs.readFileSync(importSkillFile, 'utf8');
+        if (!importSkillText.includes(IMPORT_SCRIPT_TOKEN)) {
+          throw new Error(`Packaged import SKILL.md is missing ${IMPORT_SCRIPT_TOKEN}`);
+        }
+        fs.writeFileSync(importSkillFile, importSkillText.split(IMPORT_SCRIPT_TOKEN).join(importScript));
+        fs.chmodSync(importScript, 0o755);
+        console.log(`    bound helper → ${importScript.replace(os.homedir(), '~')}`);
+      }
     }
     console.log('');
   }

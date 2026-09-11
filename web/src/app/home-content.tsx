@@ -6,12 +6,13 @@ import { ProjectSectionView, ExploreMode } from '@/components/ProjectSectionView
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
+import { ImportProgress } from '@/components/ImportProgress';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
-import { Portfolio, Record } from '@/lib/types';
+import { Portfolio, Record, ImportRun } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile,
-  readInstallMarker,
+  readInstallMarker, scanImportRuns,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -22,7 +23,7 @@ const CONNECTED_KEY = 'builders-diary-connected';
 const ONBOARDING_DONE_KEY = 'builders-diary-onboarding-done';
 const TOOLS_KEY = 'builders-diary-tools';
 // Keep this aligned with npm/package.json when a release is prepared.
-const CURRENT_INSTALLER_VERSION = '1.9.0';
+const CURRENT_INSTALLER_VERSION = '1.9.1';
 
 function isOlderVersion(installed: string, current: string): boolean {
   const parse = (value: string) => value.split('-', 1)[0].split('.').slice(0, 3).map(Number);
@@ -43,6 +44,7 @@ export function HomeContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installMarker, setInstallMarker] = useState<{ version?: string; tools?: string[] } | null>(null);
+  const [importRuns, setImportRuns] = useState<ImportRun[]>([]);
 
   // AI tools the user selected in onboarding (drives --tools + header manager)
   const [selectedClients, setSelectedClientsState] = useState<string[]>([]);
@@ -122,6 +124,7 @@ export function HomeContent() {
             const ok = await verifyFolderPermission(handle);
             if (ok) {
               setInstallMarker(await readInstallMarker(handle));
+              setImportRuns(await scanImportRuns(handle));
               const data = await scanFolderStructure(handle);
               // 실제 데이터가 있으면 그걸 쓰고, 빈 폴더면 빈 portfolio 그대로 표시
               setPortfolio(data);
@@ -167,6 +170,7 @@ export function HomeContent() {
         if (!handle) return;
         if (!(await hasFolderPermission(handle))) return;
         setInstallMarker(await readInstallMarker(handle));
+        setImportRuns(await scanImportRuns(handle));
         const data = await scanFolderStructure(handle);
         setPortfolio(data);
       } catch { /* transient FS errors — keep current view */ }
@@ -177,6 +181,23 @@ export function HomeContent() {
       window.removeEventListener('focus', rescan);
       document.removeEventListener('visibilitychange', rescan);
     };
+  }, [onboardingDone, connected]);
+
+  // Import runs are written by the local skill while this page stays open beside
+  // the AI chat. Polling is deliberately bounded and read-only; it makes newly
+  // confirmed projects/cards visible without the user switching browser tabs.
+  useEffect(() => {
+    if (!onboardingDone || !connected) return;
+    const poll = async () => {
+      try {
+        const handle = await loadFolderHandleFromStorage();
+        if (!handle || !(await hasFolderPermission(handle))) return;
+        setImportRuns(await scanImportRuns(handle));
+        setPortfolio(await scanFolderStructure(handle));
+      } catch { /* keep the current UI on transient filesystem errors */ }
+    };
+    const interval = window.setInterval(poll, 2500);
+    return () => window.clearInterval(interval);
   }, [onboardingDone, connected]);
 
   const doConnect = useCallback(async (data: Portfolio) => {
@@ -203,6 +224,7 @@ export function HomeContent() {
           if (ok) {
             await saveFolderHandleToStorage(handle);
             setInstallMarker(await readInstallMarker(handle));
+            setImportRuns(await scanImportRuns(handle));
             scanned = await scanFolderStructure(handle);
           }
         }
@@ -351,6 +373,8 @@ export function HomeContent() {
           tools={updateTools}
         />
       )}
+
+      <ImportProgress runs={importRuns} toolId={selectedClients[0]} />
 
       {/* First-record nudge — shown only when the whole portfolio is empty */}
       {totalRecordCount === 0 && (

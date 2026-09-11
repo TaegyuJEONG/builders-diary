@@ -104,6 +104,17 @@ def today_stamp_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d")
 
 
+def normalize_record_date(value: str) -> tuple[str, str]:
+    """Return (YYYY-MM-DD, YYYYMMDD), defaulting to today when omitted."""
+    if not value:
+        value = today_stamp_iso()
+    try:
+        parsed = _dt.date.fromisoformat(value)
+    except ValueError as error:
+        raise ValueError("--date must use YYYY-MM-DD") from error
+    return parsed.isoformat(), parsed.strftime("%Y%m%d")
+
+
 def slugify(text: str) -> str:
     """Lowercase, spaces->hyphens, keep unicode word chars (incl. Korean), drop punctuation."""
     text = (text or "").strip().lower()
@@ -132,6 +143,18 @@ def write_json(path: str, data: dict) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def snapshot_file(path: Path) -> bytes | None:
+    return path.read_bytes() if path.is_file() else None
+
+
+def restore_file(path: Path, snapshot: bytes | None) -> None:
+    if snapshot is None:
+        path.unlink(missing_ok=True)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(snapshot)
 
 
 def materialize_approved_evidence(record_dir: str, evidence: list[dict]) -> list[dict]:
@@ -302,11 +325,15 @@ def main() -> int:
     ap.add_argument("--role", default="", help="Legacy optional project metadata; never infer")
     ap.add_argument("--logo", default="", help="Optional logo path (else UI shows an initial badge)")
 
-    # Section (lifecycle stage). --goal kept as an alias for back-compat.
-    ap.add_argument("--section", default="", help=f"Lifecycle stage: {', '.join(SECTIONS)} (custom allowed)")
-    ap.add_argument("--goal", default="", help="Alias for --section (legacy)")
+    # Purpose is the second portfolio level (stored as goal.json for compatibility).
+    # Stage is the lifecycle grouping shown around purposes in the web UI.
+    ap.add_argument("--goal", default="", help="Purpose / workstream title, e.g. 'Curation Taxonomy'")
+    ap.add_argument("--stage", default="", help=f"Lifecycle stage: {', '.join(SECTIONS)} (custom allowed)")
+    # --section remains a legacy shorthand: it supplies both purpose and stage.
+    ap.add_argument("--section", default="", help="Legacy shorthand for --goal and --stage")
 
     ap.add_argument("--title", help="Task title")
+    ap.add_argument("--date", default="", help="Source work date in YYYY-MM-DD (default: today)")
     ap.add_argument("--purpose", default="", help="The specific aim of this task, one line")
     ap.add_argument("--sub-purpose", default="", help="Legacy alias for --purpose")
     ap.add_argument("--tags", default="", help="Comma-separated tags")
@@ -344,11 +371,15 @@ def main() -> int:
         print(json.dumps(list_projects(root), ensure_ascii=False, indent=2))
         return 0
 
-    # Saving a record requires project + section + title
-    section_title = args.section or args.goal or (
-        CATEGORY_TO_SECTION.get(args.category, args.category) if args.category else "")
-    if not args.project or not args.title or not section_title:
-        ap.error("saving a record requires --project, --title, and --section (or --goal/--category)")
+    # New import calls use --goal <Purpose> + --stage <Lifecycle>. Legacy
+    # --section calls keep their former behavior by supplying both values.
+    legacy_stage = args.section or (
+        CATEGORY_TO_SECTION.get(args.category, args.category) if args.category else ""
+    )
+    purpose_title = args.goal or legacy_stage
+    stage = args.stage or legacy_stage or purpose_title
+    if not args.project or not args.title or not purpose_title or not stage:
+        ap.error("saving a record requires --project, --title, and a purpose (--goal or --section)")
 
     # Body: from file or stdin
     if args.body_file:
@@ -374,56 +405,81 @@ def main() -> int:
         except (OSError, json.JSONDecodeError):
             evidence = []
 
-    project = ensure_project(root, args.project, extra={
-        "sector": args.sector, "one_liner": args.one_liner,
-        "role": args.role or None, "logo": args.logo,
-    })
-    # Section stored on disk as goal.json (back-compat). order = lifecycle index when known.
-    stage = section_title
-    order = SECTIONS.index(stage) if stage in SECTIONS else None
-    section = ensure_section(root, project, stage, stage=stage, order=order)
+    try:
+        record_date, folder_date = normalize_record_date(args.date)
+    except ValueError as error:
+        ap.error(str(error))
 
-    section_dir = os.path.join(root, project["slug"], section["slug"])
-    seq = next_seq(section_dir)
-    folder = f"{today_stamp()}-{seq:03d}-{slugify(args.title)}"
-    rec_dir = os.path.join(section_dir, folder)
-    rec_path = os.path.join(rec_dir, "record.json")
+    project_dir_hint = Path(root) / slugify(args.project)
+    project_json_hint = project_dir_hint / "project.json"
+    section_dir_hint = project_dir_hint / slugify(purpose_title)
+    section_json_hint = section_dir_hint / "goal.json"
+    project_before = snapshot_file(project_json_hint)
+    section_before = snapshot_file(section_json_hint)
+    rec_dir_path: Path | None = None
 
-    highlight = build_highlight(args)
-    evidence = materialize_approved_evidence(rec_dir, evidence)
-    ts = now_iso()
-    record = {
-        "id": short_id("r"),
-        "folder": folder,
-        "title": args.title,
-        "date": today_stamp_iso(),
-        "section": stage,
-        "purpose": args.purpose or args.sub_purpose or None,
-        "tags": tags,
-        "tools": tools,
-        "mindset": mindset,
-        "progress": args.progress or None,
-        # v3 narrative field + legacy `body` dual-write (one release) so old web builds keep working
-        "body_md": body,
-        "body": body,
-        # v3 `highlight` + legacy `judgment` dual-write
-        "highlight": highlight,
-        "judgment": highlight,
-        # legacy category kept if passed (web maps section→display now)
-        "category": args.category or None,
-        "evidence": evidence,
-        "project_id": project["id"],
-        "project_slug": project["slug"],
-        "project_title": project.get("title") or project.get("name"),
-        "goal_id": section["id"],
-        "goal_slug": section["slug"],
-        "goal_title": section.get("title"),
-        "created_at": ts,
-        "updated_at": ts,
-        "share_id": None,
-        "path": rec_dir,
-    }
-    write_json(rec_path, record)
+    try:
+        project = ensure_project(root, args.project, extra={
+            "sector": args.sector, "one_liner": args.one_liner,
+            "role": args.role or None, "logo": args.logo,
+        })
+        # goal.json remains the on-disk purpose container; its stage drives lifecycle grouping.
+        order = SECTIONS.index(stage) if stage in SECTIONS else None
+        section = ensure_section(root, project, purpose_title, stage=stage, order=order)
+
+        section_dir = os.path.join(root, project["slug"], section["slug"])
+        seq = next_seq(section_dir)
+        folder = f"{folder_date}-{seq:03d}-{slugify(args.title)}"
+        rec_dir = os.path.join(section_dir, folder)
+        rec_dir_path = Path(rec_dir)
+        rec_path = os.path.join(rec_dir, "record.json")
+
+        highlight = build_highlight(args)
+        evidence = materialize_approved_evidence(rec_dir, evidence)
+        ts = now_iso()
+        record = {
+            "id": short_id("r"),
+            "folder": folder,
+            "title": args.title,
+            "date": record_date,
+            "section": stage,
+            "purpose": args.purpose or args.sub_purpose or None,
+            "tags": tags,
+            "tools": tools,
+            "mindset": mindset,
+            "progress": args.progress or None,
+            # v3 narrative field + legacy `body` dual-write (one release) so old web builds keep working
+            "body_md": body,
+            "body": body,
+            # v3 `highlight` + legacy `judgment` dual-write
+            "highlight": highlight,
+            "judgment": highlight,
+            # legacy category kept if passed (web maps section→display now)
+            "category": args.category or None,
+            "evidence": evidence,
+            "project_id": project["id"],
+            "project_slug": project["slug"],
+            "project_title": project.get("title") or project.get("name"),
+            "goal_id": section["id"],
+            "goal_slug": section["slug"],
+            "goal_title": section.get("title"),
+            "created_at": ts,
+            "updated_at": ts,
+            "share_id": None,
+            "path": rec_dir,
+        }
+        write_json(rec_path, record)
+    except Exception:
+        if rec_dir_path is not None and rec_dir_path.exists():
+            shutil.rmtree(rec_dir_path)
+        restore_file(section_json_hint, section_before)
+        restore_file(project_json_hint, project_before)
+        for directory in (section_dir_hint, project_dir_hint):
+            try:
+                directory.rmdir()
+            except OSError:
+                pass
+        raise
 
     print(json.dumps({
         "ok": True,

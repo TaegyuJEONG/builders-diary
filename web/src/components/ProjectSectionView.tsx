@@ -255,7 +255,75 @@ function TaskCard({
   );
 }
 
-// ── Section board (row 2): one box per lifecycle stage present in the project ──
+// ── Purpose stage board (project view): lifecycle stage → purpose → task cards ──
+function PurposeStageBoard({
+  goals, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
+}: {
+  goals: Goal[];
+  selectedGoalId: string | null;
+  filterState: FilterState;
+  selectedRecordId: string | null;
+  onSelectRecord: (id: string) => void;
+}) {
+  const visibleGoals = goals
+    .filter(g => !selectedGoalId || g.id === selectedGoalId)
+    .map(g => ({ ...g, records: g.records.filter(r => recordPasses(r, filterState)) }))
+    .filter(g => g.records.length > 0);
+  if (visibleGoals.length === 0) {
+    return (
+      <div className="mono" style={{ padding: '30px 24px', color: 'var(--text3)', fontSize: 12 }}>
+        No tasks in this purpose yet.
+      </div>
+    );
+  }
+
+  const stageGroups = new Map<string, Goal[]>();
+  for (const goal of visibleGoals) {
+    const fallback = goal.records[0]?.section || 'Build';
+    const stage = goal.stage || fallback;
+    if (!stageGroups.has(stage)) stageGroups.set(stage, []);
+    stageGroups.get(stage)!.push(goal);
+  }
+  const orderedStages = [...stageGroups.entries()].sort(([a], [b]) => (
+    (SECTION_META[a]?.order ?? 999) - (SECTION_META[b]?.order ?? 999) || a.localeCompare(b)
+  ));
+
+  return (
+    <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 24px', overflowY: 'auto', height: '100%' }}>
+      {orderedStages.map(([stage, purposes]) => {
+        const records = purposes.flatMap(p => p.records);
+        const color = SECTION_META[stage]?.color || 'var(--text3)';
+        return (
+          <div key={stage} style={{ border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{purposes.length} purpose{purposes.length === 1 ? '' : 's'}</span>
+              <span style={{ marginLeft: 'auto' }}><ProgressRollup records={records} /></span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 13px' }}>
+              {purposes.map(purpose => (
+                <div key={purpose.id} style={{ border: '1px solid var(--border)', borderRadius: 5, background: 'var(--bg)', overflow: 'hidden' }}>
+                  <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 620, color: 'var(--text)' }}>{purpose.title}</div>
+                    {purpose.description && <div style={{ marginTop: 3, fontSize: 10, color: 'var(--text3)', lineHeight: 1.45 }}>{purpose.description}</div>}
+                  </div>
+                  <div className="thin-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px', overflowX: 'auto' }}>
+                    {purpose.records.map(record => (
+                      <TaskCard key={record.id} record={record} selected={record.id === selectedRecordId} onSelect={() => onSelectRecord(record.id)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Section board (cross-project Section / Tool exploration) ──
 function SectionBoard({
   goals, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
 }: {
@@ -449,7 +517,7 @@ export function ProjectSectionView({
           {/* Row 2: sections of the selected project */}
           <div style={{ flex: 1, minHeight: 0 }}>
             {active ? (
-              <SectionBoard
+              <PurposeStageBoard
                 goals={active.goals}
                 selectedGoalId={selectedGoalId}
                 filterState={filterState}

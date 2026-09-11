@@ -110,6 +110,7 @@ export interface Record {
 }
 
 export interface Goal {
+  // `goal.json` remains the compatibility filename; this is the human-facing Purpose.
   id: string;
   slug: string;
   title: string;
@@ -118,6 +119,20 @@ export interface Goal {
   description?: string;
   created_at?: string;
   records: Record[];
+}
+
+export interface ImportRun {
+  id: string;
+  source: string;
+  status: string;
+  created_at: string;
+  counts?: {
+    chat_conversations?: number;
+    chat_projects?: number;
+    code_sessions?: number;
+    code_workspaces?: number;
+  };
+  warnings?: string[];
 }
 
 export interface Project {
@@ -132,7 +147,7 @@ export interface Project {
   tags?: string[];           // v3 — project-level tags
   description?: string;
   created_at?: string;
-  goals: Goal[];             // sections live here (goal.json on disk)
+  goals: Goal[];             // Purposes stored as goal.json folders for compatibility
 }
 
 export interface Portfolio {
