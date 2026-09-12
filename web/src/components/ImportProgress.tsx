@@ -6,6 +6,7 @@ import { ImportRun } from '@/lib/types';
 interface ImportProgressProps {
   runs: ImportRun[];
   toolId?: string;
+  onReview?: () => void;
 }
 
 const IMPORT_PROMPT = '/builders-diary-import';
@@ -15,7 +16,7 @@ const IMPORT_PROMPT = '/builders-diary-import';
  * The helper writes imports/<run>/manifest.json; this component never reads raw
  * conversations, export URLs, source indexes, or account metadata.
  */
-export function ImportProgress({ runs, toolId }: ImportProgressProps) {
+export function ImportProgress({ runs, toolId, onReview }: ImportProgressProps) {
   const [copied, setCopied] = useState(false);
   const latest = runs[0];
   const copy = () => {
@@ -41,6 +42,7 @@ export function ImportProgress({ runs, toolId }: ImportProgressProps) {
 
   const counts = latest.counts || {};
   const status = latest.status.replace(/_/g, ' ');
+  const selecting = latest.status === 'project_selection';
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
       <span style={{ fontSize: 13, color: 'var(--accent)' }}>◌</span>
@@ -57,6 +59,11 @@ export function ImportProgress({ runs, toolId }: ImportProgressProps) {
           </div>
         )}
       </div>
+      {selecting && onReview && (
+        <button onClick={onReview} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, color: 'var(--bg)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          Review projects
+        </button>
+      )}
       <button onClick={copy} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: copied ? 'var(--tag-active-bg)' : 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: copied ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
         {copied ? '✓ Copied' : 'Continue'}
       </button>

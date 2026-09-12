@@ -190,6 +190,50 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertEqual(manifest["confirmed_projects"][0]["name"], "Product Builder Jobs")
         self.assertEqual(list(self.data_root.glob("*/*/goal.json")), [])
 
+    def test_prepare_records_existing_projects_for_resume(self) -> None:
+        from skill.scripts.claude_import import confirm_project, prepare_import_run
+
+        run = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        confirm_project(
+            data_root=self.data_root,
+            run_id=run["run_id"],
+            name="Already Imported",
+        )
+        second = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        manifest = json.loads((Path(second["run_dir"]) / "manifest.json").read_text(encoding="utf-8"))
+        names = [project["name"] for project in manifest["existing_projects"]]
+        self.assertIn("Already Imported", names)
+
+    def test_apply_selections_materializes_web_choices(self) -> None:
+        from skill.scripts.claude_import import apply_selections, prepare_import_run
+
+        run = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        candidates = json.loads((Path(run["run_dir"]) / "project-candidates.json").read_text(encoding="utf-8"))
+        code_candidate = next(c for c in candidates["candidates"] if c["source"] == "claude_code_workspace")
+        selections = {
+            "projects": [
+                {"candidate_id": code_candidate["id"], "name": "Renamed in Web", "sector": "SaaS", "one_liner": "Web choice."},
+            ]
+        }
+        (Path(run["run_dir"]) / "selections.json").write_text(json.dumps(selections), encoding="utf-8")
+
+        result = apply_selections(data_root=self.data_root, run_id=run["run_id"])
+
+        self.assertEqual(result["confirmed"], ["renamed-in-web"])
+        self.assertTrue((self.data_root / "renamed-in-web" / "project.json").is_file())
+
     def test_confirmed_project_persists_deduplicated_chronological_source_queue(self) -> None:
         from skill.scripts.claude_import import (
             complete_source,
@@ -386,14 +430,20 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertIn("another window", skill[:prepare].lower())
         self.assertIn("live", skill[:prepare].lower())
 
-    def test_project_confirmation_is_multiselect_with_free_text_other(self) -> None:
+    def test_project_selection_is_numbered_with_resume_and_web_codrive(self) -> None:
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
 
-        self.assertIn("AskUserQuestion", skill)
-        self.assertIn("multiSelect: true", skill)
-        self.assertIn("Other", skill)
-        self.assertIn("free-text", skill)
-        self.assertIn("Next", skill)
+        # Numbered selection instead of an AskUserQuestion gate.
+        self.assertIn("1, 3, 6", skill)
+        self.assertIn("2, 4, 5", skill)
+        self.assertIn("skip 7, 8", skill)
+        self.assertNotIn("multiSelect", skill)
+        # Resume: skip projects already in the portfolio.
+        self.assertIn("existing_projects", skill)
+        self.assertIn("Do **not** re-propose", skill)
+        # Co-drive: web writes selections, chat applies them.
+        self.assertIn("selections.json", skill)
+        self.assertIn("apply-selections", skill)
 
     def test_sources_are_processed_oldest_first_with_lazy_purpose_creation(self) -> None:
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")

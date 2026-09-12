@@ -8,6 +8,7 @@ import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { ManagePanel } from '@/components/ManagePanel';
 import { ImportProgress } from '@/components/ImportProgress';
+import { ImportReview } from '@/components/ImportReview';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { Portfolio, Record, ImportRun } from '@/lib/types';
 import {
@@ -63,6 +64,7 @@ export function HomeContent() {
   const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [importReviewOpen, setImportReviewOpen] = useState(false);
 
   const refreshPortfolio = useCallback(async () => {
     const handle = await loadFolderHandleFromStorage();
@@ -397,7 +399,7 @@ export function HomeContent() {
         />
       )}
 
-      <ImportProgress runs={importRuns} toolId={selectedClients[0]} />
+      <ImportProgress runs={importRuns} toolId={selectedClients[0]} onReview={() => setImportReviewOpen(true)} />
 
       {/* First-record nudge — shown only when the whole portfolio is empty */}
       {totalRecordCount === 0 && (
@@ -447,6 +449,10 @@ export function HomeContent() {
 
       {managerOpen && (
         <ManagePanel portfolio={portfolio} onClose={() => setManagerOpen(false)} onRefresh={refreshPortfolio} />
+      )}
+
+      {importReviewOpen && (
+        <ImportReview onClose={() => setImportReviewOpen(false)} onSaved={refreshPortfolio} />
       )}
     </div>
   );

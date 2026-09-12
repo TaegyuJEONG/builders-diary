@@ -97,13 +97,24 @@ Build a unified project proposal from:
 
 Claude Chat exports do not provide a direct conversation-to-project UUID link. Assign a Chat conversation to a proposed project only when its title/summary and dates provide evidence. Keep ambiguous conversation IDs as `postponed` for later review; never guess, discard, or silently attach them.
 
-Show the full numbered proposal table first, including evidence for every merge. Then use Claude Code's `AskUserQuestion` as the project picker:
+### Resume — skip what is already done
 
-- Each project candidate is a selectable option; `multiSelect: true` is required.
-- If there are more candidates than one question can hold, split them across consecutive multi-select questions. Do not replace projects with preset bundles such as “top two” or “confirm all.”
-- The user checks every project they want and presses **Next** once.
-- Keep the client-provided **Other** row as the final free-text input. Tell the user to use it for renames, merges, exclusions, or any custom scope, for example `merge 2,4,5 as Adevinta`.
-- Do not ask a second independent merge question. Interpret the selected rows and the free-text instruction together; clarify only an actual conflict.
+Read `manifest.json` `existing_projects`. It lists every Project and Learning entry already in the portfolio. Do **not** re-propose those; instead offer to add purposes/tasks to them or to import only the remaining sources. If the user already confirmed projects in a previous run, their names are here.
+
+### Numbered selection — not a multiple-choice gate
+
+Show the full numbered proposal table first, including evidence for every merge. Then ask the user to type their selection in one line. Do **not** use `AskUserQuestion` for projects: a numbered list scales to any count and handles merges and renames without the four-option limit.
+
+Examples the user can type:
+
+```text
+1, 3, 6                     — confirm those projects
+2, 4, 5 → Adevinta          — merge 2, 4, 5 into one project named Adevinta
+1 → Product Builder Jobs    — confirm and rename
+skip 7, 8                   — drop those candidates
+```
+
+Interpret the typed selection literally; clarify only a genuine conflict.
 
 For each selected or merged project, propose `name`, `sector`, and `one_liner` in the table. The project selection is approval of those fields unless the free-text response edits them. Materialize every approved project immediately:
 
@@ -120,13 +131,24 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" confirm-project \
 
 Pass every exact source ID belonging to the selected or merged project. The helper validates, deduplicates, and persists them so a long import can resume safely.
 
+### Co-drive with the web view
+
+The user may instead confirm projects in the web view, which writes `imports/<run-id>/selections.json`. If that file exists when you reach this step, apply it instead of asking again:
+
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" apply-selections \
+  --data-root "$DATA_ROOT" --run-id "<run-id>"
+```
+
+Then continue to Step 4 with the confirmed projects.
+
 ## Step 4 — Curate sources chronologically and create structure lazily
 
 The canonical structure is:
 
 ```text
 Project → Purpose → Task
-                 ↳ lifecycle section chip: Think / Plan / Build / Review / Test / Ship / Reflect
+                 ↳ lifecycle stage: Discovery / Build / Growth
 ```
 
 For each selected project:
@@ -189,7 +211,7 @@ Use the daily `builders-diary` helper to save a final approved Task with a Purpo
 python3 "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
   --project "Product Builder Jobs" \
   --goal "Curation Taxonomy" \
-  --stage "Think" \
+  --stage "Discovery" \
   --date "2026-03-15" \
   --title "Define a Product Builder curation boundary" \
   --purpose "Separate hands-on builders from AI-adjacent and conventional roles." \

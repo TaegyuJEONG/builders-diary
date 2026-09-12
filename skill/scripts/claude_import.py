@@ -295,6 +295,15 @@ def prepare_import_run(
     root = Path(data_root).expanduser()
     chat_index = scan_export_directory(export_dir)
     code_index = scan_claude_code_sessions(claude_config_dir)
+
+    # Resume support: surface projects already in the portfolio so the skill can
+    # skip re-proposing them and continue where a previous run left off.
+    try:
+        from .save_record import list_projects
+    except ImportError:
+        from save_record import list_projects
+    existing_projects = list_projects(str(root))
+
     run_id = f"claude-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
     run_dir = root / "imports" / run_id
     manifest = {
@@ -314,6 +323,7 @@ def prepare_import_run(
             "code_sessions": code_index["session_count"],
             "code_workspaces": code_index["workspace_count"],
         },
+        "existing_projects": existing_projects,
         "warnings": [*chat_index["warnings"], *code_index["warnings"]],
     }
     _write_json(run_dir / "manifest.json", manifest)
@@ -547,6 +557,49 @@ def complete_source(
     return entry
 
 
+def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
+    """Materialize project selections written by the web view.
+
+    The web writes imports/<run-id>/selections.json with the user's project
+    choices (confirm/rename/drop). This applies them through confirm_project so
+    source refs and portfolio files are written by the helper, not the browser.
+    """
+    run_dir, _ = _load_run_manifest(data_root, run_id)
+    selections_path = run_dir / "selections.json"
+    try:
+        selections = json.loads(selections_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise FileNotFoundError("selections.json not found — confirm projects in the web view first") from error
+
+    candidates_path = run_dir / "project-candidates.json"
+    candidates = json.loads(candidates_path.read_text(encoding="utf-8")).get("candidates", [])
+    by_id = {candidate["id"]: candidate for candidate in candidates if isinstance(candidate, dict)}
+
+    confirmed: list[str] = []
+    dropped: list[str] = []
+    for selection in selections.get("projects", []):
+        if not isinstance(selection, dict):
+            continue
+        candidate_id = selection.get("candidate_id")
+        candidate = by_id.get(candidate_id) if candidate_id else None
+        if candidate is None:
+            continue
+        if selection.get("action") == "drop":
+            dropped.append(candidate_id)
+            continue
+        name = str(selection.get("name") or candidate.get("name") or "Untitled").strip()
+        project = confirm_project(
+            data_root=data_root,
+            run_id=run_id,
+            name=name,
+            sector=str(selection.get("sector") or ""),
+            one_liner=str(selection.get("one_liner") or ""),
+            source_refs=candidate.get("source_refs") or [],
+        )
+        confirmed.append(project["slug"])
+    return {"confirmed": confirmed, "dropped": dropped}
+
+
 def create_download_page(manifest_path: str | Path, output_path: str | Path) -> Path:
     """Create a local clickable export-download page without handling the URLs in chat."""
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
@@ -605,6 +658,10 @@ def main() -> int:
     confirm_project_cmd.add_argument("--one-liner", default="")
     confirm_project_cmd.add_argument("--source-ref", action="append", default=None)
 
+    apply_selections_cmd = sub.add_parser("apply-selections", help="Materialize project selections written by the web view")
+    apply_selections_cmd.add_argument("--data-root", required=True)
+    apply_selections_cmd.add_argument("--run-id", required=True)
+
 
     source_queue_cmd = sub.add_parser("source-queue", help="List a confirmed project's remaining sources oldest first")
     source_queue_cmd.add_argument("--data-root", required=True)
@@ -636,6 +693,8 @@ def main() -> int:
         print(json.dumps(prepare_import_run(data_root=args.data_root, export_dir=args.export_dir, claude_config_dir=args.claude_config_dir), ensure_ascii=False, indent=2))
     elif args.command == "confirm-project":
         print(json.dumps(confirm_project(data_root=args.data_root, run_id=args.run_id, name=args.name, sector=args.sector, one_liner=args.one_liner, source_refs=args.source_ref), ensure_ascii=False, indent=2))
+    elif args.command == "apply-selections":
+        print(json.dumps(apply_selections(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "source-queue":
         print(json.dumps(project_source_queue(data_root=args.data_root, run_id=args.run_id, project_name=args.project), ensure_ascii=False, indent=2))
     elif args.command == "read-source":

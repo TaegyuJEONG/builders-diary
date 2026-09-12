@@ -473,6 +473,59 @@ export async function scanImportRuns(handle: FileSystemDirectoryHandle): Promise
   }
 }
 
+/** The proposal the import skill writes for a run: candidates the user can pick. */
+export interface ImportCandidate {
+  id: string;
+  name: string;
+  source: string;
+  source_refs: string[];
+  description?: string;
+  session_count?: number | null;
+}
+
+/** Read the latest run's project candidates (metadata only — never raw chats). */
+export async function readProjectCandidates(handle: FileSystemDirectoryHandle): Promise<{ runId: string; candidates: ImportCandidate[] } | null> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runs: string[] = [];
+    for await (const [name, entry] of imports.entries()) {
+      if (entry.kind === 'directory' && !name.startsWith('.')) runs.push(name);
+    }
+    runs.sort().reverse();
+    for (const runId of runs) {
+      const runDir = await imports.getDirectoryHandle(runId);
+      const manifest = await readJson(runDir, 'manifest.json');
+      if (!manifest || manifest.status === 'source_task_curation') continue;
+      const candidates = await readJson(runDir, 'project-candidates.json');
+      if (!candidates) continue;
+      return {
+        runId,
+        candidates: (Array.isArray(candidates.candidates) ? candidates.candidates : []).map((c: any) => ({
+          id: String(c.id),
+          name: String(c.name || ''),
+          source: String(c.source || ''),
+          source_refs: Array.isArray(c.source_refs) ? c.source_refs : [],
+          description: c.description || undefined,
+          session_count: typeof c.session_count === 'number' ? c.session_count : null,
+        })),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Write the user's project choices so the import skill can apply them. */
+export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
+  const imports = await handle.getDirectoryHandle('imports');
+  const runDir = await imports.getDirectoryHandle(runId);
+  const fh = await runDir.getFileHandle('selections.json', { create: true });
+  const writable = await (fh as any).createWritable();
+  await writable.write(JSON.stringify(selections, null, 2) + '\n');
+  await writable.close();
+}
+
 async function scanProjectFolder(
   projectFolder: FileSystemDirectoryHandle,
   slug: string,
