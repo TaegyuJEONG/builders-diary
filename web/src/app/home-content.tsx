@@ -6,12 +6,13 @@ import { ProjectSectionView, ExploreMode } from '@/components/ProjectSectionView
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
+import { ManagePanel } from '@/components/ManagePanel';
 import { ImportProgress } from '@/components/ImportProgress';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { Portfolio, Record, ImportRun } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
-  loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile,
+  loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
   readInstallMarker, scanImportRuns,
 } from '@/lib/fileSystem';
 import {
@@ -53,6 +54,7 @@ export function HomeContent() {
 
   // selection
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [exploreMode, setExploreMode] = useState<ExploreMode>('project');
@@ -60,6 +62,13 @@ export function HomeContent() {
   // filters
   const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const [managerOpen, setManagerOpen] = useState(false);
+
+  const refreshPortfolio = useCallback(async () => {
+    const handle = await loadFolderHandleFromStorage();
+    if (!handle || !(await hasFolderPermission(handle))) return;
+    setPortfolio(await scanFolderStructure(handle));
+  }, []);
 
   // Persist selected AI tools so the header manager can show them post-onboarding.
   const setSelectedClients = useCallback((tools: string[]) => {
@@ -253,6 +262,10 @@ export function HomeContent() {
       status:     updated.status,
       updated_at: updated.updated_at,
       tags:       updated.tags,
+      section:    updated.section,
+      purpose:    updated.purpose,
+      tools:      updated.tools,
+      mindset:    updated.mindset,
     });
     // Patch in-memory portfolio so card list reflects changes immediately
     setPortfolio(prev => {
@@ -270,10 +283,25 @@ export function HomeContent() {
     });
   }, []);
 
+  const handleDeleteRecord = useCallback(async (record: Record) => {
+    await deleteRecordFromFile(record.file_path);
+    setPortfolio(prev => prev ? ({
+      ...prev,
+      projects: prev.projects.map(p => ({
+        ...p,
+        goals: p.goals.map(g => ({
+          ...g,
+          records: g.records.filter(r => r.id !== record.id),
+        })),
+      })),
+    }) : prev);
+    setSelectedRecordId(null);
+  }, []);
+
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
-    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '' }),
-    [selectedMindset, selectedTools]
+    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage }),
+    [selectedMindset, selectedTools, selectedStage]
   );
 
   const tagOptions = useMemo(
@@ -303,14 +331,6 @@ export function HomeContent() {
     () => allRecords.find(r => r.id === selectedRecordId) || null,
     [allRecords, selectedRecordId]
   );
-
-  // 3-level view needs a project selected to show its sections — default to the first.
-  useEffect(() => {
-    if (!portfolio) return;
-    if (!selectedProjectId && portfolio.projects.length > 0) {
-      setSelectedProjectId(portfolio.projects[0].id);
-    }
-  }, [portfolio, selectedProjectId]);
 
   // reset card selection if the selected record no longer exists in the portfolio
   useEffect(() => {
@@ -349,19 +369,22 @@ export function HomeContent() {
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--bg)', overflow: 'hidden' }}>
       <Header
         projects={portfolio.projects}
+        stages={portfolio.stages || []}
         selectedProjectId={selectedProjectId}
+        selectedStage={selectedStage}
         selectedGoalId={selectedGoalId}
         resultCount={filteredRecords.length}
         mindsetOptions={tagOptions.mindset}
         toolOptions={tagOptions.tool}
         selectedMindset={selectedMindset}
         selectedTools={selectedTools}
-        onProjectChange={(v) => { setExploreMode('project'); setSelectedProjectId(v); setSelectedGoalId(null); setSelectedRecordId(null); }}
+        onProjectChange={(v) => { setExploreMode('project'); setSelectedProjectId(v); setSelectedStage(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
+        onStageChange={(v) => { setSelectedStage(v); setSelectedRecordId(null); }}
         onGoalChange={(v) => { setSelectedGoalId(v); setSelectedRecordId(null); }}
         onMindsetChange={setSelectedMindset}
         onToolChange={setSelectedTools}
+        onOpenManager={() => setManagerOpen(true)}
         onReconnect={handleConnect}
-        onSelectRecord={setSelectedRecordId}
         isLoading={isLoading}
         selectedClients={selectedClients}
       />
@@ -396,6 +419,7 @@ export function HomeContent() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
           <ProjectSectionView
             projects={portfolio.projects}
+            stages={portfolio.stages}
             selectedProjectId={selectedProjectId}
             selectedGoalId={selectedGoalId}
             filterState={filterState}
@@ -410,10 +434,20 @@ export function HomeContent() {
         {/* Right: detail panel (slides in on selection) */}
         {selectedRecord && (
           <div style={{ width: 400, flexShrink: 0, overflow: 'hidden' }} className="detail-col">
-            <DetailPanel record={selectedRecord} onClose={() => setSelectedRecordId(null)} onSave={handleSaveRecord} />
+            <DetailPanel
+              record={selectedRecord}
+              stages={portfolio.stages}
+              onClose={() => setSelectedRecordId(null)}
+              onSave={handleSaveRecord}
+              onDelete={handleDeleteRecord}
+            />
           </div>
         )}
       </div>
+
+      {managerOpen && (
+        <ManagePanel portfolio={portfolio} onClose={() => setManagerOpen(false)} onRefresh={refreshPortfolio} />
+      )}
     </div>
   );
 }

@@ -9,22 +9,61 @@ export interface NarrativeSection {
   body: string;      // markdown/plain text under that heading
 }
 
-/** Builder lifecycle stages (v3). The section is the process spine + cross-project axis. */
-export const SECTIONS = ['Think', 'Plan', 'Build', 'Review', 'Test', 'Ship', 'Reflect'] as const;
-export type SectionStage = typeof SECTIONS[number] | string;
+/** Builder lifecycle stages (v4): find the problem, make it, meet the market.
+ *  Users can add/rename/remove/reorder these via stages.json in their data root,
+ *  so nothing here may be treated as a closed set. */
+export const DEFAULT_STAGES = ['Discovery', 'Build', 'Growth'] as const;
+export const SECTIONS = DEFAULT_STAGES;
+export type SectionStage = string;
 
-export const SECTION_META: { [k: string]: { color: string; order: number } } = {
-  Think:   { color: 'var(--cat-research)',    order: 0 },
-  Plan:    { color: 'var(--cat-planning)',    order: 1 },
-  Build:   { color: 'var(--cat-engineering)', order: 2 },
-  Review:  { color: 'var(--cat-design)',      order: 3 },
-  Test:    { color: 'var(--cat-research)',    order: 4 },
-  Ship:    { color: 'var(--cat-growth)',      order: 5 },
-  Reflect: { color: 'var(--cat-planning)',    order: 6 },
+/** Legacy v2/v3 stage names → the three defaults. Applied only when the name is
+ *  not one of the builder's own configured stages. */
+export const LEGACY_STAGE_ALIASES: { [k: string]: string } = {
+  think: 'Discovery', plan: 'Discovery', research: 'Discovery', planning: 'Discovery',
+  build: 'Build', review: 'Build', test: 'Build', design: 'Build', engineering: 'Build',
+  ship: 'Growth', reflect: 'Growth', growth: 'Growth',
 };
+
+const STAGE_PALETTE = [
+  'var(--cat-research)', 'var(--cat-engineering)', 'var(--cat-growth)',
+  'var(--cat-planning)', 'var(--cat-design)',
+];
+
+/** Colour/order for the default stages. Custom stages fall back to
+ *  stageMeta(), which assigns a palette colour by position. */
+export const SECTION_META: { [k: string]: { color: string; order: number } } = {
+  Discovery: { color: 'var(--cat-research)',    order: 0 },
+  Build:     { color: 'var(--cat-engineering)', order: 1 },
+  Growth:    { color: 'var(--cat-growth)',      order: 2 },
+};
+
+/** Resolve a stage name against the builder's configured stage list. */
+export function normalizeStage(stage: string | undefined, configured: string[] = [...DEFAULT_STAGES]): string {
+  const name = (stage || '').trim();
+  if (!name) return '';
+  const own = configured.find(s => s.toLowerCase() === name.toLowerCase());
+  if (own) return own;
+  const mapped = LEGACY_STAGE_ALIASES[name.toLowerCase()];
+  if (!mapped) return name;
+  return configured.find(s => s.toLowerCase() === mapped.toLowerCase()) || mapped;
+}
+
+/** Display metadata for any stage, including user-defined ones. */
+export function stageMeta(stage: string, configured: string[] = [...DEFAULT_STAGES]): { color: string; order: number } {
+  const index = configured.findIndex(s => s.toLowerCase() === (stage || '').toLowerCase());
+  if (index >= 0) {
+    return SECTION_META[configured[index]] ?? { color: STAGE_PALETTE[index % STAGE_PALETTE.length], order: index };
+  }
+  return SECTION_META[stage] ?? { color: 'var(--text3)', order: 900 };
+}
 
 /** Task progress — builder-facing, not PM status. */
 export type Progress = 'done' | 'ongoing' | 'dropped' | 'undecided';
+
+/** A project has a third-party-readable story; a learning entry is skill
+ *  acquisition that belongs to no single product storyline. */
+export type EntryType = 'project' | 'learning';
+export const ENTRY_TYPES: EntryType[] = ['project', 'learning'];
 export const PROGRESS_META: { [k in Progress]: { label: string; color: string } } = {
   done:      { label: 'Done',      color: 'var(--cat-growth)' },
   ongoing:   { label: 'Ongoing',   color: 'var(--cat-planning)' },
@@ -83,7 +122,8 @@ export interface Record {
 
   // ── v3 task fields ──
   date?: string;             // YYYY-MM-DD display date
-  section?: SectionStage;    // lifecycle stage (Think/Plan/Build/...)
+  section?: SectionStage;    // lifecycle stage (Discovery/Build/Growth or custom)
+  entryType?: EntryType;     // project (has a story) | learning (skill acquisition)
   purpose?: string | null;       // the specific aim of this task
   subPurpose?: string | null;    // legacy alias; read-only compatibility
   tools?: string[];          // AI tools/stacks used
@@ -114,8 +154,10 @@ export interface Goal {
   id: string;
   slug: string;
   title: string;
-  stage?: SectionStage;      // v3 lifecycle stage (defaults to title if absent)
-  order?: number;            // lifecycle order for stable section-box layout
+  // A Purpose spans the lifecycle and has NO stage of its own; each Task carries
+  // its own `section`. `stage`/`order` survive only to read pre-v4 folders.
+  stage?: SectionStage;
+  order?: number;
   description?: string;
   created_at?: string;
   records: Record[];
@@ -140,6 +182,8 @@ export interface Project {
   slug: string;
   title: string;
   name?: string;             // v3 alias of title
+  type?: EntryType;          // project (default) | learning
+  order?: number;            // user-defined portfolio order
   sector?: string;           // v3 — e.g. "Marketplace SaaS"
   oneLiner?: string;         // v3 — one-line description
   role?: string;             // legacy optional metadata; not inferred or displayed
@@ -153,6 +197,8 @@ export interface Project {
 export interface Portfolio {
   path: string;
   projects: Project[];
+  /** The builder's configured stage list; defaults when stages.json is absent. */
+  stages?: string[];
 }
 
 // Tag taxonomy: category name -> list of tags in that category

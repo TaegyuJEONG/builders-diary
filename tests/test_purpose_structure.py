@@ -84,7 +84,7 @@ class PurposeStructureTests(unittest.TestCase):
                     "--root", str(root),
                     "--project", "Product Builder Jobs",
                     "--goal", "Curation Taxonomy",
-                    "--stage", "Think",
+                    "--stage", "Discovery",
                     "--title", "Define Product Builder boundaries",
                     "--purpose", "Separate hands-on builders from adjacent roles.",
                     "--body-file", str(body),
@@ -97,13 +97,14 @@ class PurposeStructureTests(unittest.TestCase):
             goal = root / "product-builder-jobs" / "curation-taxonomy" / "goal.json"
             record = Path(summary["path"])
 
-            self.assertEqual(summary["section"], "Think")
+            self.assertEqual(summary["section"], "Discovery")
             self.assertTrue(goal.is_file())
             self.assertEqual(json.loads(goal.read_text(encoding="utf-8"))["title"], "Curation Taxonomy")
-            self.assertEqual(json.loads(goal.read_text(encoding="utf-8"))["stage"], "Think")
+            # A Purpose spans the lifecycle, so it carries no stage of its own.
+            self.assertNotIn("stage", json.loads(goal.read_text(encoding="utf-8")))
             saved = json.loads(record.read_text(encoding="utf-8"))
             self.assertEqual(saved["goal_title"], "Curation Taxonomy")
-            self.assertEqual(saved["section"], "Think")
+            self.assertEqual(saved["section"], "Discovery")
             self.assertEqual(saved["purpose"], "Separate hands-on builders from adjacent roles.")
 
     def test_legacy_section_only_call_keeps_existing_section_as_purpose(self) -> None:
@@ -125,7 +126,7 @@ class PurposeStructureTests(unittest.TestCase):
             goal = root / "legacy-project" / "build" / "goal.json"
             self.assertEqual(summary["section"], "Build")
             self.assertEqual(json.loads(goal.read_text(encoding="utf-8"))["title"], "Build")
-            self.assertEqual(json.loads(goal.read_text(encoding="utf-8"))["stage"], "Build")
+            self.assertNotIn("stage", json.loads(goal.read_text(encoding="utf-8")))
 
 
 if __name__ == "__main__":

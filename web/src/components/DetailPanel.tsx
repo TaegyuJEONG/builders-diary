@@ -1,12 +1,14 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Record, Evidence, CATEGORY_META } from '@/lib/types';
+import { Record, Evidence, DEFAULT_STAGES, stageMeta } from '@/lib/types';
 
 interface DetailPanelProps {
   record: Record | null;
+  stages?: string[];
   onClose: () => void;
   onSave: (updated: Record) => Promise<void>;
+  onDelete?: (record: Record) => Promise<void>;
 }
 
 const EVIDENCE_META: { [k: string]: { icon: string; label: string } } = {
@@ -22,7 +24,6 @@ const EVIDENCE_META: { [k: string]: { icon: string; label: string } } = {
   other:    { icon: '↗', label: 'Link' },
 };
 
-const CATEGORY_OPTIONS = ['Planning', 'Design', 'Engineering', 'Research', 'Growth'] as const;
 
 function EvidenceItem({ ev }: { ev: Evidence }) {
   const meta = EVIDENCE_META[ev.type || 'other'] || EVIDENCE_META.other;
@@ -129,12 +130,12 @@ function narrativeLabel(heading: string): string {
 }
 
 // ── Main panel ──
-export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
+export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onSave, onDelete }: DetailPanelProps) {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState({
     title: '', summary: '', content: '', result: '',
-    category: '' as string,
+    section: '', purpose: '', tools: '', mindset: '',
   });
 
   // Reset edit mode + draft when record changes
@@ -146,15 +147,18 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
         summary:  record.summary  || '',
         content:  record.content  || '',
         result:   record.result   || '',
-        category: record.category || '',
+        section:  record.section  || 'Build',
+        purpose:  record.purpose || record.subPurpose || '',
+        tools:    (record.tools || record.toolTags || []).join(', '),
+        mindset:  (record.mindset || record.mindsetTags || []).join(', '),
       });
     }
   }, [record?.id]);
 
   if (!record) return null;
 
-  const category = (editMode ? draft.category : record.category) || '';
-  const catMeta = category ? CATEGORY_META[category] : null;
+  const section = (editMode ? draft.section : record.section) || 'Build';
+  const sectionMeta = stageMeta(section, stages);
 
   const handleSave = async () => {
     setSaving(true);
@@ -165,7 +169,12 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
         summary:    draft.summary,
         content:    draft.content,
         result:     draft.result,
-        category:   draft.category || null,
+        section:    draft.section || 'Build',
+        purpose:    draft.purpose || null,
+        tools:      draft.tools.split(',').map(v => v.trim()).filter(Boolean),
+        toolTags:   draft.tools.split(',').map(v => v.trim()).filter(Boolean),
+        mindset:    draft.mindset.split(',').map(v => v.trim()).filter(Boolean),
+        mindsetTags:draft.mindset.split(',').map(v => v.trim()).filter(Boolean),
         updated_at: new Date().toISOString().slice(0, 10),
       };
       await onSave(updated);
@@ -202,37 +211,39 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
             </div>
           )}
 
-          {/* Category + date */}
+          {/* Stage + date */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 7 }}>
             {editMode ? (
               <select
-                value={draft.category}
-                onChange={e => setField('category')(e.target.value)}
+                value={draft.section}
+                onChange={e => setField('section')(e.target.value)}
                 style={{
                   background: 'var(--bg)', border: '1px solid var(--border2)',
                   color: 'var(--text2)', borderRadius: 3, fontSize: 11,
                   padding: '3px 6px', fontFamily: 'IBM Plex Mono, monospace',
                 }}
               >
-                <option value="">— category —</option>
-                {CATEGORY_OPTIONS.map(c => (
-                  <option key={c} value={c}>{c}</option>
+                {stages.map(stage => (
+                  <option key={stage} value={stage}>{stage}</option>
                 ))}
+                {!stages.includes(draft.section) && draft.section && (
+                  <option value={draft.section}>{draft.section}</option>
+                )}
               </select>
-            ) : catMeta && (
+            ) : (
               <span className="mono" style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                fontSize: 11, color: catMeta.color,
+                fontSize: 11, color: sectionMeta.color,
               }}>
                 <span style={{
                   width: 6, height: 6, borderRadius: '50%',
-                  background: catMeta.color, display: 'inline-block',
+                  background: sectionMeta.color, display: 'inline-block',
                 }} />
-                {category}
+                {section}
               </span>
             )}
             <span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>
-              {record.updated_at ? `updated ${record.updated_at.slice(0, 10)}` : record.created_at.slice(0, 10)}
+              {record.updated_at ? `updated ${record.updated_at.slice(0, 10)}` : (record.created_at || '').slice(0, 10)}
             </span>
           </div>
 
@@ -292,6 +303,25 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
             </>
           ) : (
             <>
+              {onDelete && (
+                <button
+                  onClick={async () => {
+                    if (!window.confirm(`Delete “${record.title}”? This cannot be undone.`)) return;
+                    setSaving(true);
+                    try { await onDelete(record); } finally { setSaving(false); }
+                  }}
+                  title="Delete task"
+                  disabled={saving}
+                  className="mono"
+                  style={{
+                    height: 28, padding: '0 8px', background: 'transparent',
+                    border: '1px solid var(--border)', borderRadius: 4,
+                    color: 'var(--danger)', cursor: saving ? 'not-allowed' : 'pointer', fontSize: 10,
+                  }}
+                >
+                  Delete
+                </button>
+              )}
               <button
                 onClick={() => setEditMode(true)}
                 title="Edit"
@@ -333,9 +363,12 @@ export function DetailPanel({ record, onClose, onSave }: DetailPanelProps) {
         {editMode ? (
           // ── Edit form ──
           <>
-            <EditTextarea label="Purpose" value={draft.summary} onChange={setField('summary')} rows={3} />
-            <EditTextarea label="Work"    value={draft.content} onChange={setField('content')} rows={6} />
-            <EditTextarea label="Result"  value={draft.result}  onChange={setField('result')}  rows={3} />
+            <EditTextarea label="Purpose" value={draft.purpose} onChange={setField('purpose')} rows={2} />
+            <EditTextarea label="Summary" value={draft.summary} onChange={setField('summary')} rows={3} />
+            <EditTextarea label="Work" value={draft.content} onChange={setField('content')} rows={6} />
+            <EditTextarea label="Result" value={draft.result} onChange={setField('result')} rows={3} />
+            <EditTextarea label="Tools · comma separated" value={draft.tools} onChange={setField('tools')} rows={2} />
+            <EditTextarea label="Mindset · comma separated" value={draft.mindset} onChange={setField('mindset')} rows={2} />
           </>
         ) : (
           // ── Read view ──

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Project, Goal, Record, SECTION_META, PROGRESS_META, Progress } from '@/lib/types';
+import { Project, Goal, Record, DEFAULT_STAGES, normalizeStage, stageMeta } from '@/lib/types';
 import { FilterState, recordPasses, buildProjectToolbox } from '@/lib/portfolio';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -127,33 +127,11 @@ function ProjectCard({
   );
 }
 
-// ── progress rollup chip for a section box ──
-function ProgressRollup({ records }: { records: Record[] }) {
-  const counts: { [k in Progress]?: number } = {};
-  for (const r of records) {
-    const p = (r.progress || undefined) as Progress | undefined;
-    if (p) counts[p] = (counts[p] || 0) + 1;
-  }
-  const order: Progress[] = ['done', 'ongoing', 'undecided', 'dropped'];
-  const parts = order.filter(k => counts[k]);
-  if (parts.length === 0) return null;
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-      {parts.map(k => (
-        <span key={k} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9, color: 'var(--text3)' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: PROGRESS_META[k].color, display: 'inline-block' }} />
-          {counts[k]} {PROGRESS_META[k].label.toLowerCase()}
-        </span>
-      ))}
-    </span>
-  );
-}
-
 // ── Task card (inside a section box) ──
 function TaskCard({
-  record, selected, onSelect,
+  record, selected, filterState, onSelect,
 }: {
-  record: Record; selected: boolean; onSelect: () => void;
+  record: Record; selected: boolean; filterState: FilterState; onSelect: () => void;
 }) {
   const ev = record.evidence || [];
   const hasHighlight = !!record.highlight || !!record.judgment || ev.some(e => e.type === 'judgment');
@@ -178,20 +156,11 @@ function TaskCard({
       onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border2)'; }}
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; }}
     >
-      {/* date + progress dot */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+      {/* Date only. Progress is deliberately absent: this is a record, not PM software. */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
         <span className="mono" style={{ fontSize: 9, color: 'var(--text3)' }}>
           {record.date || record.created_at?.slice(0, 10)}
         </span>
-        {record.progress && (
-          <span className="mono" title={PROGRESS_META[record.progress as Progress]?.label} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 9,
-            color: PROGRESS_META[record.progress as Progress]?.color || 'var(--text3)',
-          }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: PROGRESS_META[record.progress as Progress]?.color, display: 'inline-block' }} />
-            {PROGRESS_META[record.progress as Progress]?.label}
-          </span>
-        )}
       </div>
 
       {/* source project — especially useful in Section/Tool cross-project views */}
@@ -216,17 +185,42 @@ function TaskCard({
       {/* tools */}
       {tools.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-          {tools.slice(0, 3).map(t => (
-            <span key={t} className="mono" style={{
-              fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
-              background: 'var(--tag-bg)', color: 'var(--text2)', border: '1px solid var(--border)', whiteSpace: 'nowrap',
-            }}>
-              {t}
-            </span>
-          ))}
+          {tools.slice(0, 3).map(t => {
+            const active = filterState.tools.includes(t);
+            return (
+              <span key={t} className="mono" style={{
+                fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
+                background: active ? 'var(--tag-active-bg)' : 'var(--tag-bg)',
+                color: active ? 'var(--accent)' : 'var(--text2)',
+                border: `1px solid ${active ? 'var(--accent-dim)' : 'var(--border)'}`,
+                whiteSpace: 'nowrap',
+              }}>
+                {t}
+              </span>
+            );
+          })}
           {tools.length > 3 && (
             <span className="mono" style={{ fontSize: 8.5, color: 'var(--text3)' }}>+{tools.length - 3}</span>
           )}
+        </div>
+      )}
+
+      {(record.mindset || []).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+          {(record.mindset || []).slice(0, 3).map(t => {
+            const active = filterState.mindset.includes(t);
+            return (
+              <span key={t} className="mono" style={{
+                fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
+                background: active ? 'var(--tag-active-bg)' : 'transparent',
+                color: active ? 'var(--accent)' : 'var(--text3)',
+                border: `1px solid ${active ? 'var(--accent-dim)' : 'var(--border)'}`,
+                whiteSpace: 'nowrap',
+              }}>
+                {t}
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -255,65 +249,59 @@ function TaskCard({
   );
 }
 
-// ── Purpose stage board (project view): lifecycle stage → purpose → task cards ──
+// ── Stage board: lifecycle stage → Task cards. Purpose belongs inside each Task. ──
 function PurposeStageBoard({
-  goals, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
+  goals, stages, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
 }: {
   goals: Goal[];
+  stages: string[];
   selectedGoalId: string | null;
   filterState: FilterState;
   selectedRecordId: string | null;
   onSelectRecord: (id: string) => void;
 }) {
-  const visibleGoals = goals
-    .filter(g => !selectedGoalId || g.id === selectedGoalId)
-    .map(g => ({ ...g, records: g.records.filter(r => recordPasses(r, filterState)) }))
-    .filter(g => g.records.length > 0);
-  if (visibleGoals.length === 0) {
+  const stageGroups = new Map<string, Record[]>();
+  for (const goal of goals) {
+    if (selectedGoalId && goal.id !== selectedGoalId) continue;
+    for (const record of goal.records) {
+      if (!recordPasses(record, filterState)) continue;
+      const stage = resolveLifecycleStage(record, goal.stage, stages);
+      if (!stageGroups.has(stage)) stageGroups.set(stage, []);
+      stageGroups.get(stage)!.push(record);
+    }
+  }
+
+  const orderedStages = [...stageGroups.entries()].sort(([a], [b]) => (
+    stageMeta(a, stages).order - stageMeta(b, stages).order || a.localeCompare(b)
+  ));
+  if (orderedStages.length === 0) {
     return (
       <div className="mono" style={{ padding: '30px 24px', color: 'var(--text3)', fontSize: 12 }}>
-        No tasks in this purpose yet.
+        No tasks match these filters.
       </div>
     );
   }
 
-  const stageGroups = new Map<string, Goal[]>();
-  for (const goal of visibleGoals) {
-    const fallback = goal.records[0]?.section || 'Build';
-    const stage = goal.stage || fallback;
-    if (!stageGroups.has(stage)) stageGroups.set(stage, []);
-    stageGroups.get(stage)!.push(goal);
-  }
-  const orderedStages = [...stageGroups.entries()].sort(([a], [b]) => (
-    (SECTION_META[a]?.order ?? 999) - (SECTION_META[b]?.order ?? 999) || a.localeCompare(b)
-  ));
-
   return (
     <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 24px', overflowY: 'auto', height: '100%' }}>
-      {orderedStages.map(([stage, purposes]) => {
-        const records = purposes.flatMap(p => p.records);
-        const color = SECTION_META[stage]?.color || 'var(--text3)';
+      {orderedStages.map(([stage, records]) => {
+        const color = stageMeta(stage, stages).color;
         return (
           <div key={stage} style={{ border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
-              <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{purposes.length} purpose{purposes.length === 1 ? '' : 's'}</span>
-              <span style={{ marginLeft: 'auto' }}><ProgressRollup records={records} /></span>
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{records.length} task{records.length === 1 ? '' : 's'}</span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 13px' }}>
-              {purposes.map(purpose => (
-                <div key={purpose.id} style={{ border: '1px solid var(--border)', borderRadius: 5, background: 'var(--bg)', overflow: 'hidden' }}>
-                  <div style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 620, color: 'var(--text)' }}>{purpose.title}</div>
-                    {purpose.description && <div style={{ marginTop: 3, fontSize: 10, color: 'var(--text3)', lineHeight: 1.45 }}>{purpose.description}</div>}
-                  </div>
-                  <div className="thin-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px', overflowX: 'auto' }}>
-                    {purpose.records.map(record => (
-                      <TaskCard key={record.id} record={record} selected={record.id === selectedRecordId} onSelect={() => onSelectRecord(record.id)} />
-                    ))}
-                  </div>
-                </div>
+            <div className="thin-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 13px', overflowX: 'auto' }}>
+              {records.map(record => (
+                <TaskCard
+                  key={record.id}
+                  record={record}
+                  selected={record.id === selectedRecordId}
+                  filterState={filterState}
+                  onSelect={() => onSelectRecord(record.id)}
+                />
               ))}
             </div>
           </div>
@@ -337,7 +325,7 @@ function SectionBoard({
   // records into lifecycle boxes in memory; no on-disk migration is needed.
   const allRecordsHaveSections = goals.length > 0 && goals.every(g => g.records.every(r => !!r.section));
   const crossToolGoals = goals.some(g => (g.stage || '').startsWith('Tool ·'));
-  const hasLifecycleGoals = crossToolGoals || goals.some(g => !!SECTION_META[g.stage || '']) || allRecordsHaveSections;
+  const hasLifecycleGoals = crossToolGoals || goals.some(g => !!g.stage) || allRecordsHaveSections;
   const sourceGoals = hasLifecycleGoals ? goals : (() => {
     const grouped = new Map<string, { source: Goal; records: Record[] }>();
     for (const goal of goals) {
@@ -353,7 +341,7 @@ function SectionBoard({
       slug: stage.toLowerCase(),
       title: stage,
       stage,
-      order: SECTION_META[stage]?.order ?? 999,
+      order: stageMeta(stage).order,
       records: group.records,
     }));
   })();
@@ -377,7 +365,7 @@ function SectionBoard({
     <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 24px', overflowY: 'auto', height: '100%' }}>
       {nonEmpty.map(g => {
         const stage = g.stage || g.title;
-        const color = SECTION_META[stage as string]?.color || 'var(--text3)';
+        const color = stageMeta(stage as string).color;
         return (
           <div key={g.id} style={{
             border: '1px solid var(--border)', borderRadius: 7,
@@ -395,9 +383,7 @@ function SectionBoard({
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>
                 {g.records.length}
               </span>
-              <span style={{ marginLeft: 'auto' }}>
-                <ProgressRollup records={g.records} />
-              </span>
+
             </div>
             {/* task cards — horizontal scroll within the box */}
             <div className="thin-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 13px', overflowX: 'auto' }}>
@@ -406,6 +392,7 @@ function SectionBoard({
                   key={r.id}
                   record={r}
                   selected={r.id === selectedRecordId}
+                  filterState={filterState}
                   onSelect={() => onSelectRecord(r.id)}
                 />
               ))}
@@ -419,10 +406,12 @@ function SectionBoard({
 
 export type ExploreMode = 'project' | 'section' | 'tool';
 
-function resolveLifecycleStage(record: Record, goalStage?: string): string {
-  if (record.section && SECTION_META[record.section]) return record.section;
-  if (goalStage && SECTION_META[goalStage]) return goalStage;
-  return 'Build';
+function resolveLifecycleStage(
+  record: Record,
+  goalStage?: string,
+  stages: string[] = [...DEFAULT_STAGES],
+): string {
+  return normalizeStage(record.section || goalStage || 'Build', stages);
 }
 
 function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
@@ -447,7 +436,7 @@ function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
       slug: key.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
       title: key,
       stage: mode === 'section' ? key : `Tool · ${key}`,
-      order: SECTION_META[key]?.order ?? 999,
+      order: stageMeta(key).order,
       records,
     }));
 }
@@ -477,10 +466,11 @@ function ExploreToggle({ mode, onChange }: { mode: ExploreMode; onChange: (mode:
 
 // ── Top-level 3-level view ──
 export function ProjectSectionView({
-  projects, selectedProjectId, selectedGoalId, filterState, mode, onModeChange, onSelectProject,
+  projects, stages = [...DEFAULT_STAGES], selectedProjectId, selectedGoalId, filterState, mode, onModeChange, onSelectProject,
   selectedRecordId, onSelectRecord,
 }: {
   projects: Project[];
+  stages?: string[];
   selectedProjectId: string | null;
   selectedGoalId: string | null;
   filterState: FilterState;
@@ -491,6 +481,7 @@ export function ProjectSectionView({
   onSelectRecord: (id: string) => void;
 }) {
   const active = projects.find(p => p.id === selectedProjectId) || null;
+  const visibleGoals = active ? active.goals : projects.flatMap(p => p.goals);
   const crossGoals = mode === 'project' ? [] : crossProjectGoals(projects, mode);
 
   return (
@@ -516,9 +507,10 @@ export function ProjectSectionView({
 
           {/* Row 2: sections of the selected project */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            {active ? (
+            {visibleGoals.length > 0 ? (
               <PurposeStageBoard
-                goals={active.goals}
+                goals={visibleGoals}
+                stages={stages}
                 selectedGoalId={selectedGoalId}
                 filterState={filterState}
                 selectedRecordId={selectedRecordId}
@@ -526,7 +518,7 @@ export function ProjectSectionView({
               />
             ) : (
               <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)', fontSize: 12 }}>
-                Select a project to see its Think → Ship → Reflect sections
+                No tasks yet.
               </div>
             )}
           </div>

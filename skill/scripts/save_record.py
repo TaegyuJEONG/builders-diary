@@ -40,8 +40,77 @@ from pathlib import Path
 # Work categories — legacy (v2). Kept for --category back-compat mapping to section.
 CATEGORIES = ["Planning", "Design", "Engineering", "Research", "Growth"]
 
-# Builder-lifecycle sections (v3). The section is the process spine + cross-project axis.
-SECTIONS = ["Think", "Plan", "Build", "Review", "Test", "Ship", "Reflect"]
+# Builder-lifecycle stages (v4). Three buckets that match how builders actually
+# write up their work: find the problem, make the thing, meet the market.
+# Users may add/rename/remove/reorder these via {ROOT}/stages.json.
+DEFAULT_STAGES = ["Discovery", "Build", "Growth"]
+SECTIONS = DEFAULT_STAGES  # back-compat alias for older callers
+
+# Legacy vocabularies collapse into the three defaults. Only applied when the
+# incoming name is NOT one of the user's own configured stages.
+LEGACY_STAGE_ALIASES = {
+    # v3 seven-stage lifecycle
+    "think": "Discovery",
+    "plan": "Discovery",
+    "build": "Build",
+    "review": "Build",
+    "test": "Build",
+    "ship": "Growth",
+    "reflect": "Growth",
+    # v2 work categories
+    "research": "Discovery",
+    "planning": "Discovery",
+    "design": "Build",
+    "engineering": "Build",
+    "growth": "Growth",
+}
+
+# Entry types. A project has a third-party-readable story; a learning entry is
+# skill acquisition that does not belong to any one product's storyline.
+ENTRY_TYPES = ["project", "learning"]
+
+
+def load_stages(root: "str | Path") -> list:
+    """Return the builder's stage list: their stages.json, else the defaults.
+
+    Shape: [{"name": "Discovery"}, ...] — order in the file IS the display order.
+    """
+    path = Path(os.path.expanduser(str(root))) / "stages.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return [{"name": name} for name in DEFAULT_STAGES]
+    raw = data.get("stages") if isinstance(data, dict) else data
+    stages = []
+    for item in raw if isinstance(raw, list) else []:
+        name = (item.get("name") if isinstance(item, dict) else item) or ""
+        name = str(name).strip()
+        if name and not any(s["name"].casefold() == name.casefold() for s in stages):
+            stages.append({"name": name})
+    return stages or [{"name": name} for name in DEFAULT_STAGES]
+
+
+def normalize_stage(root: "str | Path", stage: str) -> str:
+    """Map a stage name onto the builder's configured vocabulary.
+
+    A name the builder actually configured wins as-is. Otherwise a legacy v2/v3
+    name collapses into its bucket. An unrecognized name is kept verbatim so a
+    custom stage is never silently dropped.
+    """
+    name = (stage or "").strip()
+    if not name:
+        return ""
+    configured = load_stages(root)
+    for item in configured:
+        if item["name"].casefold() == name.casefold():
+            return item["name"]
+    mapped = LEGACY_STAGE_ALIASES.get(name.casefold())
+    if mapped:
+        for item in configured:
+            if item["name"].casefold() == mapped.casefold():
+                return item["name"]
+        return mapped
+    return name
 
 # Task progress (v3) — builder-facing, not PM done/blocked status.
 PROGRESS = ["done", "ongoing", "dropped", "undecided"]
@@ -212,18 +281,22 @@ def ensure_project(root: str, title: str, extra: "dict | None" = None) -> dict:
 
 
 def ensure_section(root: str, project: dict, title: str, stage: str = "", order: "int | None" = None) -> dict:
-    """Create or reuse a section (stored on disk as goal.json for back-compat).
-    `stage` is the lifecycle stage (Think/Plan/Build/...); `title` is the folder key."""
+    """Create or reuse a Purpose (stored on disk as goal.json for back-compat).
+
+    A Purpose is a named workstream and deliberately carries NO lifecycle stage:
+    one Purpose legitimately spans Discovery through Growth. The stage lives on
+    each Task. `stage`/`order` are accepted for signature compatibility only.
+    """
     slug = slugify(title)
     gdir = os.path.join(root, project["slug"], slug)
     gjson = os.path.join(gdir, "goal.json")
     existing = load_json(gjson)
     if existing and existing.get("id"):
-        changed = False
-        if stage and existing.get("stage") != stage:
-            existing["stage"] = stage
-            changed = True
-        if changed:
+        # Drop a stage written by an older version so one Task can no longer
+        # retitle the whole Purpose.
+        if "stage" in existing:
+            existing.pop("stage", None)
+            existing.pop("order", None)
             existing["updated_at"] = now_iso()
             write_json(gjson, existing)
         return existing
@@ -231,14 +304,11 @@ def ensure_section(root: str, project: dict, title: str, stage: str = "", order:
         "id": short_id("g"),
         "slug": slug,
         "title": title,
-        "stage": stage or title,
         "project_slug": project["slug"],
         "created_at": now_iso(),
         "updated_at": now_iso(),
         "share_id": None,
     }
-    if order is not None:
-        meta["order"] = order
     write_json(gjson, meta)
     return meta
 
@@ -274,39 +344,28 @@ def list_projects(root: str) -> list:
             if gslug.startswith(".") or not os.path.isfile(gjson):
                 continue
             g = load_json(gjson) or {}
-            stage = g.get("stage")
-            if stage:
-                sections.append({
-                    "stage": stage,
-                    "title": g.get("title") or gslug,
-                    "tasks": next_seq(gdir),
-                })
-            else:
-                # Legacy goal folders may contain multiple old categories.
-                # Infer lifecycle sections from their record metadata without
-                # moving files on disk.
-                inferred = {}
-                for name in os.listdir(gdir):
-                    rpath = os.path.join(gdir, name, "record.json")
-                    if not os.path.isfile(rpath):
-                        continue
-                    r = load_json(rpath) or {}
-                    stage_name = r.get("section") or CATEGORY_TO_SECTION.get(r.get("category", ""))
-                    if stage_name:
-                        inferred[stage_name] = inferred.get(stage_name, 0) + 1
-                if inferred:
-                    for stage_name, tasks in sorted(inferred.items()):
-                        sections.append({"stage": stage_name, "title": stage_name, "tasks": tasks})
-                else:
-                    sections.append({
-                        "stage": g.get("title") or gslug,
-                        "title": g.get("title") or gslug,
-                        "tasks": next_seq(gdir),
-                    })
+            # A Purpose has no stage of its own; its Tasks carry the stages.
+            stage_counts = {}
+            for name in os.listdir(gdir):
+                rpath = os.path.join(gdir, name, "record.json")
+                if not os.path.isfile(rpath):
+                    continue
+                r = load_json(rpath) or {}
+                raw = r.get("section") or CATEGORY_TO_SECTION.get(r.get("category", "")) or ""
+                stage_name = normalize_stage(root, raw) if raw else ""
+                if stage_name:
+                    stage_counts[stage_name] = stage_counts.get(stage_name, 0) + 1
+            sections.append({
+                "purpose": g.get("title") or gslug,
+                "title": g.get("title") or gslug,
+                "stages": stage_counts,
+                "tasks": next_seq(gdir),
+            })
         out.append({
             "slug": p.get("slug", pslug),
             "name": p.get("name") or p.get("title") or pslug,
             "sector": p.get("sector"),
+            "type": p.get("type") or "project",
             "sections": sections,
         })
     return out
@@ -319,6 +378,8 @@ def main() -> int:
     ap.add_argument("--root", help="Store root (default: $BUILDERS_DIARY_PATH or ~/Documents/builders-diary)")
 
     ap.add_argument("--project", help="Project title")
+    ap.add_argument("--type", default="", choices=["", *ENTRY_TYPES],
+                    help="Entry type: project (has a story) or learning (skill acquisition)")
     # Project metadata (optional; written on create, updated on reuse if provided)
     ap.add_argument("--sector", default="", help="Project sector, e.g. 'Marketplace SaaS'")
     ap.add_argument("--one-liner", default="", help="Project one-line description")
@@ -328,7 +389,7 @@ def main() -> int:
     # Purpose is the second portfolio level (stored as goal.json for compatibility).
     # Stage is the lifecycle grouping shown around purposes in the web UI.
     ap.add_argument("--goal", default="", help="Purpose / workstream title, e.g. 'Curation Taxonomy'")
-    ap.add_argument("--stage", default="", help=f"Lifecycle stage: {', '.join(SECTIONS)} (custom allowed)")
+    ap.add_argument("--stage", default="", help=f"Task lifecycle stage: {', '.join(DEFAULT_STAGES)} (custom allowed)")
     # --section remains a legacy shorthand: it supplies both purpose and stage.
     ap.add_argument("--section", default="", help="Legacy shorthand for --goal and --stage")
 
@@ -377,7 +438,7 @@ def main() -> int:
         CATEGORY_TO_SECTION.get(args.category, args.category) if args.category else ""
     )
     purpose_title = args.goal or legacy_stage
-    stage = args.stage or legacy_stage or purpose_title
+    stage = normalize_stage(root, args.stage or legacy_stage or purpose_title)
     if not args.project or not args.title or not purpose_title or not stage:
         ap.error("saving a record requires --project, --title, and a purpose (--goal or --section)")
 
@@ -422,10 +483,11 @@ def main() -> int:
         project = ensure_project(root, args.project, extra={
             "sector": args.sector, "one_liner": args.one_liner,
             "role": args.role or None, "logo": args.logo,
+            "type": args.type or "project",
         })
-        # goal.json remains the on-disk purpose container; its stage drives lifecycle grouping.
-        order = SECTIONS.index(stage) if stage in SECTIONS else None
-        section = ensure_section(root, project, purpose_title, stage=stage, order=order)
+        # goal.json is the on-disk Purpose container. It carries no stage:
+        # the stage lives on each Task so one Purpose can span the lifecycle.
+        section = ensure_section(root, project, purpose_title)
 
         section_dir = os.path.join(root, project["slug"], section["slug"])
         seq = next_seq(section_dir)
@@ -443,6 +505,7 @@ def main() -> int:
             "title": args.title,
             "date": record_date,
             "section": stage,
+            "entry_type": project.get("type") or "project",
             "purpose": args.purpose or args.sub_purpose or None,
             "tags": tags,
             "tools": tools,

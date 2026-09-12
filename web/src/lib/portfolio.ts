@@ -1,11 +1,11 @@
 import { Portfolio, Record, Project, ToolCategory, ToolboxGroup } from './types';
-import { mockPortfolioV2, tagCategories } from './mockData';
+import { mockPortfolioV2 } from './mockData';
 import { SelectOption } from '@/components/SearchableSelect';
 
 /** Legacy mock category → lifecycle section, so ?demo=1 renders the 3-level view. */
 const MOCK_CATEGORY_TO_SECTION: { [k: string]: string } = {
-  Planning: 'Plan', Design: 'Review', Engineering: 'Build',
-  Research: 'Think', Growth: 'Ship',
+  Planning: 'Discovery', Research: 'Discovery',
+  Design: 'Build', Engineering: 'Build', Growth: 'Growth',
 };
 
 const TOOL_CATEGORY_ORDER: ToolCategory[] = [
@@ -66,7 +66,6 @@ export function convertMockToPortfolio(): Portfolio {
         id: goal.id,
         slug: goal.id.replace(/^goal-/, ''),
         title: goal.title,
-        stage: goal.title,
         description: goal.description,
         records: goal.cards.map(card => {
           const section = card.category ? (MOCK_CATEGORY_TO_SECTION[card.category] || card.category) : undefined;
@@ -108,29 +107,27 @@ export function buildTagOptions(portfolio: Portfolio): {
   mindset: SelectOption[];
   tool: SelectOption[];
 } {
-  const counts = new Map<string, number>();
+  const mindsetCounts = new Map<string, number>();
+  const toolCounts = new Map<string, number>();
   for (const p of portfolio.projects) {
     for (const g of p.goals) {
       for (const r of g.records) {
-        for (const t of r.tags) counts.set(t, (counts.get(t) || 0) + 1);
+        for (const t of r.mindset || r.mindsetTags || []) {
+          const name = t.trim();
+          if (name) mindsetCounts.set(name, (mindsetCounts.get(name) || 0) + 1);
+        }
+        for (const t of r.tools || r.toolTags || []) {
+          const name = t.trim();
+          if (name) toolCounts.set(name, (toolCounts.get(name) || 0) + 1);
+        }
       }
     }
   }
-  const mindsetSet = new Set(tagCategories['mindset']);
-  const toolSet = new Set(tagCategories['tool']);
-
-  const mindset = tagCategories['mindset']
-    .filter(t => counts.has(t))
-    .map(t => ({ value: t, label: t, count: counts.get(t) || 0 }));
-  const tool = tagCategories['tool']
-    .filter(t => counts.has(t))
-    .map(t => ({ value: t, label: t, count: counts.get(t) || 0 }));
-
-  for (const [t, c] of counts) {
-    if (!mindsetSet.has(t) && !toolSet.has(t)) {
-      tool.push({ value: t, label: t, count: c });
-    }
-  }
+  const toOptions = (counts: Map<string, number>) => [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([value, count]) => ({ value, label: value, count }));
+  const mindset = toOptions(mindsetCounts);
+  const tool = toOptions(toolCounts);
   return { mindset, tool };
 }
 
@@ -138,9 +135,11 @@ export interface FilterState {
   mindset: string[];
   tools: string[];
   keyword: string;
+  stage?: string | null;
 }
 
 export function recordPasses(r: Record, f: FilterState): boolean {
+  if (f.stage && r.section !== f.stage) return false;
   if (f.mindset.length > 0) {
     const rm = r.mindset || r.mindsetTags || [];
     if (!f.mindset.some(t => rm.includes(t))) return false;
@@ -152,7 +151,7 @@ export function recordPasses(r: Record, f: FilterState): boolean {
   if (f.keyword.trim()) {
     const k = f.keyword.trim().toLowerCase();
     const hay = (
-      r.title + ' ' + r.summary + ' ' + (r.content || '') + ' ' + r.tags.join(' ')
+      (r.title || '') + ' ' + (r.summary || '') + ' ' + (r.content || '') + ' ' + (r.tags || []).join(' ')
     ).toLowerCase();
     if (!hay.includes(k)) return false;
   }

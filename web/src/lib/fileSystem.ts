@@ -1,15 +1,18 @@
 'use client';
 
-import { Portfolio, Project, Goal, Record, NarrativeSection, SECTION_META, ImportRun } from './types';
+import {
+  Portfolio, Project, Goal, Record, NarrativeSection, ImportRun,
+  DEFAULT_STAGES, EntryType, normalizeStage,
+} from './types';
 
-// Legacy v2 category → v3 lifecycle section. Used only when a record has no
-// explicit v3 `section` and its goal.json has no v3 `stage`.
+// Legacy v2 category → v4 stage. Used only when a record has no explicit
+// `section` of its own.
 const LEGACY_CATEGORY_TO_SECTION: { [k: string]: string } = {
-  Planning: 'Plan',
+  Planning: 'Discovery',
+  Research: 'Discovery',
   Design: 'Build',
   Engineering: 'Build',
-  Research: 'Think',
-  Growth: 'Ship',
+  Growth: 'Growth',
 };
 
 interface FileSystemDirectoryHandle {
@@ -17,6 +20,7 @@ interface FileSystemDirectoryHandle {
   kind: 'directory';
   getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
   getDirectoryHandle(name: string, options?: { create?: boolean }): Promise<FileSystemDirectoryHandle>;
+  removeEntry(name: string, options?: { recursive?: boolean }): Promise<void>;
   entries(): AsyncIterable<[string, FileSystemHandle]>;
   keys(): AsyncIterable<string>;
   values(): AsyncIterable<FileSystemHandle>;
@@ -171,7 +175,11 @@ export async function hasFolderPermission(handle: FileSystemDirectoryHandle): Pr
 }
 
 export async function saveRecordToFile(
-  record: { file_path: string; title: string; summary?: string; content?: string; result?: string; status?: string; updated_at?: string; tags?: string[] },
+  record: {
+    file_path: string; title: string; summary?: string; content?: string; result?: string;
+    status?: string; updated_at?: string; tags?: string[]; section?: string;
+    purpose?: string | null; tools?: string[]; mindset?: string[];
+  },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const idb = indexedDB.open('BuildersDiary', 1);
@@ -224,7 +232,11 @@ export async function saveRecordToFile(
               ...(record.result ? { result: record.result } : {}),
               ...(record.status ? { status: record.status } : {}),
               ...(record.updated_at ? { updated_at: record.updated_at } : {}),
-              ...(record.tags ? { tags: record.tags } : {}),
+              ...(record.tags !== undefined ? { tags: record.tags } : {}),
+              ...(record.section !== undefined ? { section: record.section } : {}),
+              ...(record.purpose !== undefined ? { purpose: record.purpose } : {}),
+              ...(record.tools !== undefined ? { tools: record.tools } : {}),
+              ...(record.mindset !== undefined ? { mindset: record.mindset } : {}),
             };
             await writable.write(JSON.stringify(updated, null, 2));
             await writable.close();
@@ -243,6 +255,21 @@ export async function saveRecordToFile(
   });
 }
 
+/** Delete one Task directory. The user-facing caller must confirm first. */
+export async function deleteRecordFromFile(filePath: string): Promise<void> {
+  const root = await loadFolderHandleFromStorage();
+  if (!root) throw new Error('Builder’s Diary folder is not connected');
+  const segments = filePath.split('/').filter(Boolean);
+  if (segments.length < 4 || segments[segments.length - 1] !== 'record.json') {
+    throw new Error('Invalid Builder’s Diary record path');
+  }
+  let parent = root;
+  for (const segment of segments.slice(0, -2)) {
+    parent = await parent.getDirectoryHandle(segment);
+  }
+  await parent.removeEntry(segments[segments.length - 2], { recursive: true });
+}
+
 // ── Actual folder structure ──────────────────────────────────────────────────
 // ~/builders-diary/
 //   {project-slug}/
@@ -254,6 +281,7 @@ export async function saveRecordToFile(
 
 export async function scanFolderStructure(handle: FileSystemDirectoryHandle): Promise<Portfolio> {
   const projects: Project[] = [];
+  const stages = await readStages(handle);
 
   try {
     for await (const [name, entry] of handle.entries()) {
@@ -262,17 +290,152 @@ export async function scanFolderStructure(handle: FileSystemDirectoryHandle): Pr
       if (entry.kind !== 'directory') continue;
 
       const projectFolder = entry as FileSystemDirectoryHandle;
-      const project = await scanProjectFolder(projectFolder, name);
+      const project = await scanProjectFolder(projectFolder, name, stages);
       if (project) projects.push(project);
     }
   } catch (error) {
     console.error('Error scanning folder:', error);
   }
 
-  // Sort projects by created_at descending
-  projects.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+  // User-defined order wins; unranked projects fall back to recency.
+  projects.sort((a, b) =>
+    (a.order ?? 999) - (b.order ?? 999)
+    || (b.created_at || '').localeCompare(a.created_at || '')
+  );
 
-  return { path: handle.name, projects };
+  return { path: handle.name, projects, stages };
+}
+
+/** Read the builder's editable stage list (stages.json), else the defaults. */
+export async function readStages(handle: FileSystemDirectoryHandle): Promise<string[]> {
+  try {
+    const fh = await handle.getFileHandle('stages.json');
+    const parsed = JSON.parse(await (await fh.getFile()).text());
+    const raw = Array.isArray(parsed) ? parsed : parsed?.stages;
+    const names: string[] = [];
+    for (const item of Array.isArray(raw) ? raw : []) {
+      const name = String(typeof item === 'string' ? item : item?.name ?? '').trim();
+      if (name && !names.some(n => n.toLowerCase() === name.toLowerCase())) names.push(name);
+    }
+    return names.length ? names : [...DEFAULT_STAGES];
+  } catch {
+    return [...DEFAULT_STAGES];
+  }
+}
+
+/** Persist an edited stage list back to the connected folder. */
+export async function writeStages(handle: FileSystemDirectoryHandle, stages: string[]): Promise<void> {
+  const fh = await handle.getFileHandle('stages.json', { create: true });
+  const writable = await (fh as any).createWritable();
+  await writable.write(JSON.stringify({ stages: stages.map(name => ({ name })) }, null, 2) + '\n');
+  await writable.close();
+}
+
+function slugifyForPath(value: string): string {
+  return (value || '').trim().toLowerCase()
+    .replace(/[\s_]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]/gu, '')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'untitled';
+}
+
+async function writeJsonFile(folder: FileSystemDirectoryHandle, name: string, value: unknown): Promise<void> {
+  const fh = await folder.getFileHandle(name, { create: true });
+  const writable = await (fh as any).createWritable();
+  await writable.write(JSON.stringify(value, null, 2) + '\n');
+  await writable.close();
+}
+
+/** Create a Project or Learning entry directly from the web UI. */
+export async function createProjectInFolder(input: {
+  name: string; type?: EntryType; sector?: string; oneLiner?: string; logo?: string;
+}): Promise<void> {
+  const root = await loadFolderHandleFromStorage();
+  if (!root) throw new Error('Builder’s Diary folder is not connected');
+  const name = input.name.trim();
+  if (!name) throw new Error('Project name is required');
+  const slug = slugifyForPath(name);
+  const folder = await root.getDirectoryHandle(slug, { create: true });
+  const existing = await readJson(folder, 'project.json');
+  if (existing?.id) throw new Error('A project with this name already exists');
+  const now = new Date().toISOString();
+  await writeJsonFile(folder, 'project.json', {
+    id: `p-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
+    slug, title: name, name, type: input.type || 'project',
+    sector: input.sector || undefined,
+    one_liner: input.oneLiner || undefined,
+    logo: input.logo || undefined,
+    created_at: now, updated_at: now, share_id: null,
+  });
+}
+
+/** Update metadata/order for an existing Project without touching its Tasks. */
+export async function updateProjectInFolder(project: Project): Promise<void> {
+  const root = await loadFolderHandleFromStorage();
+  if (!root) throw new Error('Builder’s Diary folder is not connected');
+  const folder = await root.getDirectoryHandle(project.slug);
+  const existing = await readJson(folder, 'project.json') || {};
+  await writeJsonFile(folder, 'project.json', {
+    ...existing,
+    title: project.title || project.name || project.slug,
+    name: project.name || project.title || project.slug,
+    type: project.type || 'project',
+    sector: project.sector || '',
+    one_liner: project.oneLiner || '',
+    logo: project.logo || null,
+    order: project.order,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function deleteProjectFromFolder(slug: string): Promise<void> {
+  const root = await loadFolderHandleFromStorage();
+  if (!root) throw new Error('Builder’s Diary folder is not connected');
+  if (!slug || slug.startsWith('.') || slug.includes('/')) throw new Error('Invalid project slug');
+  await root.removeEntry(slug, { recursive: true });
+}
+
+/** Create a minimal Task. The user can enrich every field in the detail editor. */
+export async function createTaskInFolder(input: {
+  project: Project; purposeName: string; stage: string; title: string;
+}): Promise<void> {
+  const root = await loadFolderHandleFromStorage();
+  if (!root) throw new Error('Builder’s Diary folder is not connected');
+  const title = input.title.trim();
+  const purposeName = input.purposeName.trim();
+  if (!title || !purposeName || !input.stage) throw new Error('Title, Purpose, and Stage are required');
+  const projectFolder = await root.getDirectoryHandle(input.project.slug);
+  const purposeSlug = slugifyForPath(purposeName);
+  const purposeFolder = await projectFolder.getDirectoryHandle(purposeSlug, { create: true });
+  let goal = await readJson(purposeFolder, 'goal.json');
+  const now = new Date().toISOString();
+  if (!goal?.id) {
+    goal = {
+      id: `g-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
+      slug: purposeSlug, title: purposeName, project_slug: input.project.slug,
+      created_at: now, updated_at: now, share_id: null,
+    };
+    await writeJsonFile(purposeFolder, 'goal.json', goal);
+  }
+  const date = now.slice(0, 10);
+  const stamp = date.replace(/-/g, '');
+  let seq = 0;
+  for await (const [name, entry] of purposeFolder.entries()) {
+    if (entry.kind === 'directory' && /^\d{8}-\d{3}-/.test(name)) seq += 1;
+  }
+  const recordFolderName = `${stamp}-${String(seq).padStart(3, '0')}-${slugifyForPath(title)}`;
+  const recordFolder = await purposeFolder.getDirectoryHandle(recordFolderName, { create: true });
+  await writeJsonFile(recordFolder, 'record.json', {
+    id: `r-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
+    folder: recordFolderName, title, date, section: input.stage,
+    purpose: purposeName, tags: [], tools: [], mindset: [], progress: null,
+    body_md: '', body: '', highlight: null, judgment: null, evidence: [],
+    project_id: input.project.id, project_slug: input.project.slug,
+    project_title: input.project.title, goal_id: goal?.id || undefined,
+    goal_slug: purposeSlug, goal_title: purposeName,
+    entry_type: input.project.type || 'project',
+    created_at: now, updated_at: now, share_id: null,
+  });
 }
 
 async function readJson(folder: FileSystemDirectoryHandle, fileName: string): Promise<any | null> {
@@ -312,7 +475,8 @@ export async function scanImportRuns(handle: FileSystemDirectoryHandle): Promise
 
 async function scanProjectFolder(
   projectFolder: FileSystemDirectoryHandle,
-  slug: string
+  slug: string,
+  stages: string[] = [...DEFAULT_STAGES]
 ): Promise<Project | null> {
   // Must have project.json to be considered a valid project
   const meta = await readJson(projectFolder, 'project.json');
@@ -325,8 +489,8 @@ async function scanProjectFolder(
     if (entry.kind !== 'directory') continue;
 
     const goalFolder = entry as FileSystemDirectoryHandle;
-    const goal = await scanGoalFolder(goalFolder, name);
-    if (goal) goals.push(...expandGoalSections(goal));
+    const goal = await scanGoalFolder(goalFolder, name, stages);
+    if (goal) goals.push(goal);
   }
 
   // Add project/section breadcrumbs to every task so cross-project views remain navigable.
@@ -341,17 +505,19 @@ async function scanProjectFolder(
     })),
   }));
 
-  enrichedGoals.sort((a, b) => {
-    const ao = a.order ?? 999, bo = b.order ?? 999;
-    if (ao !== bo) return ao - bo;
-    return (a.created_at || '').localeCompare(b.created_at || '');
-  });
+  // Purposes are workstreams, so they sort by when they started — not by a
+  // lifecycle stage, which now lives on each Task.
+  enrichedGoals.sort((a, b) =>
+    (a.created_at || '').localeCompare(b.created_at || '') || a.title.localeCompare(b.title)
+  );
 
   return {
     id: meta.id || `proj-${slug}`,
     slug: meta.slug || slug,
     title: meta.title || meta.name || slug,
     name: meta.name || meta.title || slug,
+    type: (meta.type === 'learning' ? 'learning' : 'project') as EntryType,
+    order: typeof meta.order === 'number' ? meta.order : undefined,
     sector: meta.sector || undefined,
     oneLiner: meta.one_liner || undefined,
     role: meta.role || undefined,
@@ -364,16 +530,16 @@ async function scanProjectFolder(
 
 async function scanGoalFolder(
   goalFolder: FileSystemDirectoryHandle,
-  slug: string
+  slug: string,
+  stages: string[] = [...DEFAULT_STAGES]
 ): Promise<Goal | null> {
   // Must have goal.json to be considered a valid section
   const meta = await readJson(goalFolder, 'goal.json');
   if (!meta) return null;
 
-  // A v3 goal.json has `stage`. Legacy goal.json stores a human goal title,
-  // so leave stage empty and derive each record's lifecycle section from its
-  // legacy category below.
-  const explicitStage = meta.stage || '';
+  // Pre-v4 goal.json may still carry a `stage`; it is only a fallback for
+  // records that have no section of their own. A Purpose has no stage now.
+  const legacyGoalStage = meta.stage || '';
 
   const records: Record[] = [];
 
@@ -384,11 +550,14 @@ async function scanGoalFolder(
     const recordFolder = entry as FileSystemDirectoryHandle;
     const record = await scanRecordFolder(recordFolder, name);
     if (record) {
-      // v3 record.section wins. Legacy records derive their lifecycle stage
-      // from the old category (Research→Think, Planning→Plan, etc.).
-      if (!record.section) {
-        record.section = explicitStage || LEGACY_CATEGORY_TO_SECTION[record.category || ''] || 'Build';
-      }
+      // The Task's own stage always wins; legacy records fall back to their old
+      // category, then to the pre-v4 goal stage. Everything is normalized into
+      // the builder's configured vocabulary.
+      const raw = record.section
+        || LEGACY_CATEGORY_TO_SECTION[record.category || '']
+        || legacyGoalStage
+        || 'Build';
+      record.section = normalizeStage(raw, stages);
       records.push(record);
     }
   }
@@ -396,17 +565,10 @@ async function scanGoalFolder(
   // Sort by folder name (YYYYMMDD-seq-...) ascending
   records.sort((a, b) => (a.folder || '').localeCompare(b.folder || ''));
 
-  const stage = explicitStage || (records.length === 1 ? records[0].section : undefined);
-  const order = typeof meta.order === 'number'
-    ? meta.order
-    : (SECTION_META[stage as string]?.order ?? 999);
-
   return {
     id: meta.id || `goal-${slug}`,
     slug: meta.slug || slug,
     title: meta.title || slug,
-    stage,
-    order,
     created_at: meta.created_at,
     records,
   };
@@ -449,44 +611,6 @@ function resultFromNarrative(narrative: NarrativeSection[]): string | undefined 
   return r?.body?.trim() || undefined;
 }
 
-function expandGoalSections(goal: Goal): Goal[] {
-  // New structure: goal.json is a Purpose with a primary lifecycle stage.
-  // Keep its semantic title intact; task-level stage overrides stay on the record.
-  if (goal.stage) {
-    return [{
-      ...goal,
-      order: goal.order ?? SECTION_META[goal.stage]?.order ?? 999,
-    }];
-  }
-
-  // Legacy folders may contain records from multiple old categories. Present
-  // those as virtual lifecycle groups without changing old files on disk.
-  const groups = new Map<string, Record[]>();
-  for (const record of goal.records) {
-    const stage = record.section || 'Build';
-    if (!groups.has(stage)) groups.set(stage, []);
-    groups.get(stage)!.push(record);
-  }
-  if (groups.size <= 1) {
-    const stage = [...groups.keys()][0] || 'Build';
-    return [{
-      ...goal,
-      stage,
-      title: goal.title || stage,
-      order: goal.order ?? SECTION_META[stage]?.order ?? 999,
-    }];
-  }
-  return [...groups.entries()].map(([stage, records]) => ({
-    ...goal,
-    id: `${goal.id}-${stage.toLowerCase()}`,
-    slug: `${goal.slug}-${stage.toLowerCase()}`,
-    title: stage,
-    stage,
-    order: SECTION_META[stage]?.order ?? 999,
-    records,
-  }));
-}
-
 async function scanRecordFolder(
   recordFolder: FileSystemDirectoryHandle,
   folderName: string
@@ -523,6 +647,7 @@ async function scanRecordFolder(
     // v3 fields
     date: meta.date || (meta.created_at ? meta.created_at.slice(0, 10) : ''),
     section,
+    entryType: meta.entry_type === 'learning' ? 'learning' : 'project',
     purpose: meta.purpose || meta.sub_purpose || null,
     subPurpose: meta.purpose || meta.sub_purpose || null,
     tools,

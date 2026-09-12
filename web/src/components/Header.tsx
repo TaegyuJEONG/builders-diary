@@ -6,7 +6,9 @@ import { Project } from '@/lib/types';
 
 interface HeaderProps {
   projects: Project[];
+  stages: string[];
   selectedProjectId: string | null;
+  selectedStage: string | null;
   selectedGoalId: string | null;
   resultCount: number;
   mindsetOptions: SelectOption[];
@@ -14,11 +16,13 @@ interface HeaderProps {
   selectedMindset: string[];
   selectedTools: string[];
   onProjectChange: (id: string | null) => void;
+  onStageChange: (stage: string | null) => void;
   onGoalChange: (id: string | null) => void;
   onMindsetChange: (v: string[]) => void;
   onToolChange: (v: string[]) => void;
+  onOpenManager: () => void;
   onReconnect: () => void;
-  onSelectRecord: (id: string) => void;
+
   isLoading?: boolean;
   /** AI tools the user has installed the skill for (from onboarding). */
   selectedClients?: string[];
@@ -305,7 +309,9 @@ function ToolsPopover({
 
 export function Header({
   projects,
+  stages,
   selectedProjectId,
+  selectedStage,
   selectedGoalId,
   resultCount,
   mindsetOptions,
@@ -313,11 +319,13 @@ export function Header({
   selectedMindset,
   selectedTools,
   onProjectChange,
+  onStageChange,
   onGoalChange,
   onMindsetChange,
   onToolChange,
+  onOpenManager,
   onReconnect,
-  onSelectRecord,
+
   isLoading = false,
   selectedClients = [],
 }: HeaderProps) {
@@ -334,26 +342,28 @@ export function Header({
     count: p.goals.reduce((a, g) => a + g.records.length, 0),
   }));
 
-  // Purposes: scoped to the selected project, or ALL purposes across projects
-  // when no project is picked (e.g. "Venture Design" across everything).
-  const goalScope = selectedProject ? goals : projects.flatMap(p => p.goals);
-  const goalOptions: SelectOption[] = goalScope.map(g => ({
-    value: g.id,
-    label: g.title,
-    count: g.records.length,
-  }));
-
-  // Card search: only cards in the current project+goal scope
-  const scopedRecords = selectedProject
-    ? (selectedGoalId
-      ? selectedProject.goals.find(g => g.id === selectedGoalId)?.records || []
-      : selectedProject.goals.flatMap(g => g.records))
+  const projectScopedRecords = selectedProject
+    ? selectedProject.goals.flatMap(g => g.records)
     : projects.flatMap(p => p.goals.flatMap(g => g.records));
+  const stageNames = Array.from(new Set([
+    ...stages,
+    ...projectScopedRecords.map(r => r.section).filter((s): s is string => !!s),
+  ]));
+  const stageOptions: SelectOption[] = stageNames.map(stage => ({
+    value: stage,
+    label: stage,
+    count: projectScopedRecords.filter(r => r.section === stage).length,
+  })).filter(o => (o.count || 0) > 0);
 
-  const searchOptions: SelectOption[] = scopedRecords.map(r => ({
-    value: r.id,
-    label: r.title,
-  }));
+  // Purpose is the Task's workstream. In All Projects, disambiguate identical
+  // Purpose names with the source project instead of silently merging IDs.
+  const goalOptions: SelectOption[] = selectedProject
+    ? goals.map(g => ({ value: g.id, label: g.title, count: g.records.length }))
+    : projects.flatMap(p => p.goals.map(g => ({
+        value: g.id,
+        label: `${g.title} · ${p.title}`,
+        count: g.records.length,
+      })));
 
   const activeFilterCount = selectedMindset.length + selectedTools.length;
 
@@ -380,37 +390,36 @@ export function Header({
       <SearchableSelect
         options={projectOptions}
         value={selectedProjectId}
-        onChange={(v) => { onProjectChange(v); onGoalChange(null); }}
+        onChange={(v) => { onProjectChange(v); onStageChange(null); onGoalChange(null); }}
         placeholder="Select project"
         searchPlaceholder="Search projects…"
         allOptionLabel="All Projects"
         minWidth={180}
       />
 
-      {/* Purpose dropdown */}
+      {/* Stage dropdown */}
       <SearchableSelect
-        options={goalOptions}
-        value={selectedGoalId}
-        onChange={onGoalChange}
-        placeholder="All Purposes"
-        searchPlaceholder="Search purposes…"
-        allOptionLabel="All Purposes"
+        options={stageOptions}
+        value={selectedStage}
+        onChange={onStageChange}
+        placeholder="All Stages"
+        searchPlaceholder="Search stages…"
+        allOptionLabel="All Stages"
         minWidth={160}
       />
 
       <span style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
 
-      {/* Card search — jump to a specific card */}
-      <div style={{ flex: 1, minWidth: 0, maxWidth: 280 }}>
-        <SearchableSelect
-          options={searchOptions}
-          value={null}
-          onChange={(v) => { if (v) onSelectRecord(v); }}
-          placeholder={`${resultCount} card${resultCount !== 1 ? 's' : ''}…`}
-          searchPlaceholder="Jump to card…"
-          minWidth={200}
-        />
-      </div>
+      {/* Purpose dropdown */}
+      <SearchableSelect
+        options={goalOptions}
+        value={selectedGoalId}
+        onChange={onGoalChange}
+        placeholder={`${resultCount} tasks · All Purposes`}
+        searchPlaceholder="Search purposes…"
+        allOptionLabel="All Purposes"
+        minWidth={220}
+      />
 
       <div style={{ flex: 1 }} />
 
@@ -502,6 +511,22 @@ export function Header({
           <ToolsPopover selectedClients={selectedClients} onClose={() => setToolsOpen(false)} />
         )}
       </div>
+
+      {/* Portfolio manager */}
+      <button
+        onClick={onOpenManager}
+        title="Manage portfolio"
+        style={{
+          width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'transparent', border: '1px solid var(--border)', borderRadius: 4,
+          color: 'var(--text2)', cursor: 'pointer', flexShrink: 0,
+        }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3.1 3.1l1.4 1.4M9.5 9.5l1.4 1.4M10.9 3.1L9.5 4.5M4.5 9.5l-1.4 1.4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+          <circle cx="7" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.1"/>
+        </svg>
+      </button>
 
       {/* Folder change icon button */}
       <button
