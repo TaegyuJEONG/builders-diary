@@ -283,17 +283,17 @@ function PurposeStageBoard({
   }
 
   return (
-    <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 14, padding: '16px 20px 24px', overflowX: 'auto', overflowY: 'auto', height: '100%' }}>
+    <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'row', alignItems: 'stretch', gap: 14, padding: '16px 20px 24px', overflowX: 'auto', overflowY: 'hidden', height: '100%' }}>
       {orderedStages.map(([stage, records]) => {
         const color = stageMeta(stage, stages).color;
         return (
-          <div key={stage} style={{ width: 280, minWidth: 280, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
+          <div key={stage} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{records.length} task{records.length === 1 ? '' : 's'}</span>
             </div>
-            <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '12px 13px', overflowY: 'visible' }}>
+            <div className="thin-scroll" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '12px 13px', overflowY: 'auto', overflowX: 'hidden' }}>
               {records.map(record => (
                 <TaskCard
                   key={record.id}
