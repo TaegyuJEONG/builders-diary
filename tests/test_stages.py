@@ -150,5 +150,28 @@ class EntryTypeTests(unittest.TestCase):
             self.assertEqual(meta["type"], "project")
 
 
+class ActivityTests(unittest.TestCase):
+    def test_activities_are_saved_as_explicit_task_methods(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(
+                root,
+                project="P",
+                goal="Validate demand",
+                stage="Discovery",
+                activity="Research, User Interview",
+                title="Interview early users",
+            )
+            record = json.loads(next(root.glob("p/*/*/record.json")).read_text(encoding="utf-8"))
+            self.assertEqual(record["activities"], ["Research", "User Interview"])
+
+    def test_activities_default_to_empty_list(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(root, project="P", goal="Purpose", stage="Build", title="A task")
+            record = json.loads(next(root.glob("p/*/*/record.json")).read_text(encoding="utf-8"))
+            self.assertEqual(record["activities"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

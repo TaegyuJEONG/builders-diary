@@ -68,18 +68,18 @@ Three levels:
 ```
 Project   — the venture/effort (sector, one-liner) — mirrors a portfolio header
   └ Purpose — a reusable workstream such as Venture Design, Curation Taxonomy, or Market Validation
-       └ Task — one unit of work (stage, task aim, tools, mindset, progress, highlight, evidence, body)
+       └ Task — one unit of work (stage, activity, task aim, tools, mindset, progress, highlight, evidence, body)
 ```
 
-A Purpose carries one primary lifecycle `stage` — Think → Plan → Build → Review → Test → Ship → Reflect —
-so the web view tells a readable story while Purpose remains searchable across projects.
+A Purpose is a reusable workstream. It carries **no** lifecycle stage: one workstream can span Discovery through Growth.
 
 A **Task** carries:
 
 | field | what it is |
 |-------|------------|
 | title | what was attempted (intent, not status) |
-| stage | inherited lifecycle stage from its Purpose (Think/Plan/Build/...; rare task override allowed) |
+| stage | one lifecycle stage: Discovery → Build → Growth (user-custom stages also allowed) |
+| activity | 1–3 repeatable methods such as Research, User Interview, Prototype, Development, Evaluation, Outreach, or Launch |
 | purpose | the task's specific aim, one line |
 | tools | tools actually used in this task; always include the active AI client (e.g. Antigravity) |
 | mindset | 1–3 discovery tags (skeptical, first-principles, cost-aware…) |
@@ -175,12 +175,13 @@ this is where the real evidence lives, not just the chat bubbles:
 
 ---
 
-## Step 3 — Generate candidate tasks with a Purpose and Stage
+## Step 3 — Generate candidate tasks with a Purpose, Stage, and Activity
 
 From the session traces, split work by intent. Infer for each candidate:
 
 - a reusable **Purpose** (for example, Venture Design, Curation Taxonomy, or Market Validation);
-- its likely lifecycle **stage** (Think → Plan → Build → Review → Test → Ship → Reflect).
+- its likely lifecycle **stage** (Discovery → Build → Growth);
+- 1–3 **activities** describing how the work happened (Research, User Interview, Prototype, Development, Evaluation, Outreach, etc.).
 
 Both are draft recommendations only. The builder curates the candidate task list before any full card is written. If a session genuinely spans two Purposes, split it into separate candidates rather than forcing a broad container.
 
@@ -197,10 +198,10 @@ no full bodies yet:
 ```text
 [builders-diary] N candidate tasks found
 
-#  Draft section  Task                                      Highlight  Evidence
-1  Think          Reframe email: tool-intro → running proof  ✓          chat, proposal.md
-2  Think          Catch the stale-source claim, re-research   ✓          research.md
-3  Plan           Reject 4-day market test → internal setup   ✓          chat
+#  Stage       Activity          Task                                      Highlight  Evidence
+1  Discovery   Research          Reframe email: tool-intro → running proof  ✓          chat, proposal.md
+2  Discovery   Research          Catch the stale-source claim, re-research   ✓          research.md
+3  Discovery   Problem Framing   Reject 4-day market test → internal setup   ✓          chat
 ```
 
 First use the client's structured question tool in single-select mode:
@@ -323,7 +324,8 @@ python3 "{{BUILDERS_DIARY_SCRIPT}}" \
   --one-liner   "AI-native operating setup pitched into a marketplace EiR role" \
 
   --goal        "Curation Taxonomy" \
-  --stage       "Think" \
+  --stage       "Discovery" \
+  --activity    "Research,Source validation" \
   --title       "Catch the stale-source claim and re-research from official repos" \
   --purpose     "Verify GStack/Hermes claims against primary sources" \
   --tools       "Hermes,GStack,Web search" \
@@ -356,7 +358,7 @@ captured?, evidence count, path) and the section rollup:
 
 ```
 Saved 3 tasks.
-  Think: 2 done  ·  Plan: 1 ongoing
+  Discovery: 2 done  ·  Build: 1 done
 View your portfolio: http://localhost:3111
 ```
 

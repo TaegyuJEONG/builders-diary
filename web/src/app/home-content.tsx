@@ -56,6 +56,7 @@ export function HomeContent() {
   // selection
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<string | null>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
   const [exploreMode, setExploreMode] = useState<ExploreMode>('project');
@@ -266,6 +267,7 @@ export function HomeContent() {
       tags:       updated.tags,
       section:    updated.section,
       purpose:    updated.purpose,
+      activities: updated.activities,
       tools:      updated.tools,
       mindset:    updated.mindset,
     });
@@ -302,12 +304,12 @@ export function HomeContent() {
 
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
-    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage }),
-    [selectedMindset, selectedTools, selectedStage]
+    () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage, activity: selectedActivity }),
+    [selectedMindset, selectedTools, selectedStage, selectedActivity]
   );
 
   const tagOptions = useMemo(
-    () => (portfolio ? buildTagOptions(portfolio) : { mindset: [], tool: [] }),
+    () => (portfolio ? buildTagOptions(portfolio) : { mindset: [], tool: [], activity: [] }),
     [portfolio]
   );
 
@@ -374,15 +376,16 @@ export function HomeContent() {
         stages={portfolio.stages || []}
         selectedProjectId={selectedProjectId}
         selectedStage={selectedStage}
-        selectedGoalId={selectedGoalId}
+        selectedActivity={selectedActivity}
         resultCount={filteredRecords.length}
+        activityOptions={tagOptions.activity}
         mindsetOptions={tagOptions.mindset}
         toolOptions={tagOptions.tool}
         selectedMindset={selectedMindset}
         selectedTools={selectedTools}
-        onProjectChange={(v) => { setExploreMode('project'); setSelectedProjectId(v); setSelectedStage(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
+        onProjectChange={(v) => { setExploreMode('project'); setSelectedProjectId(v); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
         onStageChange={(v) => { setSelectedStage(v); setSelectedRecordId(null); }}
-        onGoalChange={(v) => { setSelectedGoalId(v); setSelectedRecordId(null); }}
+        onActivityChange={(v) => { setSelectedActivity(v); setSelectedRecordId(null); }}
         onMindsetChange={setSelectedMindset}
         onToolChange={setSelectedTools}
         onOpenManager={() => setManagerOpen(true)}

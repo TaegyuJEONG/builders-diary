@@ -135,7 +135,7 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState({
     title: '', summary: '', content: '', result: '',
-    section: '', purpose: '', tools: '', mindset: '',
+    section: '', purpose: '', activities: '', tools: '', mindset: '',
   });
 
   // Reset edit mode + draft when record changes
@@ -149,6 +149,7 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
         result:   record.result   || '',
         section:  record.section  || 'Build',
         purpose:  record.purpose || record.subPurpose || '',
+        activities: (record.activities || []).join(', '),
         tools:    (record.tools || record.toolTags || []).join(', '),
         mindset:  (record.mindset || record.mindsetTags || []).join(', '),
       });
@@ -171,6 +172,7 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
         result:     draft.result,
         section:    draft.section || 'Build',
         purpose:    draft.purpose || null,
+        activities: draft.activities.split(',').map(v => v.trim()).filter(Boolean),
         tools:      draft.tools.split(',').map(v => v.trim()).filter(Boolean),
         toolTags:   draft.tools.split(',').map(v => v.trim()).filter(Boolean),
         mindset:    draft.mindset.split(',').map(v => v.trim()).filter(Boolean),
@@ -364,6 +366,7 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
           // ── Edit form ──
           <>
             <EditTextarea label="Purpose" value={draft.purpose} onChange={setField('purpose')} rows={2} />
+            <EditTextarea label="Activities · comma separated" value={draft.activities} onChange={setField('activities')} rows={2} />
             <EditTextarea label="Summary" value={draft.summary} onChange={setField('summary')} rows={3} />
             <EditTextarea label="Work" value={draft.content} onChange={setField('content')} rows={6} />
             <EditTextarea label="Result" value={draft.result} onChange={setField('result')} rows={3} />

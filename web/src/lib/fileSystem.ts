@@ -178,7 +178,7 @@ export async function saveRecordToFile(
   record: {
     file_path: string; title: string; summary?: string; content?: string; result?: string;
     status?: string; updated_at?: string; tags?: string[]; section?: string;
-    purpose?: string | null; tools?: string[]; mindset?: string[];
+    purpose?: string | null; tools?: string[]; mindset?: string[]; activities?: string[];
   },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -237,6 +237,7 @@ export async function saveRecordToFile(
               ...(record.purpose !== undefined ? { purpose: record.purpose } : {}),
               ...(record.tools !== undefined ? { tools: record.tools } : {}),
               ...(record.mindset !== undefined ? { mindset: record.mindset } : {}),
+              ...(record.activities !== undefined ? { activities: record.activities } : {}),
             };
             await writable.write(JSON.stringify(updated, null, 2));
             await writable.close();
@@ -397,7 +398,7 @@ export async function deleteProjectFromFolder(slug: string): Promise<void> {
 
 /** Create a minimal Task. The user can enrich every field in the detail editor. */
 export async function createTaskInFolder(input: {
-  project: Project; purposeName: string; stage: string; title: string;
+  project: Project; purposeName: string; stage: string; title: string; activities?: string[];
 }): Promise<void> {
   const root = await loadFolderHandleFromStorage();
   if (!root) throw new Error('Builder’s Diary folder is not connected');
@@ -428,7 +429,7 @@ export async function createTaskInFolder(input: {
   await writeJsonFile(recordFolder, 'record.json', {
     id: `r-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
     folder: recordFolderName, title, date, section: input.stage,
-    purpose: purposeName, tags: [], tools: [], mindset: [], progress: null,
+    purpose: purposeName, activities: input.activities || [], tags: [], tools: [], mindset: [], progress: null,
     body_md: '', body: '', highlight: null, judgment: null, evidence: [],
     project_id: input.project.id, project_slug: input.project.slug,
     project_title: input.project.title, goal_id: goal?.id || undefined,
@@ -700,6 +701,7 @@ async function scanRecordFolder(
     // v3 fields
     date: meta.date || (meta.created_at ? meta.created_at.slice(0, 10) : ''),
     section,
+    activities: Array.isArray(meta.activities) ? meta.activities : [],
     entryType: meta.entry_type === 'learning' ? 'learning' : 'project',
     purpose: meta.purpose || meta.sub_purpose || null,
     subPurpose: meta.purpose || meta.sub_purpose || null,

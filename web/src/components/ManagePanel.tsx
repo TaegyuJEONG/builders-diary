@@ -35,7 +35,7 @@ export function ManagePanel({ portfolio, onClose, onRefresh }: ManagePanelProps)
   const selected = useMemo(() => portfolio.projects.find(p => p.slug === selectedSlug), [portfolio.projects, selectedSlug]);
   const [projectDraft, setProjectDraft] = useState<Partial<Project>>({});
   const [newProject, setNewProject] = useState({ name: '', type: 'project' as 'project' | 'learning', sector: '', oneLiner: '', logo: '' });
-  const [newTask, setNewTask] = useState({ projectSlug: portfolio.projects[0]?.slug || '', title: '', purpose: '', stage: stages[0] || 'Discovery' });
+  const [newTask, setNewTask] = useState({ projectSlug: portfolio.projects[0]?.slug || '', title: '', purpose: '', activity: '', stage: stages[0] || 'Discovery' });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -143,12 +143,13 @@ export function ManagePanel({ portfolio, onClose, onRefresh }: ManagePanelProps)
               <p style={{ color: 'var(--text2)', fontSize: 12, lineHeight: 1.55, margin: 0 }}>Create the shell now, then edit its full story and chips from the Task panel.</p>
               <div><Label>Project</Label><select style={fieldStyle} value={newTask.projectSlug} onChange={e => setNewTask(v => ({ ...v, projectSlug: e.target.value }))}>{portfolio.projects.map(p => <option key={p.id} value={p.slug}>{p.title}</option>)}</select></div>
               <div><Label>Stage</Label><select style={fieldStyle} value={newTask.stage} onChange={e => setNewTask(v => ({ ...v, stage: e.target.value }))}>{stages.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
+              <div><Label>Activities · comma separated</Label><input style={fieldStyle} value={newTask.activity} onChange={e => setNewTask(v => ({ ...v, activity: e.target.value }))} /></div>
               <div><Label>Purpose</Label><input style={fieldStyle} value={newTask.purpose} onChange={e => setNewTask(v => ({ ...v, purpose: e.target.value }))} /></div>
               <div><Label>Task title</Label><input style={fieldStyle} value={newTask.title} onChange={e => setNewTask(v => ({ ...v, title: e.target.value }))} /></div>
               <button disabled={busy || !newTask.projectSlug || !newTask.title.trim() || !newTask.purpose.trim()} style={{ ...buttonStyle, color: 'var(--accent)', borderColor: 'var(--accent)' }} onClick={() => {
                 const project = portfolio.projects.find(p => p.slug === newTask.projectSlug);
                 if (!project) return;
-                run(async () => { await createTaskInFolder({ project, purposeName: newTask.purpose, stage: newTask.stage, title: newTask.title }); setNewTask(v => ({ ...v, title: '', purpose: '' })); }, 'Task created.');
+                run(async () => { await createTaskInFolder({ project, purposeName: newTask.purpose, stage: newTask.stage, title: newTask.title, activities: newTask.activity.split(',').map(v => v.trim()).filter(Boolean) }); setNewTask(v => ({ ...v, title: '', purpose: '', activity: '' })); }, 'Task created.');
               }}>Create task</button>
             </div>
           )}

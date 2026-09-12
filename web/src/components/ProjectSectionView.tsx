@@ -182,6 +182,25 @@ function TaskCard({
         </div>
       )}
 
+      {(record.activities || []).length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+          {(record.activities || []).map(activity => {
+            const active = filterState.activity === activity;
+            return (
+              <span key={activity} className="mono" style={{
+                fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
+                background: active ? 'var(--tag-active-bg)' : 'transparent',
+                color: active ? 'var(--accent)' : 'var(--text3)',
+                border: `1px solid ${active ? 'var(--accent-dim)' : 'var(--border)'}`,
+                whiteSpace: 'nowrap',
+              }}>
+                {activity}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* tools */}
       {tools.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>

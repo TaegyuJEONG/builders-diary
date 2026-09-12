@@ -390,6 +390,7 @@ def main() -> int:
     # Stage is the lifecycle grouping shown around purposes in the web UI.
     ap.add_argument("--goal", default="", help="Purpose / workstream title, e.g. 'Curation Taxonomy'")
     ap.add_argument("--stage", default="", help=f"Task lifecycle stage: {', '.join(DEFAULT_STAGES)} (custom allowed)")
+    ap.add_argument("--activity", default="", help="Comma-separated task methods, e.g. 'Research,User Interview'")
     # --section remains a legacy shorthand: it supplies both purpose and stage.
     ap.add_argument("--section", default="", help="Legacy shorthand for --goal and --stage")
 
@@ -454,6 +455,7 @@ def main() -> int:
     tags = [t.strip() for t in args.tags.split(",") if t.strip()]
     tools = [t.strip() for t in args.tools.split(",") if t.strip()]
     mindset = [m.strip() for m in args.mindset.split(",") if m.strip()]
+    activities = [a.strip() for a in args.activity.split(",") if a.strip()]
 
     # Evidence: optional JSON list
     evidence = []
@@ -505,6 +507,7 @@ def main() -> int:
             "title": args.title,
             "date": record_date,
             "section": stage,
+            "activities": activities,
             "entry_type": project.get("type") or "project",
             "purpose": args.purpose or args.sub_purpose or None,
             "tags": tags,

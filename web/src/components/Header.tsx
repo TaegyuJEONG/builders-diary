@@ -9,15 +9,16 @@ interface HeaderProps {
   stages: string[];
   selectedProjectId: string | null;
   selectedStage: string | null;
-  selectedGoalId: string | null;
+  selectedActivity: string | null;
   resultCount: number;
+  activityOptions: SelectOption[];
   mindsetOptions: SelectOption[];
   toolOptions: SelectOption[];
   selectedMindset: string[];
   selectedTools: string[];
   onProjectChange: (id: string | null) => void;
   onStageChange: (stage: string | null) => void;
-  onGoalChange: (id: string | null) => void;
+  onActivityChange: (activity: string | null) => void;
   onMindsetChange: (v: string[]) => void;
   onToolChange: (v: string[]) => void;
   onOpenManager: () => void;
@@ -315,15 +316,16 @@ export function Header({
   stages,
   selectedProjectId,
   selectedStage,
-  selectedGoalId,
+  selectedActivity,
   resultCount,
+  activityOptions,
   mindsetOptions,
   toolOptions,
   selectedMindset,
   selectedTools,
   onProjectChange,
   onStageChange,
-  onGoalChange,
+  onActivityChange,
   onMindsetChange,
   onToolChange,
   onOpenManager,
@@ -358,15 +360,6 @@ export function Header({
     count: projectScopedRecords.filter(r => r.section === stage).length,
   })).filter(o => (o.count || 0) > 0);
 
-  // Purpose is the Task's workstream. In All Projects, disambiguate identical
-  // Purpose names with the source project instead of silently merging IDs.
-  const goalOptions: SelectOption[] = selectedProject
-    ? goals.map(g => ({ value: g.id, label: g.title, count: g.records.length }))
-    : projects.flatMap(p => p.goals.map(g => ({
-        value: g.id,
-        label: `${g.title} · ${p.title}`,
-        count: g.records.length,
-      })));
 
   const activeFilterCount = selectedMindset.length + selectedTools.length;
 
@@ -393,7 +386,7 @@ export function Header({
       <SearchableSelect
         options={projectOptions}
         value={selectedProjectId}
-        onChange={(v) => { onProjectChange(v); onStageChange(null); onGoalChange(null); }}
+        onChange={(v) => { onProjectChange(v); onStageChange(null); onActivityChange(null); }}
         placeholder="Select project"
         searchPlaceholder="Search projects…"
         allOptionLabel="All Projects"
@@ -413,14 +406,14 @@ export function Header({
 
       <span style={{ width: 1, height: 20, background: 'var(--border)', flexShrink: 0 }} />
 
-      {/* Purpose dropdown */}
+      {/* Activity dropdown */}
       <SearchableSelect
-        options={goalOptions}
-        value={selectedGoalId}
-        onChange={onGoalChange}
-        placeholder={`${resultCount} tasks · All Purposes`}
-        searchPlaceholder="Search purposes…"
-        allOptionLabel="All Purposes"
+        options={activityOptions}
+        value={selectedActivity}
+        onChange={onActivityChange}
+        placeholder={`${resultCount} tasks · All Activities`}
+        searchPlaceholder="Search activities…"
+        allOptionLabel="All Activities"
         minWidth={220}
       />
 

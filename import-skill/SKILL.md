@@ -189,6 +189,7 @@ For each selected project:
 Every retained Task card must use the daily Builder's Diary evidence rules:
 
 - English title, Task aim, and body;
+- 1–3 activities (Research, User Interview, Prototype, Development, Evaluation, Outreach, etc.);
 - tools actually used;
 - 1–3 mindset tags;
 - progress;
@@ -215,6 +216,7 @@ python3 "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
   --date "2026-03-15" \
   --title "Define a Product Builder curation boundary" \
   --purpose "Separate hands-on builders from AI-adjacent and conventional roles." \
+  --activity "Research,Taxonomy design" \
   --tools "Claude Chat,Claude Code,Git" \
   --mindset "skeptical,source-first" \
   --progress "ongoing" \

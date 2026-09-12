@@ -106,9 +106,11 @@ export function convertMockToPortfolio(): Portfolio {
 export function buildTagOptions(portfolio: Portfolio): {
   mindset: SelectOption[];
   tool: SelectOption[];
+  activity: SelectOption[];
 } {
   const mindsetCounts = new Map<string, number>();
   const toolCounts = new Map<string, number>();
+  const activityCounts = new Map<string, number>();
   for (const p of portfolio.projects) {
     for (const g of p.goals) {
       for (const r of g.records) {
@@ -120,6 +122,10 @@ export function buildTagOptions(portfolio: Portfolio): {
           const name = t.trim();
           if (name) toolCounts.set(name, (toolCounts.get(name) || 0) + 1);
         }
+        for (const activity of r.activities || []) {
+          const name = activity.trim();
+          if (name) activityCounts.set(name, (activityCounts.get(name) || 0) + 1);
+        }
       }
     }
   }
@@ -128,7 +134,8 @@ export function buildTagOptions(portfolio: Portfolio): {
     .map(([value, count]) => ({ value, label: value, count }));
   const mindset = toOptions(mindsetCounts);
   const tool = toOptions(toolCounts);
-  return { mindset, tool };
+  const activity = toOptions(activityCounts);
+  return { mindset, tool, activity };
 }
 
 export interface FilterState {
@@ -136,10 +143,12 @@ export interface FilterState {
   tools: string[];
   keyword: string;
   stage?: string | null;
+  activity?: string | null;
 }
 
 export function recordPasses(r: Record, f: FilterState): boolean {
   if (f.stage && r.section !== f.stage) return false;
+  if (f.activity && !(r.activities || []).includes(f.activity)) return false;
   if (f.mindset.length > 0) {
     const rm = r.mindset || r.mindsetTags || [];
     if (!f.mindset.some(t => rm.includes(t))) return false;
