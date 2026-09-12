@@ -24,13 +24,16 @@ interface OnboardingScreenProps {
   onComplete: () => void;
 }
 
+const IMPORT_PROMPT = '/builders-diary-import';
+
+// Launch ecosystem is Claude Code only for now. Other clients are surfaced so
+// heavy Claude Code users understand the roadmap without being slowed down by
+// dead options.
 const CLIENTS = [
   { id: 'claude',   label: 'Claude Code',  desc: 'Anthropic',         available: true  },
-  { id: 'cursor',   label: 'Cursor',        desc: 'Anysphere',         available: true  },
-  { id: 'windsurf', label: 'Windsurf',      desc: 'Codeium',           available: true  },
-  { id: 'antigravity', label: 'Antigravity', desc: 'Google',           available: true  },
-  { id: 'cline',    label: 'Cline',         desc: 'VS Code extension', available: true  },
-  { id: 'chatgpt',  label: 'ChatGPT',       desc: 'OpenAI',            available: false },
+  { id: 'cursor',   label: 'Cursor',        desc: 'Anysphere',         available: false },
+  { id: 'windsurf', label: 'Windsurf',      desc: 'Codeium',           available: false },
+  { id: 'antigravity', label: 'Antigravity', desc: 'Google',           available: false },
   { id: 'codex',    label: 'Codex CLI',     desc: 'OpenAI',            available: false },
 ];
 
@@ -44,8 +47,14 @@ export function OnboardingScreen({
   const [phase, setPhase] = useState<Phase>('select');
   const [copied, setCopied] = useState<string | null>(null);
   const [markerStatus, setMarkerStatus] = useState<MarkerStatus>('unchecked');
+  const [installConfirmed, setInstallConfirmed] = useState(false);
 
   const hint = terminalHint(detectOS());
+
+  // Claude Code is the only launch client today — select it by default.
+  useEffect(() => {
+    if (selectedClients.length === 0) setSelectedClients(['claude']);
+  }, [selectedClients, setSelectedClients]);
 
   // When a folder gets connected (or re-connected), verify it's the installer's folder.
   useEffect(() => {
@@ -59,8 +68,6 @@ export function OnboardingScreen({
         if (cancelled) return;
         if (marker) {
           setMarkerStatus('ok');
-          // Brief beat so the user sees the confirmation, then enter the portfolio.
-          setTimeout(() => { if (!cancelled) onComplete(); }, 900);
         } else {
           setMarkerStatus('missing');
         }
@@ -69,9 +76,9 @@ export function OnboardingScreen({
       }
     })();
     return () => { cancelled = true; };
-  }, [folderConnected, connectNonce, onComplete]);
+  }, [folderConnected, connectNonce]);
 
-  // Install snippet — one command installs the skill for all selected tools
+  // Install snippet — one command installs the skill for the selected tool.
   const toolFlag = selectedClients.join(',');
   const installSnippet = `npx --yes builders-diary@latest install --tools ${toolFlag || 'claude'}`;
 
@@ -82,17 +89,10 @@ export function OnboardingScreen({
     });
   }
 
-  function toggleClient(id: string) {
-    setSelectedClients(
-      selectedClients.includes(id)
-        ? selectedClients.filter(c => c !== id)
-        : [...selectedClients, id]
-    );
-  }
-
   function goBackToSelect() {
     setPhase('select');
     setMarkerStatus('unchecked');
+    setInstallConfirmed(false);
   }
 
   return (
@@ -137,7 +137,7 @@ export function OnboardingScreen({
               fontSize: 10, color: 'var(--text3)',
               textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16,
             }}>
-              Which AI tools do you use?
+              Works with
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 32 }}>
@@ -146,7 +146,7 @@ export function OnboardingScreen({
                 return (
                   <button
                     key={c.id}
-                    onClick={() => c.available && toggleClient(c.id)}
+                    onClick={() => c.available && setSelectedClients(['claude'])}
                     className="mono"
                     style={{
                       width: '100%',
@@ -164,7 +164,6 @@ export function OnboardingScreen({
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      {/* checkbox */}
                       <div style={{
                         width: 16, height: 16, borderRadius: 3, flexShrink: 0,
                         border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
@@ -190,7 +189,7 @@ export function OnboardingScreen({
                         border: '1px solid var(--border)',
                         borderRadius: 3, padding: '2px 8px',
                       }}>
-                        Upcoming
+                        Coming soon
                       </div>
                     )}
                   </button>
@@ -199,23 +198,20 @@ export function OnboardingScreen({
             </div>
 
             <button
-              onClick={() => selectedClients.length > 0 && setPhase('steps')}
-              disabled={selectedClients.length === 0}
+              onClick={() => setPhase('steps')}
               className="mono"
               style={{
                 width: '100%',
                 padding: '13px',
-                background: selectedClients.length > 0 ? 'var(--accent)' : 'var(--border)',
-                color: selectedClients.length > 0 ? 'var(--bg)' : 'var(--text3)',
+                background: 'var(--accent)',
+                color: 'var(--bg)',
                 border: 'none', borderRadius: 6,
                 fontSize: 13, fontWeight: 600, letterSpacing: '0.04em',
-                cursor: selectedClients.length > 0 ? 'pointer' : 'not-allowed',
+                cursor: 'pointer',
                 transition: 'background 0.2s',
               }}
             >
-              {selectedClients.length === 0
-                ? 'Pick at least one to continue'
-                : `Continue →`}
+              Continue →
             </button>
           </>
         )}
@@ -234,14 +230,13 @@ export function OnboardingScreen({
                 display: 'flex', alignItems: 'center', gap: 6,
               }}
             >
-              ← Change tools
+              ← Change tool
             </button>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-              {/* ── STEP 1: Install (the npx command is the hero) ── */}
-              <StepCard n={1} active={!folderConnected} done={markerStatus === 'ok'} title="Install the skill">
-                {/* install command — hero */}
+              {/* ── STEP 1: Install (shown alone first) ── */}
+              <StepCard n={1} active={!installConfirmed} done={installConfirmed} title="Install the skill">
                 <div style={{
                   background: 'var(--bg)',
                   border: '1px solid var(--accent)',
@@ -268,7 +263,6 @@ export function OnboardingScreen({
                   </button>
                 </div>
 
-                {/* OS-aware terminal hint */}
                 <div className="mono" style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.7 }}>
                   {hint.label}: press{' '}
                   <span style={{
@@ -278,87 +272,148 @@ export function OnboardingScreen({
                   {hint.type && <>, type <span style={{ color: 'var(--text2)' }}>{hint.type}</span>, hit Enter</>}, then paste.
                 </div>
 
-                {selectedClients.includes('claude') && (
-                  <div className="mono" style={{
-                    fontSize: 10.5, color: 'var(--text2)', lineHeight: 1.65,
-                    marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)',
-                  }}>
-                    Claude Code: use the <strong>Code</strong> tab with a <strong>Local</strong> project.
-                    This installer does not update Claude Chat or Settings → Skills.
-                  </div>
+                {!installConfirmed && (
+                  <button
+                    onClick={() => setInstallConfirmed(true)}
+                    className="mono"
+                    style={{
+                      width: '100%', marginTop: 14,
+                      padding: '11px', fontSize: 12, fontWeight: 600,
+                      background: 'var(--accent)', color: 'var(--bg)',
+                      border: 'none', borderRadius: 4, cursor: 'pointer',
+                    }}
+                  >
+                    Installed — continue →
+                  </button>
                 )}
               </StepCard>
 
-              {/* ── STEP 2: Connect the folder the installer created ── */}
-              <StepCard n={2} active={!!folderConnected || markerStatus !== 'unchecked'} done={markerStatus === 'ok'} title="Connect your folder">
-                <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
-                  The installer just created a{' '}
-                  <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>builders-diary</code>{' '}
-                  folder in your <strong>Documents</strong>. Pick it — the picker opens right there.
-                </p>
+              {/* ── STEP 2: Connect the folder (revealed after install) ── */}
+              {installConfirmed && (
+                <StepCard n={2} active={markerStatus !== 'ok'} done={markerStatus === 'ok'} title="Connect your folder">
+                  <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
+                    The installer just created a{' '}
+                    <code className="mono" style={{ fontSize: 12, color: 'var(--text)' }}>builders-diary</code>{' '}
+                    folder in your <strong>Documents</strong>. Pick it — the picker opens right there.
+                  </p>
 
-                {markerStatus !== 'ok' && (
-                  <button
-                    onClick={onSelectFolder}
-                    disabled={isLoading || markerStatus === 'checking'}
-                    className="mono"
-                    style={{
-                      padding: '10px 24px',
-                      background: (isLoading || markerStatus === 'checking') ? 'var(--border)' : 'var(--accent)',
-                      color: (isLoading || markerStatus === 'checking') ? 'var(--text3)' : 'var(--bg)',
-                      border: 'none', borderRadius: 4,
-                      fontSize: 12, fontWeight: 600, letterSpacing: '0.05em',
-                      cursor: (isLoading || markerStatus === 'checking') ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isLoading ? 'Connecting…'
-                      : markerStatus === 'checking' ? 'Checking…'
-                      : markerStatus === 'missing' ? 'Choose folder again'
-                      : 'Choose folder'}
-                  </button>
-                )}
+                  {markerStatus !== 'ok' && (
+                    <button
+                      onClick={onSelectFolder}
+                      disabled={isLoading || markerStatus === 'checking'}
+                      className="mono"
+                      style={{
+                        padding: '10px 24px',
+                        background: (isLoading || markerStatus === 'checking') ? 'var(--border)' : 'var(--accent)',
+                        color: (isLoading || markerStatus === 'checking') ? 'var(--text3)' : 'var(--bg)',
+                        border: 'none', borderRadius: 4,
+                        fontSize: 12, fontWeight: 600, letterSpacing: '0.05em',
+                        cursor: (isLoading || markerStatus === 'checking') ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      {isLoading ? 'Connecting…'
+                        : markerStatus === 'checking' ? 'Checking…'
+                        : markerStatus === 'missing' ? 'Choose folder again'
+                        : 'Choose folder'}
+                    </button>
+                  )}
 
-                {error && (
-                  <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>
-                )}
+                  {error && (
+                    <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>
+                  )}
 
-                {/* verified */}
-                {markerStatus === 'ok' && (
-                  <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>
-                    ✓ Install verified — opening your portfolio…
-                  </div>
-                )}
-
-                {/* failure caught: wrong folder or install never ran */}
-                {markerStatus === 'missing' && (
-                  <div style={{
-                    marginTop: 14,
-                    background: 'var(--surface)',
-                    border: '1px solid var(--danger)',
-                    borderRadius: 6, padding: '12px 14px',
-                  }}>
-                    <div className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>
-                      That folder wasn&apos;t set up by the installer{folderPath ? ` (you picked “${folderPath}”)` : ''}.
+                  {markerStatus === 'ok' && (
+                    <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>
+                      ✓ Folder connected
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.7 }}>
-                      Make sure the command in step 1 ran without errors, then pick the{' '}
-                      <code className="mono" style={{ fontSize: 11.5, color: 'var(--text)' }}>builders-diary</code>{' '}
-                      folder in your Documents.
+                  )}
+
+                  {markerStatus === 'missing' && (
+                    <div style={{
+                      marginTop: 14,
+                      background: 'var(--surface)',
+                      border: '1px solid var(--danger)',
+                      borderRadius: 6, padding: '12px 14px',
+                    }}>
+                      <div className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>
+                        That folder wasn&apos;t set up by the installer{folderPath ? ` (you picked “${folderPath}”)` : ''}.
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.7 }}>
+                        Make sure the command in step 1 ran without errors, then pick the{' '}
+                        <code className="mono" style={{ fontSize: 11.5, color: 'var(--text)' }}>builders-diary</code>{' '}
+                        folder in your Documents.
+                      </div>
+                      <button
+                        onClick={onComplete}
+                        className="mono"
+                        style={{
+                          marginTop: 10, background: 'none', border: 'none',
+                          color: 'var(--text3)', fontSize: 10.5, cursor: 'pointer',
+                          padding: 0, textDecoration: 'underline',
+                        }}
+                      >
+                        I know what I&apos;m doing — use this folder anyway
+                      </button>
                     </div>
+                  )}
+                </StepCard>
+              )}
+
+              {/* ── STEP 3: Start importing (revealed after folder connects) ── */}
+              {markerStatus === 'ok' && (
+                <StepCard n={3} active done={false} title="Bring in your past work">
+                  <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
+                    Open Claude Code next to this page, then run the import skill. Confirmed projects,
+                    stages, and tasks will appear here live as you approve them.
+                  </p>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <a
+                      href="claude://"
+                      className="mono"
+                      style={{
+                        display: 'block', textAlign: 'center', textDecoration: 'none',
+                        padding: '11px', fontSize: 12, fontWeight: 600,
+                        background: 'var(--accent)', color: 'var(--bg)',
+                        border: 'none', borderRadius: 4,
+                      }}
+                    >
+                      Open Claude Code
+                    </a>
+                    <button
+                      onClick={() => copy(IMPORT_PROMPT, 'import')}
+                      className="mono"
+                      style={{
+                        padding: '11px', fontSize: 12, fontWeight: 600,
+                        background: copied === 'import' ? 'var(--tag-active-bg)' : 'transparent',
+                        color: copied === 'import' ? 'var(--accent)' : 'var(--text2)',
+                        border: '1px solid var(--border)', borderRadius: 4,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      {copied === 'import' ? '✓ Copied' : `Copy ${IMPORT_PROMPT}`}
+                    </button>
                     <button
                       onClick={onComplete}
                       className="mono"
                       style={{
-                        marginTop: 10, background: 'none', border: 'none',
-                        color: 'var(--text3)', fontSize: 10.5, cursor: 'pointer',
-                        padding: 0, textDecoration: 'underline',
+                        padding: '11px', fontSize: 12, fontWeight: 600,
+                        background: 'transparent', color: 'var(--accent)',
+                        border: '1px solid var(--accent)', borderRadius: 4,
+                        cursor: 'pointer',
                       }}
                     >
-                      I know what I&apos;m doing — use this folder anyway
+                      Enter portfolio →
                     </button>
                   </div>
-                )}
-              </StepCard>
+
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--text3)', lineHeight: 1.65, marginTop: 12 }}>
+                    In Claude Code, start a new session and run{' '}
+                    <code style={{ color: 'var(--text2)' }}>{IMPORT_PROMPT}</code>. Keep this page open beside it —
+                    it updates as the skill confirms each project and task.
+                  </div>
+                </StepCard>
+              )}
 
             </div>
           </>

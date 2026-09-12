@@ -177,9 +177,9 @@ const TOOL_LABELS: { [id: string]: string } = {
   cline: 'Cline',
   codex: 'Codex CLI',
   antigravity: 'Antigravity',
-  chatgpt: 'ChatGPT',
 };
-const ADDABLE_TOOLS = ['claude', 'cursor', 'windsurf', 'antigravity', 'cline'];
+const ADDABLE_TOOLS = ['claude'];
+const COMING_SOON_TOOLS = ['cursor', 'windsurf', 'antigravity', 'codex'];
 
 /** Tools manager popover — shows connected tools + a command to add another. */
 function ToolsPopover({
@@ -302,6 +302,9 @@ function ToolsPopover({
             )}
           </>
         )}
+        <div className="mono" style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 9.5, color: 'var(--text3)', lineHeight: 1.6 }}>
+          Coming soon: {COMING_SOON_TOOLS.map(t => TOOL_LABELS[t] ?? t).join(', ')}
+        </div>
       </div>
     </div>
   );
