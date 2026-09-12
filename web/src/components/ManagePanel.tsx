@@ -11,6 +11,9 @@ interface ManagePanelProps {
   portfolio: Portfolio;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  initialTab?: 'projects' | 'stages' | 'task';
+  initialStage?: string;
+  initialProjectSlug?: string;
 }
 
 const fieldStyle: React.CSSProperties = {
@@ -28,14 +31,14 @@ function Label({ children }: { children: React.ReactNode }) {
   return <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>{children}</div>;
 }
 
-export function ManagePanel({ portfolio, onClose, onRefresh }: ManagePanelProps) {
-  const [tab, setTab] = useState<'projects' | 'stages' | 'task'>('projects');
+export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'projects', initialStage, initialProjectSlug }: ManagePanelProps) {
+  const [tab, setTab] = useState<'projects' | 'stages' | 'task'>(initialTab);
   const [stages, setStages] = useState<string[]>(portfolio.stages || ['Discovery', 'Build', 'Growth']);
   const [selectedSlug, setSelectedSlug] = useState(portfolio.projects[0]?.slug || '');
   const selected = useMemo(() => portfolio.projects.find(p => p.slug === selectedSlug), [portfolio.projects, selectedSlug]);
   const [projectDraft, setProjectDraft] = useState<Partial<Project>>({});
   const [newProject, setNewProject] = useState({ name: '', type: 'project' as 'project' | 'learning', sector: '', oneLiner: '', logo: '' });
-  const [newTask, setNewTask] = useState({ projectSlug: portfolio.projects[0]?.slug || '', title: '', purpose: '', activity: '', stage: stages[0] || 'Discovery' });
+  const [newTask, setNewTask] = useState({ projectSlug: initialProjectSlug || portfolio.projects[0]?.slug || '', title: '', purpose: '', activity: '', stage: initialStage || stages[0] || 'Discovery' });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
 

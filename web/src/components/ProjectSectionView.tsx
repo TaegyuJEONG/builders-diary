@@ -61,14 +61,18 @@ function Toolbox({ project }: { project: Project }) {
 
 // ── Project card (row 1) ──
 function ProjectCard({
-  project, selected, onSelect,
+  project, selected, onSelect, onDropProject,
 }: {
-  project: Project; selected: boolean; onSelect: () => void;
+  project: Project; selected: boolean; onSelect: () => void; onDropProject?: (sourceId: string, targetId: string) => void;
 }) {
   const taskCount = project.goals.reduce((s, g) => s + g.records.length, 0);
   return (
     <div
       onClick={onSelect}
+      draggable
+      onDragStart={e => { e.dataTransfer.setData('application/x-bd-project', project.id); e.dataTransfer.effectAllowed = 'move'; }}
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => { e.preventDefault(); const source = e.dataTransfer.getData('application/x-bd-project'); if (source && source !== project.id) onDropProject?.(source, project.id); }}
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter') onSelect(); }}
@@ -129,9 +133,9 @@ function ProjectCard({
 
 // ── Task card (inside a section box) ──
 function TaskCard({
-  record, selected, filterState, stacked = false, onSelect,
+  record, selected, filterState, stacked = false, onSelect, onDropTask,
 }: {
-  record: Record; selected: boolean; filterState: FilterState; stacked?: boolean; onSelect: () => void;
+  record: Record; selected: boolean; filterState: FilterState; stacked?: boolean; onSelect: () => void; onDropTask?: (sourceId: string, beforeId?: string) => void;
 }) {
   const ev = record.evidence || [];
   const hasHighlight = !!record.highlight || !!record.judgment || ev.some(e => e.type === 'judgment');
@@ -141,6 +145,10 @@ function TaskCard({
     <div
       data-rid={record.id}
       onClick={onSelect}
+      draggable
+      onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('application/x-bd-task', record.id); e.dataTransfer.effectAllowed = 'move'; }}
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => { e.preventDefault(); e.stopPropagation(); const source = e.dataTransfer.getData('application/x-bd-task'); if (source && source !== record.id) onDropTask?.(source, record.id); }}
       role="button"
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter') onSelect(); }}
@@ -271,6 +279,8 @@ function TaskCard({
 // ── Stage board: lifecycle stage → Task cards. Purpose belongs inside each Task. ──
 function PurposeStageBoard({
   goals, stages, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
+  onDropTaskToStage, onCreateTask, onDeleteStage,
+  onDropStage, onCreateStage,
 }: {
   goals: Goal[];
   stages: string[];
@@ -278,6 +288,11 @@ function PurposeStageBoard({
   filterState: FilterState;
   selectedRecordId: string | null;
   onSelectRecord: (id: string) => void;
+  onDropTaskToStage?: (sourceId: string, targetStage: string, beforeId?: string) => void;
+  onCreateTask?: (stage: string) => void;
+  onDeleteStage?: (stage: string) => void;
+  onDropStage?: (sourceStage: string, targetStage: string) => void;
+  onCreateStage?: () => void;
 }) {
   const stageGroups = new Map<string, Record[]>();
   for (const goal of goals) {
@@ -306,11 +321,13 @@ function PurposeStageBoard({
       {orderedStages.map(([stage, records]) => {
         const color = stageMeta(stage, stages).color;
         return (
-          <div key={stage} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
+          <div key={stage} draggable onDragStart={e => { e.dataTransfer.setData('application/x-bd-stage', stage); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const task = e.dataTransfer.getData('application/x-bd-task'); const sourceStage = e.dataTransfer.getData('application/x-bd-stage'); if (task) onDropTaskToStage?.(task, stage); else if (sourceStage && sourceStage !== stage) onDropStage?.(sourceStage, stage); }} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }} onDragOver={e => e.preventDefault()}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{records.length} task{records.length === 1 ? '' : 's'}</span>
+              <button onClick={() => onCreateTask?.(stage)} title={`Add task to ${stage}`} className="mono" style={{ marginLeft: 'auto', width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', borderRadius: 3, cursor: 'pointer' }}>+</button>
+              <button onClick={() => onDeleteStage?.(stage)} title={`Delete ${stage}`} className="mono" style={{ width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--danger)', borderRadius: 3, cursor: 'pointer' }}>×</button>
             </div>
             <div className="thin-scroll" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '12px 13px', overflowY: 'auto', overflowX: 'hidden' }}>
               {records.map(record => (
@@ -320,6 +337,7 @@ function PurposeStageBoard({
                   selected={record.id === selectedRecordId}
                   filterState={filterState}
                   stacked
+                  onDropTask={(sourceId, beforeId) => onDropTaskToStage?.(sourceId, stage, beforeId)}
                   onSelect={() => onSelectRecord(record.id)}
                 />
               ))}
@@ -327,6 +345,7 @@ function PurposeStageBoard({
           </div>
         );
       })}
+      <button onClick={onCreateStage} title="Create stage" className="mono" style={{ width: 280, minWidth: 280, height: 58, alignSelf: 'flex-start', border: '1px dashed var(--border2)', borderRadius: 7, background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>+ Stage</button>
     </div>
   );
 }
@@ -464,7 +483,7 @@ function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
 // ── Top-level 3-level view ──
 export function ProjectSectionView({
   projects, stages = [...DEFAULT_STAGES], selectedProjectId, selectedGoalId, filterState, mode, onModeChange, onSelectProject,
-  selectedRecordId, onSelectRecord,
+  selectedRecordId, onSelectRecord, onDropProject, onCreateProject, onDropTaskToStage, onCreateTask, onDeleteStage, onDropStage, onCreateStage,
 }: {
   projects: Project[];
   stages?: string[];
@@ -474,6 +493,13 @@ export function ProjectSectionView({
   mode: ExploreMode;
   onModeChange: (mode: ExploreMode) => void;
   onSelectProject: (id: string) => void;
+  onDropProject?: (sourceId: string, targetId: string) => void;
+  onCreateProject?: () => void;
+  onDropTaskToStage?: (sourceId: string, targetStage: string, beforeId?: string) => void;
+  onCreateTask?: (stage: string) => void;
+  onDeleteStage?: (stage: string) => void;
+  onDropStage?: (sourceStage: string, targetStage: string) => void;
+  onCreateStage?: () => void;
   selectedRecordId: string | null;
   onSelectRecord: (id: string) => void;
 }) {
@@ -497,8 +523,10 @@ export function ProjectSectionView({
                 project={p}
                 selected={p.id === selectedProjectId}
                 onSelect={() => onSelectProject(p.id)}
+                onDropProject={onDropProject}
               />
             ))}
+            <button onClick={onCreateProject} className="mono" title="Create project" style={{ width: 38, minWidth: 38, height: 38, alignSelf: 'center', border: '1px dashed var(--border2)', background: 'transparent', color: 'var(--text2)', borderRadius: 5, fontSize: 18, cursor: 'pointer' }}>+</button>
           </div>
 
           {/* Row 2: sections of the selected project */}
@@ -511,6 +539,11 @@ export function ProjectSectionView({
                 filterState={filterState}
                 selectedRecordId={selectedRecordId}
                 onSelectRecord={onSelectRecord}
+                onDropTaskToStage={onDropTaskToStage}
+                onCreateTask={onCreateTask}
+                onDeleteStage={onDeleteStage}
+                onDropStage={onDropStage}
+                onCreateStage={onCreateStage}
               />
             ) : (
               <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)', fontSize: 12 }}>

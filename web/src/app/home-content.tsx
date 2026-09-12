@@ -9,12 +9,13 @@ import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { ManagePanel } from '@/components/ManagePanel';
 import { ImportProgress } from '@/components/ImportProgress';
 import { ImportReview } from '@/components/ImportReview';
+import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
-import { Portfolio, Record, ImportRun } from '@/lib/types';
+import { Portfolio, Project, Record, ImportRun } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
-  readInstallMarker, scanImportRuns,
+  readInstallMarker, scanImportRuns, updateProjectInFolder, deleteProjectFromFolder, writeStages,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -66,6 +67,10 @@ export function HomeContent() {
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [managerOpen, setManagerOpen] = useState(false);
   const [importReviewOpen, setImportReviewOpen] = useState(false);
+  const [projectPanelId, setProjectPanelId] = useState<string | null>(null);
+  const [managerTab, setManagerTab] = useState<'projects' | 'stages' | 'task'>('projects');
+  const [managerStage, setManagerStage] = useState<string | undefined>();
+  const [managerProjectSlug, setManagerProjectSlug] = useState<string | undefined>();
 
   const refreshPortfolio = useCallback(async () => {
     const handle = await loadFolderHandleFromStorage();
@@ -302,6 +307,46 @@ export function HomeContent() {
     setSelectedRecordId(null);
   }, []);
 
+  const openManager = useCallback((tab: 'projects' | 'stages' | 'task', stage?: string) => {
+    setManagerTab(tab);
+    setManagerStage(stage);
+    setManagerProjectSlug(selectedProjectId ? portfolio?.projects.find(p => p.id === selectedProjectId)?.slug : portfolio?.projects[0]?.slug);
+    setManagerOpen(true);
+  }, [portfolio, selectedProjectId]);
+
+  const handleReorderProjects = useCallback(async (sourceId: string, targetId: string) => {
+    if (!portfolio || sourceId === targetId) return;
+    const next = [...portfolio.projects];
+    const from = next.findIndex(p => p.id === sourceId); const to = next.findIndex(p => p.id === targetId);
+    if (from < 0 || to < 0) return;
+    const moved = next.splice(from, 1)[0]; next.splice(to, 0, moved);
+    for (let i = 0; i < next.length; i++) await updateProjectInFolder({ ...next[i], order: i });
+    await refreshPortfolio();
+  }, [portfolio, refreshPortfolio]);
+
+  const handleReorderStages = useCallback(async (source: string, target: string) => {
+    if (!portfolio || source === target) return;
+    const stages = [...(portfolio.stages || [])]; const from = stages.indexOf(source); const to = stages.indexOf(target);
+    if (from < 0 || to < 0) return;
+    stages.splice(to, 0, stages.splice(from, 1)[0]);
+    const handle = await loadFolderHandleFromStorage();
+    if (handle) { await writeStages(handle, stages); await refreshPortfolio(); }
+  }, [portfolio, refreshPortfolio]);
+
+
+  const projectPanel = projectPanelId ? portfolio?.projects.find(p => p.id === projectPanelId) : null;
+  const handleSaveProject = useCallback(async (project: Project) => {
+    await updateProjectInFolder(project);
+    await refreshPortfolio();
+    setProjectPanelId(null);
+  }, [refreshPortfolio]);
+  const handleDeleteProject = useCallback(async (project: Project) => {
+    await deleteProjectFromFolder(project.slug);
+    await refreshPortfolio();
+    setProjectPanelId(null);
+    setSelectedProjectId(null);
+  }, [refreshPortfolio]);
+
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
     () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage, activity: selectedActivity }),
@@ -323,6 +368,29 @@ export function HomeContent() {
     if (!portfolio) return [];
     return portfolio.projects.flatMap(p => p.goals.flatMap(g => g.records));
   }, [portfolio]);
+
+  const handleMoveTaskToStage = useCallback(async (sourceId: string, targetStage: string, beforeId?: string) => {
+    if (!portfolio) return;
+    const record = allRecords.find(r => r.id === sourceId);
+    if (!record) return;
+    const stageRecords = allRecords.filter(r => r.section === targetStage && r.id !== sourceId);
+    const insertionIndex = beforeId ? Math.max(0, stageRecords.findIndex(r => r.id === beforeId)) : stageRecords.length;
+    const moved = { ...record, section: targetStage, order: insertionIndex };
+    stageRecords.splice(insertionIndex, 0, moved);
+    for (let i = 0; i < stageRecords.length; i++) {
+      const task = stageRecords[i];
+      await saveRecordToFile({ file_path: task.file_path, title: task.title, section: targetStage, order: i });
+    }
+    await refreshPortfolio();
+  }, [allRecords, portfolio, refreshPortfolio]);
+
+  const handleDeleteStage = useCallback(async (stage: string) => {
+    if (!portfolio) return;
+    if (allRecords.some(r => r.section === stage)) { window.alert(`Move all Tasks out of ${stage} before deleting it.`); return; }
+    if (!window.confirm(`Delete Stage “${stage}”? This cannot be undone.`)) return;
+    const handle = await loadFolderHandleFromStorage();
+    if (handle) { await writeStages(handle, (portfolio.stages || []).filter(s => s !== stage)); await refreshPortfolio(); }
+  }, [allRecords, portfolio, refreshPortfolio]);
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
   const totalRecordCount = allRecords.length;
@@ -388,7 +456,6 @@ export function HomeContent() {
         onActivityChange={(v) => { setSelectedActivity(v); setSelectedRecordId(null); }}
         onMindsetChange={setSelectedMindset}
         onToolChange={setSelectedTools}
-        onOpenManager={() => setManagerOpen(true)}
         onReconnect={handleConnect}
         isLoading={isLoading}
         selectedClients={selectedClients}
@@ -430,7 +497,14 @@ export function HomeContent() {
             filterState={filterState}
             mode={exploreMode}
             onModeChange={(mode) => { setExploreMode(mode); setSelectedGoalId(null); setSelectedRecordId(null); }}
-            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setSelectedGoalId(null); setSelectedRecordId(null); }}
+            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(id); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
+            onDropProject={handleReorderProjects}
+            onCreateProject={() => openManager('projects')}
+            onDropTaskToStage={handleMoveTaskToStage}
+            onCreateTask={(stage) => openManager('task', stage)}
+            onDeleteStage={handleDeleteStage}
+            onDropStage={handleReorderStages}
+            onCreateStage={() => openManager('stages')}
             selectedRecordId={selectedRecordId}
             onSelectRecord={setSelectedRecordId}
           />
@@ -448,10 +522,25 @@ export function HomeContent() {
             />
           </div>
         )}
+        {!selectedRecord && projectPanel && (
+          <ProjectDetailPanel
+            project={projectPanel}
+            onClose={() => setProjectPanelId(null)}
+            onSave={handleSaveProject}
+            onDelete={handleDeleteProject}
+          />
+        )}
       </div>
 
       {managerOpen && (
-        <ManagePanel portfolio={portfolio} onClose={() => setManagerOpen(false)} onRefresh={refreshPortfolio} />
+        <ManagePanel
+          portfolio={portfolio}
+          initialTab={managerTab}
+          initialStage={managerStage}
+          initialProjectSlug={managerProjectSlug}
+          onClose={() => setManagerOpen(false)}
+          onRefresh={refreshPortfolio}
+        />
       )}
 
       {importReviewOpen && (

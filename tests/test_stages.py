@@ -173,5 +173,14 @@ class ActivityTests(unittest.TestCase):
             self.assertEqual(record["activities"], [])
 
 
+class OrderingTests(unittest.TestCase):
+    def test_explicit_task_order_is_persisted(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(root, project="P", goal="Purpose", stage="Build", order="42", title="Ordered task")
+            record = json.loads(next(root.glob("p/*/*/record.json")).read_text(encoding="utf-8"))
+            self.assertEqual(record["order"], 42)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -396,6 +396,7 @@ def main() -> int:
 
     ap.add_argument("--title", help="Task title")
     ap.add_argument("--date", default="", help="Source work date in YYYY-MM-DD (default: today)")
+    ap.add_argument("--order", type=int, default=None, help="User-defined task order within its stage")
     ap.add_argument("--purpose", default="", help="The specific aim of this task, one line")
     ap.add_argument("--sub-purpose", default="", help="Legacy alias for --purpose")
     ap.add_argument("--tags", default="", help="Comma-separated tags")
@@ -507,6 +508,7 @@ def main() -> int:
             "title": args.title,
             "date": record_date,
             "section": stage,
+            "order": args.order if args.order is not None else None,
             "activities": activities,
             "entry_type": project.get("type") or "project",
             "purpose": args.purpose or args.sub_purpose or None,

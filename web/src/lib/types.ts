@@ -124,6 +124,7 @@ export interface Record {
   date?: string;             // YYYY-MM-DD display date
   section?: SectionStage;    // lifecycle stage (Discovery/Build/Growth or custom)
   activities?: string[];     // task methods, e.g. Research / User Interview
+  order?: number;            // user-defined order within a Stage column
   entryType?: EntryType;     // project (has a story) | learning (skill acquisition)
   purpose?: string | null;       // the specific aim of this task
   subPurpose?: string | null;    // legacy alias; read-only compatibility

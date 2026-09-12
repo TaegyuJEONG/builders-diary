@@ -178,7 +178,7 @@ export async function saveRecordToFile(
   record: {
     file_path: string; title: string; summary?: string; content?: string; result?: string;
     status?: string; updated_at?: string; tags?: string[]; section?: string;
-    purpose?: string | null; tools?: string[]; mindset?: string[]; activities?: string[];
+    purpose?: string | null; tools?: string[]; mindset?: string[]; activities?: string[]; order?: number;
   },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -238,6 +238,7 @@ export async function saveRecordToFile(
               ...(record.tools !== undefined ? { tools: record.tools } : {}),
               ...(record.mindset !== undefined ? { mindset: record.mindset } : {}),
               ...(record.activities !== undefined ? { activities: record.activities } : {}),
+              ...(record.order !== undefined ? { order: record.order } : {}),
             };
             await writable.write(JSON.stringify(updated, null, 2));
             await writable.close();
@@ -617,7 +618,10 @@ async function scanGoalFolder(
   }
 
   // Sort by folder name (YYYYMMDD-seq-...) ascending
-  records.sort((a, b) => (a.folder || '').localeCompare(b.folder || ''));
+  records.sort((a, b) =>
+    (a.order ?? 999999) - (b.order ?? 999999)
+    || (a.folder || '').localeCompare(b.folder || '')
+  );
 
   return {
     id: meta.id || `goal-${slug}`,
@@ -702,6 +706,7 @@ async function scanRecordFolder(
     date: meta.date || (meta.created_at ? meta.created_at.slice(0, 10) : ''),
     section,
     activities: Array.isArray(meta.activities) ? meta.activities : [],
+    order: typeof meta.order === 'number' ? meta.order : undefined,
     entryType: meta.entry_type === 'learning' ? 'learning' : 'project',
     purpose: meta.purpose || meta.sub_purpose || null,
     subPurpose: meta.purpose || meta.sub_purpose || null,

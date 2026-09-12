@@ -21,7 +21,6 @@ interface HeaderProps {
   onActivityChange: (activity: string | null) => void;
   onMindsetChange: (v: string[]) => void;
   onToolChange: (v: string[]) => void;
-  onOpenManager: () => void;
   onReconnect: () => void;
 
   isLoading?: boolean;
@@ -328,7 +327,6 @@ export function Header({
   onActivityChange,
   onMindsetChange,
   onToolChange,
-  onOpenManager,
   onReconnect,
 
   isLoading = false,
@@ -507,22 +505,6 @@ export function Header({
           <ToolsPopover selectedClients={selectedClients} onClose={() => setToolsOpen(false)} />
         )}
       </div>
-
-      {/* Portfolio manager */}
-      <button
-        onClick={onOpenManager}
-        title="Manage portfolio"
-        style={{
-          width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          background: 'transparent', border: '1px solid var(--border)', borderRadius: 4,
-          color: 'var(--text2)', cursor: 'pointer', flexShrink: 0,
-        }}
-      >
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-          <path d="M7 1.5v2M7 10.5v2M1.5 7h2M10.5 7h2M3.1 3.1l1.4 1.4M9.5 9.5l1.4 1.4M10.9 3.1L9.5 4.5M4.5 9.5l-1.4 1.4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-          <circle cx="7" cy="7" r="2.2" stroke="currentColor" strokeWidth="1.1"/>
-        </svg>
-      </button>
 
       {/* Folder change icon button */}
       <button
