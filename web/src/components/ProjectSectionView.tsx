@@ -442,29 +442,6 @@ function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
     }));
 }
 
-function ExploreToggle({ mode, onChange }: { mode: ExploreMode; onChange: (mode: ExploreMode) => void }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '9px 20px 0', flexShrink: 0 }}>
-      <span className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginRight: 4 }}>Explore by</span>
-      {([['project', 'Project'], ['section', 'Section'], ['tool', 'Tool']] as const).map(([value, label]) => (
-        <button
-          key={value}
-          onClick={() => onChange(value)}
-          className="mono"
-          style={{
-            border: `1px solid ${mode === value ? 'var(--accent-dim)' : 'var(--border)'}`,
-            background: mode === value ? 'var(--tag-active-bg)' : 'transparent',
-            color: mode === value ? 'var(--accent)' : 'var(--text3)',
-            borderRadius: 3, padding: '3px 8px', fontSize: 9, cursor: 'pointer',
-          }}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // ── Top-level 3-level view ──
 export function ProjectSectionView({
   projects, stages = [...DEFAULT_STAGES], selectedProjectId, selectedGoalId, filterState, mode, onModeChange, onSelectProject,
@@ -487,7 +464,6 @@ export function ProjectSectionView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-      <ExploreToggle mode={mode} onChange={onModeChange} />
       {mode === 'project' ? (
         <>
           {/* Row 1: project cards */}
