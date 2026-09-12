@@ -129,9 +129,9 @@ function ProjectCard({
 
 // ── Task card (inside a section box) ──
 function TaskCard({
-  record, selected, filterState, onSelect,
+  record, selected, filterState, stacked = false, onSelect,
 }: {
-  record: Record; selected: boolean; filterState: FilterState; onSelect: () => void;
+  record: Record; selected: boolean; filterState: FilterState; stacked?: boolean; onSelect: () => void;
 }) {
   const ev = record.evidence || [];
   const hasHighlight = !!record.highlight || !!record.judgment || ev.some(e => e.type === 'judgment');
@@ -145,7 +145,7 @@ function TaskCard({
       tabIndex={0}
       onKeyDown={e => { if (e.key === 'Enter') onSelect(); }}
       style={{
-        width: 236, minWidth: 236, flexShrink: 0, alignSelf: 'flex-start',
+        width: stacked ? '100%' : 236, minWidth: stacked ? 0 : 236, flexShrink: 0, alignSelf: 'flex-start',
         background: 'var(--bg)',
         border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
         borderRadius: 5, padding: '10px 11px', cursor: 'pointer',
@@ -283,23 +283,24 @@ function PurposeStageBoard({
   }
 
   return (
-    <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 20px 24px', overflowY: 'auto', height: '100%' }}>
+    <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 14, padding: '16px 20px 24px', overflowX: 'auto', overflowY: 'auto', height: '100%' }}>
       {orderedStages.map(([stage, records]) => {
         const color = stageMeta(stage, stages).color;
         return (
-          <div key={stage} style={{ border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
+          <div key={stage} style={{ width: 280, minWidth: 280, border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{records.length} task{records.length === 1 ? '' : 's'}</span>
             </div>
-            <div className="thin-scroll" style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 13px', overflowX: 'auto' }}>
+            <div className="thin-scroll" style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '12px 13px', overflowY: 'visible' }}>
               {records.map(record => (
                 <TaskCard
                   key={record.id}
                   record={record}
                   selected={record.id === selectedRecordId}
                   filterState={filterState}
+                  stacked
                   onSelect={() => onSelectRecord(record.id)}
                 />
               ))}
