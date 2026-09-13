@@ -528,6 +528,13 @@ export interface ImportCandidate {
   source: string;
   source_refs: string[];
   description?: string;
+  /** Evidence line written by the agent when it attaches sources (assign-sources). */
+  summary?: string;
+  /** The user's own project intent text from Claude's export. */
+  prompt_template?: string;
+  /** Claude's built-in example project — never the user's own work. */
+  is_starter_project?: boolean;
+  doc_count?: number;
   session_count?: number | null;
 }
 
@@ -554,6 +561,10 @@ export async function readProjectCandidates(handle: FileSystemDirectoryHandle): 
           source: String(c.source || ''),
           source_refs: Array.isArray(c.source_refs) ? c.source_refs : [],
           description: c.description || undefined,
+          summary: c.summary || undefined,
+          prompt_template: c.prompt_template || undefined,
+          is_starter_project: c.is_starter_project === true,
+          doc_count: typeof c.doc_count === 'number' ? c.doc_count : 0,
           session_count: typeof c.session_count === 'number' ? c.session_count : null,
         })),
       };

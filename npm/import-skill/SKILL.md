@@ -212,6 +212,11 @@ The response lists `without_sources`: projects that were written with an empty s
 
 The web table reads the candidate fields you filled in (`source_refs`, `summary`) alongside `source`, `session_count`, `description`, `prompt_template`, `is_starter_project` and `doc_count`, so the user sees the same evidence you did.
 
+The table also records decisions you should expect in that file:
+
+- `order` — the row order the user arranged, which `apply-selections` writes as the portfolio board order (the web sorts projects by their `order`).
+- `merged_from` — a candidate the user nested under this one. `apply-selections` unions the child's sources into the parent and does **not** write the child as its own project; the absorbed ids come back under `merged`. This is how a user merges duplicates in the web, so never re-propose a merged child as a separate project.
+
 Then continue to Step 4 with the confirmed projects.
 
 ## Step 4 — Curate sources chronologically and create structure lazily

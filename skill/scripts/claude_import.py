@@ -633,6 +633,7 @@ def confirm_project(
     sector: str = "",
     one_liner: str = "",
     source_refs: list[str] | None = None,
+    order: int | None = None,
 ) -> dict[str, Any]:
     """Materialize a user-confirmed project without touching source exports."""
     ensure_project = _import_save_record().ensure_project
@@ -646,6 +647,11 @@ def confirm_project(
         if unknown:
             raise ValueError(f"Unknown source refs: {', '.join(unknown)}")
     project = ensure_project(str(root), name, extra={"sector": sector, "one_liner": one_liner})
+    if order is not None:
+        # The web board orders projects by project.json `order`. ensure_project filters out
+        # falsy extras, so 0 could not ride along inside `extra`; write it directly.
+        project["order"] = order
+        _write_json(root / project["slug"] / "project.json", project)
     confirmed = manifest.setdefault("confirmed_projects", [])
     item = next((item for item in confirmed if isinstance(item, dict) and item.get("id") == project["id"]), None)
     if item is None:
@@ -833,36 +839,64 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
     candidates = json.loads(candidates_path.read_text(encoding="utf-8")).get("candidates", [])
     by_id = {candidate["id"]: candidate for candidate in candidates if isinstance(candidate, dict)}
 
+    entries = [item for item in selections.get("projects", []) if isinstance(item, dict)]
+    # The table's row order becomes the board order, so apply them in the order the user
+    # arranged. Anything unlisted keeps its file order, after the listed rows.
+    order = [str(item) for item in (selections.get("order") or [])]
+
+    def rank(entry: dict[str, Any]) -> int:
+        candidate_id = str(entry.get("candidate_id") or "")
+        return order.index(candidate_id) if candidate_id in order else len(order)
+
+    entries.sort(key=rank)
+
+    # A merge is a parent row with children. Only the parent becomes a project and it
+    # inherits every child's sources; writing a child as its own project would split it.
+    absorbed = {
+        str(child)
+        for entry in entries
+        for child in (entry.get("merged_from") or [])
+    }
+
     confirmed: list[str] = []
     dropped: list[str] = []
+    merged: list[str] = []
     without_sources: list[dict[str, str]] = []
-    for selection in selections.get("projects", []):
-        if not isinstance(selection, dict):
+    confirm_index = 0
+    for entry in entries:
+        candidate_id = str(entry.get("candidate_id") or "")
+        candidate = by_id.get(candidate_id)
+        if candidate is None or candidate_id in absorbed:
             continue
-        candidate_id = selection.get("candidate_id")
-        candidate = by_id.get(candidate_id) if candidate_id else None
-        if candidate is None:
-            continue
-        if selection.get("action") == "drop":
+        if entry.get("action") == "drop":
             dropped.append(candidate_id)
             continue
-        name = str(selection.get("name") or candidate.get("name") or "Untitled").strip()
-        source_refs = candidate.get("source_refs") or []
+        source_refs: list[str] = list(candidate.get("source_refs") or [])
+        for child_id in (entry.get("merged_from") or []):
+            child = by_id.get(str(child_id))
+            if child is None:
+                continue
+            source_refs.extend(child.get("source_refs") or [])
+            merged.append(str(child_id))
+        source_refs = list(dict.fromkeys(source_refs))
+        name = str(entry.get("name") or candidate.get("name") or "Untitled").strip()
         project = confirm_project(
             data_root=data_root,
             run_id=run_id,
             name=name,
-            sector=str(selection.get("sector") or ""),
-            one_liner=str(selection.get("one_liner") or ""),
+            sector=str(entry.get("sector") or ""),
+            one_liner=str(entry.get("one_liner") or ""),
             source_refs=source_refs,
+            order=confirm_index,
         )
+        confirm_index += 1
         confirmed.append(project["slug"])
         if not source_refs:
             # The project now exists but nothing can ever be curated into it: its source
             # queue is empty. Surface it so the skill reports the gap instead of quietly
             # importing nothing for that project.
-            without_sources.append({"candidate_id": str(candidate_id), "name": name})
-    return {"confirmed": confirmed, "dropped": dropped, "without_sources": without_sources}
+            without_sources.append({"candidate_id": candidate_id, "name": name})
+    return {"confirmed": confirmed, "dropped": dropped, "merged": merged, "without_sources": without_sources}
 
 
 def create_download_page(manifest_path: str | Path, output_path: str | Path) -> Path:

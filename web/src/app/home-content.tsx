@@ -48,6 +48,8 @@ export function HomeContent() {
   const [error, setError] = useState<string | null>(null);
   const [installMarker, setInstallMarker] = useState<{ version?: string; tools?: string[] } | null>(null);
   const [importRuns, setImportRuns] = useState<ImportRun[]>([]);
+  // Bumped on every import rescan so the selection table re-reads candidates live.
+  const [importTick, setImportTick] = useState(0);
 
   // AI tools the user selected in onboarding (drives --tools + header manager)
   const [selectedClients, setSelectedClientsState] = useState<string[]>([]);
@@ -176,8 +178,10 @@ export function HomeContent() {
   // Refresh the portfolio whenever the user returns to this tab — records
   // saved from an AI session appear without a manual reload. Read-only
   // permission check (no gesture needed); selection/filters are preserved.
+  // Gated on `connected` only: while onboarding is still on screen the user has
+  // already connected the folder, and the import run it needs to show lives there.
   useEffect(() => {
-    if (!onboardingDone || !connected) return;
+    if (!connected) return;
     const rescan = async () => {
       if (document.visibilityState !== 'visible') return;
       try {
@@ -186,6 +190,7 @@ export function HomeContent() {
         if (!(await hasFolderPermission(handle))) return;
         setInstallMarker(await readInstallMarker(handle));
         setImportRuns(await scanImportRuns(handle));
+        setImportTick(t => t + 1);
         const data = await scanFolderStructure(handle);
         setPortfolio(data);
       } catch { /* transient FS errors — keep current view */ }
@@ -196,24 +201,36 @@ export function HomeContent() {
       window.removeEventListener('focus', rescan);
       document.removeEventListener('visibilitychange', rescan);
     };
-  }, [onboardingDone, connected]);
+  }, [connected]);
 
   // Import runs are written by the local skill while this page stays open beside
   // the AI chat. Polling is deliberately bounded and read-only; it makes newly
   // confirmed projects/cards visible without the user switching browser tabs.
+  // This is what keeps the onboarding step 3 table live, so it must run before
+  // onboarding completes too.
   useEffect(() => {
-    if (!onboardingDone || !connected) return;
+    if (!connected) return;
     const poll = async () => {
       try {
         const handle = await loadFolderHandleFromStorage();
         if (!handle || !(await hasFolderPermission(handle))) return;
         setImportRuns(await scanImportRuns(handle));
+        setImportTick(t => t + 1);
         setPortfolio(await scanFolderStructure(handle));
       } catch { /* keep the current UI on transient filesystem errors */ }
     };
     const interval = window.setInterval(poll, 2500);
     return () => window.clearInterval(interval);
-  }, [onboardingDone, connected]);
+  }, [connected]);
+
+  // Once the portfolio actually has projects there is nothing left to onboard: the
+  // user confirmed them (in the chat or in the step 3 table) and expects to see the
+  // board. Without this the page sat on the onboarding screen after confirming.
+  useEffect(() => {
+    if (onboardingDone || !connected) return;
+    if (!portfolio || (portfolio.projects || []).length === 0) return;
+    completeOnboarding();
+  }, [onboardingDone, connected, portfolio, completeOnboarding]);
 
   const doConnect = useCallback(async (data: Portfolio) => {
     setPortfolio(data);
@@ -465,6 +482,8 @@ export function HomeContent() {
         selectedClients={selectedClients}
         setSelectedClients={setSelectedClients}
         onComplete={completeOnboarding}
+        importRuns={importRuns}
+        importRefreshKey={importTick}
       />
     );
   }

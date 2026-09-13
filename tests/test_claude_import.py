@@ -657,6 +657,8 @@ class ClaudeImportTests(unittest.TestCase):
 
         applied = apply_selections(data_root=self.data_root, run_id=run_id)
 
+        self.assertEqual(applied["confirmed"], ["no-sources"])
+        self.assertEqual(applied["merged"], [])
         self.assertEqual([entry["name"] for entry in applied["without_sources"]], ["No Sources"])
 
     def test_confirming_a_merged_project_unions_source_refs(self) -> None:
@@ -672,6 +674,55 @@ class ClaudeImportTests(unittest.TestCase):
 
         self.assertEqual(entry["source_refs"], ["chat:chat-1", "chat:chat-2"])
 
+    def test_merge_and_row_order_survive_apply_selections(self) -> None:
+        """A merged row must feed its sources to the parent, and row order becomes board order."""
+        from skill.scripts.claude_import import apply_selections, assign_sources
+
+        run_id = self._prepare()
+        candidates = self._candidates()
+        chat = next(c for c in candidates if c["source"] == "claude_chat_project")
+        code = next(c for c in candidates if c["source"] == "claude_code_workspace")
+        self.assertTrue(code["source_refs"], "fixture workspace should carry session refs")
+
+        # Give the chat candidate a source of its own, so the merge has something to absorb.
+        assign_sources(
+            data_root=self.data_root, run_id=run_id, candidate_id=chat["id"],
+            source_refs=["chat:chat-1"], summary="Chat evidence",
+        )
+
+        selections = {
+            "run_id": run_id,
+            "order": [code["id"], chat["id"]],
+            "projects": [
+                {
+                    "candidate_id": code["id"], "name": "Code project", "action": "confirm",
+                    "order": 0, "merged_from": [chat["id"]],
+                },
+            ],
+        }
+        (Path(self.data_root) / "imports" / run_id / "selections.json").write_text(
+            json.dumps(selections), encoding="utf-8",
+        )
+        result = apply_selections(data_root=self.data_root, run_id=run_id)
+
+        self.assertEqual(result["confirmed"], ["code-project"])
+        self.assertEqual(result["merged"], [chat["id"]])
+        self.assertEqual(result["dropped"], [])
+        self.assertEqual(result["without_sources"], [])
+
+        manifest = json.loads(
+            (Path(self.data_root) / "imports" / run_id / "manifest.json").read_text(encoding="utf-8")
+        )
+        confirmed = {item["slug"]: item for item in manifest["confirmed_projects"]}
+        # The absorbed child's sources reached the parent, and the child was not written
+        # as a project of its own.
+        self.assertIn("chat:chat-1", confirmed["code-project"]["source_refs"])
+        self.assertNotIn("productbuilderjob", confirmed)
+
+        # Row order became the board order the web sorts on.
+        project = json.loads((Path(self.data_root) / "code-project" / "project.json").read_text(encoding="utf-8"))
+        self.assertEqual(project["order"], 0)
+
     def test_skill_attaches_chat_sources_before_project_selection(self) -> None:
         """A chat candidate confirmed with no sources can never produce a task card."""
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
@@ -683,6 +734,9 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertIn("is_starter_project", step_three)
         # A project confirmed without sources must be reported, not swallowed.
         self.assertIn("without_sources", skill)
+        # The merge contract the web table writes must be documented for the agent.
+        self.assertIn("merged_from", skill)
+        self.assertIn("`order`", skill)
 
     def test_skill_sends_a_user_without_exports_to_the_export_flow(self) -> None:
         """A user who has not exported must be walked through the export, not prepared.

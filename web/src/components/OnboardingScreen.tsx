@@ -6,6 +6,9 @@ import {
   readInstallMarker,
 } from '@/lib/fileSystem';
 import { detectOS, terminalHint } from '@/lib/os';
+import { ImportRun } from '@/lib/types';
+import { ImportProgress } from '@/components/ImportProgress';
+import { ImportSelectionTable } from '@/components/ImportSelectionTable';
 
 interface OnboardingScreenProps {
   /** Opens the native folder picker; resolves when a folder is connected. */
@@ -22,6 +25,10 @@ interface OnboardingScreenProps {
   setSelectedClients: (tools: string[]) => void;
   /** Called when the user finishes onboarding and enters the portfolio. */
   onComplete: () => void;
+  /** Import runs written by the local skill — drives the step 3 selection table. */
+  importRuns?: ImportRun[];
+  /** Bumped by the parent's poll so the table re-reads candidates live. */
+  importRefreshKey?: number;
 }
 
 const IMPORT_PROMPT = '/builders-diary-import';
@@ -42,12 +49,17 @@ type MarkerStatus = 'unchecked' | 'checking' | 'ok' | 'missing';
 
 export function OnboardingScreen({
   onSelectFolder, isLoading, error, folderConnected, connectNonce = 0, folderPath,
-  selectedClients, setSelectedClients, onComplete,
+  selectedClients, setSelectedClients, onComplete, importRuns = [], importRefreshKey = 0,
 }: OnboardingScreenProps) {
   const [phase, setPhase] = useState<Phase>('select');
   const [copied, setCopied] = useState<string | null>(null);
   const [markerStatus, setMarkerStatus] = useState<MarkerStatus>('unchecked');
   const [installConfirmed, setInstallConfirmed] = useState(false);
+
+  // A run waiting on project selection turns step 3 into the selection table, so the
+  // web route is reachable without first leaving onboarding.
+  const latestRun = importRuns[0];
+  const needsReview = latestRun?.status === 'project_selection';
 
   const hint = terminalHint(detectOS());
 
@@ -105,7 +117,7 @@ export function OnboardingScreen({
       alignItems: 'center',
       padding: '56px 24px 60px',
     }}>
-      <div style={{ maxWidth: 560, width: '100%' }}>
+      <div style={{ maxWidth: needsReview ? 1000 : 560, width: '100%' }}>
 
         {/* ── HERO ── */}
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
@@ -362,11 +374,23 @@ export function OnboardingScreen({
               {/* ── STEP 3: Start importing (revealed after folder connects) ── */}
               {markerStatus === 'ok' && (
                 <StepCard n={3} active done={false} title="Bring in your past work">
+                  {latestRun && (
+                    <div style={{ marginBottom: 14 }}>
+                      <ImportProgress runs={importRuns} toolId={selectedClients[0] || 'claude'} />
+                    </div>
+                  )}
+
                   <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
-                    Open Claude Code next to this page, then run the import skill. Confirmed projects,
-                    stages, and tasks will appear here live as you approve them.
+                    {needsReview
+                      ? 'Your export is indexed. Tick the projects to bring in, rename or merge them, then save — or answer in the chat instead. Both write the same choice.'
+                      : 'Open Claude Code next to this page, then run the import skill. Confirmed projects, stages, and tasks will appear here live as you approve them.'}
                   </p>
 
+                  {needsReview ? (
+                    <div style={{ marginBottom: 14 }}>
+                      <ImportSelectionTable refreshKey={importRefreshKey} />
+                    </div>
+                  ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <a
                       href="claude://"
@@ -393,19 +417,22 @@ export function OnboardingScreen({
                     >
                       {copied === 'import' ? '✓ Copied' : `Copy ${IMPORT_PROMPT}`}
                     </button>
-                    <button
-                      onClick={onComplete}
-                      className="mono"
-                      style={{
-                        padding: '11px', fontSize: 12, fontWeight: 600,
-                        background: 'transparent', color: 'var(--accent)',
-                        border: '1px solid var(--accent)', borderRadius: 4,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      Enter portfolio →
-                    </button>
                   </div>
+                  )}
+
+                  <button
+                    onClick={onComplete}
+                    className="mono"
+                    style={{
+                      width: '100%', marginTop: 14,
+                      padding: '11px', fontSize: 12, fontWeight: 600,
+                      background: 'transparent', color: 'var(--accent)',
+                      border: '1px solid var(--accent)', borderRadius: 4,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Enter portfolio →
+                  </button>
 
                   <div className="mono" style={{ fontSize: 10.5, color: 'var(--text3)', lineHeight: 1.65, marginTop: 12 }}>
                     In Claude Code, start a new session and run{' '}
