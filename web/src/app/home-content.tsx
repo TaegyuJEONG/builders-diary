@@ -497,9 +497,8 @@ export function HomeContent() {
             filterState={filterState}
             mode={exploreMode}
             onModeChange={(mode) => { setExploreMode(mode); setSelectedGoalId(null); setSelectedRecordId(null); }}
-            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(id); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
-            onDropProject={handleReorderProjects}
-            onCreateProject={() => openManager('projects')}
+            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(null); setManagerProjectSlug(portfolio?.projects.find(p => p.id === id)?.slug || undefined); setManagerTab('projects'); setManagerOpen(true); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
+            onCreateProject={() => { setManagerTab('projects'); setManagerProjectSlug(undefined); setManagerOpen(true); }}
             onDropTaskToStage={handleMoveTaskToStage}
             onCreateTask={(stage) => openManager('task', stage)}
             onDeleteStage={handleDeleteStage}
@@ -538,6 +537,7 @@ export function HomeContent() {
           initialTab={managerTab}
           initialStage={managerStage}
           initialProjectSlug={managerProjectSlug}
+          createOnly={!managerProjectSlug}
           onClose={() => setManagerOpen(false)}
           onRefresh={refreshPortfolio}
         />

@@ -14,6 +14,7 @@ interface ManagePanelProps {
   initialTab?: 'projects' | 'stages' | 'task';
   initialStage?: string;
   initialProjectSlug?: string;
+  createOnly?: boolean;
 }
 
 const fieldStyle: React.CSSProperties = {
@@ -31,10 +32,10 @@ function Label({ children }: { children: React.ReactNode }) {
   return <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>{children}</div>;
 }
 
-export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'projects', initialStage, initialProjectSlug }: ManagePanelProps) {
+export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'projects', initialStage, initialProjectSlug, createOnly = false }: ManagePanelProps) {
   const [tab, setTab] = useState<'projects' | 'stages' | 'task'>(initialTab);
   const [stages, setStages] = useState<string[]>(portfolio.stages || ['Discovery', 'Build', 'Growth']);
-  const [selectedSlug, setSelectedSlug] = useState(portfolio.projects[0]?.slug || '');
+  const [selectedSlug, setSelectedSlug] = useState(initialProjectSlug || portfolio.projects[0]?.slug || '');
   const selected = useMemo(() => portfolio.projects.find(p => p.slug === selectedSlug), [portfolio.projects, selectedSlug]);
   const [projectDraft, setProjectDraft] = useState<Partial<Project>>({});
   const [newProject, setNewProject] = useState({ name: '', type: 'project' as 'project' | 'learning', sector: '', oneLiner: '', logo: '' });
@@ -76,19 +77,20 @@ export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'proje
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.62)', display: 'flex', justifyContent: 'flex-end' }} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
       <aside style={{ width: 420, maxWidth: '92vw', height: '100%', background: 'var(--surface)', borderLeft: '1px solid var(--border2)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ height: 52, padding: '0 16px', display: 'flex', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
-          <strong style={{ fontSize: 13 }}>Manage portfolio</strong>
+          <strong style={{ fontSize: 13 }}>{createOnly ? 'Create project or learning' : 'Manage portfolio'}</strong>
           <button onClick={onClose} aria-label="Close" style={{ ...buttonStyle, marginLeft: 'auto', width: 28, padding: 4 }}>×</button>
         </div>
-        <div style={{ display: 'flex', gap: 5, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+        {!createOnly && <div style={{ display: 'flex', gap: 5, padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
           {(['projects', 'stages', 'task'] as const).map(value => (
             <button key={value} onClick={() => setTab(value)} style={{ ...buttonStyle, color: tab === value ? 'var(--accent)' : 'var(--text2)', borderColor: tab === value ? 'var(--accent)' : 'var(--border)' }}>
               {value === 'task' ? 'New task' : value[0].toUpperCase() + value.slice(1)}
             </button>
           ))}
-        </div>
+        </div>}
         <div className="thin-scroll" style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
           {tab === 'projects' && (
             <>
+              <div style={{ display: createOnly ? 'none' : 'contents' }}>
               <Label>Order and select</Label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 18 }}>
                 {portfolio.projects.map((project, index) => (
@@ -117,6 +119,7 @@ export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'proje
                   </div>
                 </div>
               )}
+              </div>
               <div style={{ borderTop: '1px solid var(--border)', marginTop: 20, paddingTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <Label>Create project or learning</Label>
                 <input style={fieldStyle} placeholder="Name" value={newProject.name} onChange={e => setNewProject(v => ({ ...v, name: e.target.value }))} />
