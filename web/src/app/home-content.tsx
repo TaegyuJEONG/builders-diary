@@ -386,10 +386,25 @@ export function HomeContent() {
 
   const handleDeleteStage = useCallback(async (stage: string) => {
     if (!portfolio) return;
-    if (allRecords.some(r => r.section === stage)) { window.alert(`Move all Tasks out of ${stage} before deleting it.`); return; }
-    if (!window.confirm(`Delete Stage “${stage}”? This cannot be undone.`)) return;
-    const handle = await loadFolderHandleFromStorage();
-    if (handle) { await writeStages(handle, (portfolio.stages || []).filter(s => s !== stage)); await refreshPortfolio(); }
+    const stageRecords = allRecords.filter(r => r.section === stage);
+    const projectNames = [...new Set(stageRecords.map(r => r.projectTitle || r.project_slug || 'Unknown project'))];
+    const scope = projectNames.length === 1 ? projectNames[0] : 'ALL PROJECTS';
+    const token = `${scope} / ${stage}`;
+    const warning = stageRecords.length
+      ? `Delete Stage “${stage}” and permanently delete ${stageRecords.length} Task${stageRecords.length === 1 ? '' : 's'} inside it?\n\nThis cannot be undone.`
+      : `Delete empty Stage “${stage}”?\n\nThis cannot be undone.`;
+    if (!window.confirm(warning)) return;
+    const typed = window.prompt(`Type exactly “${token}” to confirm Stage deletion.`);
+    if (typed !== token) return;
+    try {
+      for (const record of stageRecords) await deleteRecordFromFile(record.file_path);
+      const handle = await loadFolderHandleFromStorage();
+      if (!handle) throw new Error('Builder’s Diary folder is not connected');
+      await writeStages(handle, (portfolio.stages || []).filter(s => s !== stage));
+      await refreshPortfolio();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Stage deletion failed');
+    }
   }, [allRecords, portfolio, refreshPortfolio]);
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
