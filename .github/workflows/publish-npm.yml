@@ -19,7 +19,7 @@ jobs:
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-      - name: Use npm trusted publishing client
-        run: npm install --global npm@11.5.1
+      - name: Use current npm trusted publishing client
+        run: npm install --global npm@12.0.2
       - name: Stage package with npm trusted publishing
         run: npm stage publish
