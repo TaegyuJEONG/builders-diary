@@ -16,6 +16,7 @@ import hashlib
 import html
 import json
 import re
+import sys
 import uuid
 import zipfile
 from collections import defaultdict
@@ -39,6 +40,45 @@ def _zip_category(path: Path) -> str | None:
         if name.startswith(f"{category}-") and name.endswith(".zip"):
             return category
     return None
+
+
+def _import_save_record() -> Any:
+    """Load the daily skill's save_record module from wherever it was installed.
+
+    The two skills are installed side by side, so when this file is executed as a
+    script only its own folder (…/builders-diary-import/scripts) lands on sys.path
+    and a bare ``import save_record`` cannot see the daily skill's
+    …/builders-diary/scripts/save_record.py. In the repo both files sit together in
+    skill/scripts/, which is why running from the repo never exposed this.
+    """
+    try:
+        from . import save_record  # imported as part of the skill package
+        return save_record
+    except ImportError:
+        pass
+
+    import importlib.util
+
+    for directory in (
+        Path(__file__).resolve().parent,                                     # repo layout
+        Path(__file__).resolve().parents[2] / "builders-diary" / "scripts",   # installed sibling
+    ):
+        module_path = directory / "save_record.py"
+        if not module_path.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location("save_record", module_path)
+        if spec is None or spec.loader is None:
+            continue
+        module = importlib.util.module_from_spec(spec)
+        sys.modules.setdefault("save_record", module)
+        spec.loader.exec_module(module)
+        return module
+
+    raise ModuleNotFoundError(
+        "save_record.py was not found next to this script or in the sibling "
+        "builders-diary skill. Reinstall with: "
+        "npx --yes builders-diary@latest install --tools claude"
+    )
 
 
 def _safe_text(value: Any, limit: int = 500) -> str:
@@ -379,11 +419,7 @@ def prepare_import_run(
 
     # Resume support: surface projects already in the portfolio so the skill can
     # skip re-proposing them and continue where a previous run left off.
-    try:
-        from .save_record import list_projects
-    except ImportError:
-        from save_record import list_projects
-    existing_projects = list_projects(str(root))
+    existing_projects = _import_save_record().list_projects(str(root))
 
     run_id = f"claude-{dt.datetime.now(dt.timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:6]}"
     run_dir = root / "imports" / run_id
@@ -516,10 +552,7 @@ def confirm_project(
     source_refs: list[str] | None = None,
 ) -> dict[str, Any]:
     """Materialize a user-confirmed project without touching source exports."""
-    try:
-        from .save_record import ensure_project
-    except ImportError:  # Script execution outside the package.
-        from save_record import ensure_project
+    ensure_project = _import_save_record().ensure_project
 
     root = Path(data_root).expanduser()
     run_dir, manifest = _load_run_manifest(root, run_id)

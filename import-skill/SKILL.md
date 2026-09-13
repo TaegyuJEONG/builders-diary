@@ -68,9 +68,17 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" list-runs --data-root "$DATA_ROOT"
 
 If the latest run is unfinished, resume that exact `run-id` with `source-queue` / `read-source` / `complete-source`; do not run `prepare` first.
 
-## Step 1 — Download the Claude export (user action)
+## Step 1 — Get the Claude export (user action)
 
-If the user has a Claude export manifest JSON but not the ZIP files:
+Chat work reaches the portfolio only through the Claude export archives, so check for them before anything else:
+
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" scan-export --export-dir "$HOME/Downloads"
+```
+
+**If `archives` is empty, the user has not exported yet. Do not create an import run and do not continue to Step 2.** Walk them through the export instead:
+
+**A. A manifest JSON exists** (e.g. `~/Downloads/Claude-Export.json`) but the ZIPs do not:
 
 1. Create a local download page. Do not expose the one-time URLs in the conversation:
 
@@ -87,6 +95,14 @@ open "$HOME/Downloads/builders-diary-claude-download.html"
 5. After the required ZIPs exist, ask before removing the generated local HTML page containing the one-time links. Never retain or print those URLs as import state.
 
 Do not attempt to use the export URLs yourself: they require the user's authenticated Claude session and can be one-time links.
+
+**B. There is no manifest either** — they have never exported:
+
+Tell them to request it in Claude: **Settings → Privacy → Export data**. Claude emails a manifest JSON with one-time links. When it arrives, continue with A.
+
+Re-run `scan-export` before moving on: Step 2 must start with `conversations-*.zip` and `projects-*.zip` present.
+
+**Only if the user explicitly chooses to skip the Chat export**, say plainly that only local Claude Code sessions will be indexed and that Chat work can be added later by re-running this skill — then continue to Step 2. Never make that choice for them, and never imply the run includes Chat work it cannot see.
 
 ## Step 2 — Build a local source index
 

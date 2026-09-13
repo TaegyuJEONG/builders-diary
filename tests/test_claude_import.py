@@ -8,6 +8,8 @@ or ~/.claude directory.
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -528,6 +530,63 @@ class ClaudeImportTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "HTTPS"):
             create_download_page(manifest, self.base / "unsafe.html")
+
+    def test_skill_sends_a_user_without_exports_to_the_export_flow(self) -> None:
+        """A user who has not exported must be walked through the export, not prepared.
+
+        Step 2 indexes whatever archives exist; with none present it silently produced
+        a zero-Chat run and never offered the export. That is the exact state a new
+        user is in.
+        """
+        skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
+        section = skill[skill.index("## Step 1") : skill.index("## Step 2")]
+
+        self.assertIn("scan-export", section)
+        self.assertIn("archives", section)
+        self.assertIn("download-page", section)
+        self.assertIn("Export data", section)  # the never-exported path
+        self.assertIn("do not continue to step 2", section.lower())
+
+    def test_helper_runs_from_the_installed_skill_layout(self) -> None:
+        """The helper must work the way the installer actually lays the skills out.
+
+        The installer copies save_record.py into the daily skill's folder and
+        claude_import.py into the import skill's folder, so they live in *different*
+        directories. The repo keeps both in skill/scripts/, which hides any import
+        that cannot resolve after installation.
+        """
+        skills = self.base / "skills"
+        (skills / "builders-diary" / "scripts").mkdir(parents=True)
+        (skills / "builders-diary-import" / "scripts").mkdir(parents=True)
+        shutil.copy(
+            ROOT / "skill" / "scripts" / "save_record.py",
+            skills / "builders-diary" / "scripts" / "save_record.py",
+        )
+        helper = skills / "builders-diary-import" / "scripts" / "claude_import.py"
+        shutil.copy(ROOT / "skill" / "scripts" / "claude_import.py", helper)
+
+        # A bare `import save_record` must not be rescued by the parent environment.
+        env = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(helper),
+                "prepare",
+                "--data-root",
+                str(self.base / "installed-data"),
+                "--export-dir",
+                str(self.export_dir),
+                "--claude-config-dir",
+                str(self.config_dir),
+            ],
+            capture_output=True,
+            text=True,
+            cwd=str(self.base),
+            env=env,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("run_id", result.stdout)
 
     def test_skill_opens_with_live_viewer_preflight(self) -> None:
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
