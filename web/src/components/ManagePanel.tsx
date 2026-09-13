@@ -126,7 +126,7 @@ export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'proje
                 <select style={fieldStyle} value={newProject.type} onChange={e => setNewProject(v => ({ ...v, type: e.target.value as 'project' | 'learning' }))}><option value="project">Project</option><option value="learning">Learning</option></select>
                 <input style={fieldStyle} placeholder="Sector (optional)" value={newProject.sector} onChange={e => setNewProject(v => ({ ...v, sector: e.target.value }))} />
                 <input style={fieldStyle} placeholder="One-line story (optional)" value={newProject.oneLiner} onChange={e => setNewProject(v => ({ ...v, oneLiner: e.target.value }))} />
-                <button disabled={busy || !newProject.name.trim()} onClick={() => run(async () => { await createProjectInFolder(newProject); setNewProject({ name: '', type: 'project', sector: '', oneLiner: '', logo: '' }); }, 'Created.')} style={{ ...buttonStyle, color: 'var(--accent)' }}>Create</button>
+                <button disabled={busy || !newProject.name.trim()} onClick={() => run(async () => { await createProjectInFolder({ ...newProject, order: portfolio.projects.length }); setNewProject({ name: '', type: 'project', sector: '', oneLiner: '', logo: '' }); }, 'Created.')} style={{ ...buttonStyle, color: 'var(--accent)' }}>Create</button>
               </div>
             </>
           )}

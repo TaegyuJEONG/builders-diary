@@ -350,7 +350,7 @@ async function writeJsonFile(folder: FileSystemDirectoryHandle, name: string, va
 
 /** Create a Project or Learning entry directly from the web UI. */
 export async function createProjectInFolder(input: {
-  name: string; type?: EntryType; sector?: string; oneLiner?: string; logo?: string;
+  name: string; type?: EntryType; sector?: string; oneLiner?: string; logo?: string; order?: number;
 }): Promise<void> {
   const root = await loadFolderHandleFromStorage();
   if (!root) throw new Error('Builder’s Diary folder is not connected');
@@ -368,6 +368,7 @@ export async function createProjectInFolder(input: {
     one_liner: input.oneLiner || undefined,
     logo: input.logo || undefined,
     created_at: now, updated_at: now, share_id: null,
+    ...(typeof input.order === 'number' ? { order: input.order } : {}),
   });
 }
 
