@@ -7,7 +7,6 @@ import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { ManagePanel } from '@/components/ManagePanel';
-import { ImportProgress } from '@/components/ImportProgress';
 import { ImportReview } from '@/components/ImportReview';
 import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
@@ -398,10 +397,10 @@ export function HomeContent() {
     const scope = selectedProject?.title || selectedProject?.name || selectedProjectSlug || 'ALL PROJECTS';
     const token = `${scope} / ${stageDeleteTarget}`;
     try {
+      // A stage action inside a Project only removes that Project's Tasks.
+      // `stages.json` is the canonical portfolio configuration and can only be
+      // changed through Manage portfolio.
       for (const record of stageRecords) await deleteRecordFromFile(record.file_path);
-      const handle = await loadFolderHandleFromStorage();
-      if (!handle) throw new Error('Builder’s Diary folder is not connected');
-      await writeStages(handle, (portfolio.stages || []).filter(s => s !== stageDeleteTarget));
       setStageDeleteTarget(null);
       await refreshPortfolio();
     } catch (error) {
@@ -477,6 +476,8 @@ export function HomeContent() {
         onReconnect={handleConnect}
         isLoading={isLoading}
         selectedClients={selectedClients}
+        importRuns={importRuns}
+        onOpenImport={() => setImportReviewOpen(true)}
       />
 
       {updateAvailable && installedVersion && (
@@ -486,8 +487,6 @@ export function HomeContent() {
           tools={updateTools}
         />
       )}
-
-      <ImportProgress runs={importRuns} toolId={selectedClients[0]} onReview={() => setImportReviewOpen(true)} />
 
       {/* First-record nudge — shown only when the whole portfolio is empty */}
       {totalRecordCount === 0 && (
