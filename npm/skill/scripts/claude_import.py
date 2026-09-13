@@ -571,8 +571,10 @@ def _load_project_proposal(run_dir: Path) -> dict[str, Any]:
         value = {}
     if not isinstance(value, dict):
         value = {}
+    status = value.get("status")
     return {
         "schema_version": 1,
+        "status": status if status in {"draft", "finalized"} else "draft",
         "projects": value.get("projects") if isinstance(value.get("projects"), list) else [],
         "learning": value.get("learning") if isinstance(value.get("learning"), list) else [],
         "noise": value.get("noise") if isinstance(value.get("noise"), list) else [],
@@ -665,6 +667,16 @@ def propose_project(
     proposal = _load_project_proposal(run_dir)
     project_id = f"project:{_candidate_key(name)}"
     item = next((row for row in proposal["projects"] if isinstance(row, dict) and row.get("id") == project_id), None)
+    claimed_elsewhere = {
+        str(source_ref): str(row.get("name") or row.get("id"))
+        for row in proposal["projects"]
+        if isinstance(row, dict) and row.get("id") != project_id
+        for source_ref in (row.get("source_refs") or [])
+    }
+    conflicts = [source_ref for source_ref in wanted if source_ref in claimed_elsewhere]
+    if conflicts:
+        owners = ", ".join(f"{source_ref} ({claimed_elsewhere[source_ref]})" for source_ref in conflicts[:3])
+        raise ValueError(f"Source already belongs to proposal: {owners}")
     if item is None:
         item = {"id": project_id, "classification": "project"}
         proposal["projects"].append(item)
@@ -683,6 +695,96 @@ def propose_project(
     _write_json(run_dir / "project-proposal.json", proposal)
     _append_run_event(run_dir, "project_proposed", project_id=project_id, source_count=len(all_refs))
     return item
+
+
+def finalize_project_proposal(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
+    """Seal a complete proposal so the web can safely enable Save."""
+    run_dir, _ = _load_run_manifest(data_root, run_id)
+    proposal = _load_project_proposal(run_dir)
+    if not proposal["projects"]:
+        raise ValueError("Cannot finalize an empty project proposal")
+    owners: dict[str, str] = {}
+    for project in proposal["projects"]:
+        if not isinstance(project, dict):
+            continue
+        for source_ref in project.get("source_refs") or []:
+            previous = owners.setdefault(str(source_ref), str(project.get("name") or project.get("id")))
+            if previous != str(project.get("name") or project.get("id")):
+                raise ValueError(f"Cannot finalize: source {source_ref} belongs to both {previous} and {project.get('name')}")
+    proposal["status"] = "finalized"
+    _write_json(run_dir / "project-proposal.json", proposal)
+    _append_run_event(run_dir, "project_proposal_finalized", project_count=len(proposal["projects"]))
+    return {"status": "finalized", "project_count": len(proposal["projects"])}
+
+
+def _chat_export_row(source_index: dict[str, Any], source_id: str) -> dict[str, Any]:
+    """Locate one Chat export row locally without returning unrelated conversations."""
+    export_dir = Path(source_index["chat"]["export_dir"])
+    archive_names = source_index["chat"].get("archives", {}).get("conversations", [])
+    for archive_name in archive_names:
+        archive_path = _validated_source_path(export_dir / archive_name, export_dir)
+        with zipfile.ZipFile(archive_path) as archive:
+            for name in archive.namelist():
+                if not name.endswith("conversations.json"):
+                    continue
+                rows = _json_from_zip(archive, name)
+                row = next((item for item in rows if isinstance(item, dict) and item.get("uuid") == source_id), None)
+                if row is not None:
+                    return row
+    raise FileNotFoundError(f"Chat source content not found: chat:{source_id}")
+
+
+def materialize_proposal_chat_views(*, data_root: str | Path, run_id: str, page_size: int = 20) -> dict[str, Any]:
+    """Copy only proposed Chat messages into private, page-sized local viewer files."""
+    if not 1 <= page_size <= 100:
+        raise ValueError("page_size must be between 1 and 100")
+    run_dir, _ = _load_run_manifest(data_root, run_id)
+    proposal = _load_project_proposal(run_dir)
+    if proposal["status"] != "finalized":
+        raise ValueError("Finalize the project proposal before materializing Chat views")
+    source_index = _load_source_index(run_dir)
+    catalog = _source_catalog(source_index)
+    view: dict[str, Any] = {"schema_version": 1, "projects": {}, "errors": []}
+    written = 0
+    for project in proposal["projects"]:
+        if not isinstance(project, dict) or not project.get("id"):
+            continue
+        entries: list[dict[str, Any]] = []
+        for source_ref in project.get("source_refs") or []:
+            source = catalog.get(source_ref)
+            if not source or source.get("kind") != "chat":
+                continue
+            digest = hashlib.sha256(str(source_ref).encode("utf-8")).hexdigest()[:20]
+            try:
+                row = _chat_export_row(source_index, str(source.get("source_id")))
+                messages = [
+                    {
+                        "sender": str(message.get("sender") or "unknown"),
+                        "text": str(message.get("text") or ""),
+                        "created_at": message.get("created_at"),
+                    }
+                    for message in (row.get("chat_messages") or [])
+                    if isinstance(message, dict)
+                ]
+                pages = []
+                for start in range(0, len(messages), page_size):
+                    relative = f"chat-pages/{digest}/page-{start // page_size + 1:04d}.json"
+                    _write_json(run_dir / relative, {"messages": messages[start : start + page_size]})
+                    pages.append(relative)
+                entries.append({
+                    "title": str(source.get("title") or "Untitled Chat"),
+                    "summary": str(source.get("summary") or ""),
+                    "created_at": source.get("created_at"),
+                    "message_count": len(messages),
+                    "pages": pages,
+                })
+                written += 1
+            except (OSError, ValueError, zipfile.BadZipFile, json.JSONDecodeError) as error:
+                view["errors"].append({"project_id": project["id"], "title": str(source.get("title") or "Untitled Chat"), "message": str(error)})
+        view["projects"][project["id"]] = entries
+    _write_json(run_dir / "chat-view.json", view)
+    _append_run_event(run_dir, "chat_views_materialized", written=written, errors=len(view["errors"]))
+    return {"written": written, "errors": len(view["errors"])}
 
 
 def assign_sources(
@@ -1104,6 +1206,15 @@ def main() -> int:
     propose_project_cmd.add_argument("--source-ref", action="append", default=None)
     propose_project_cmd.add_argument("--candidate-id", action="append", default=None)
 
+    finalize_proposal_cmd = sub.add_parser("finalize-proposal", help="Mark a complete proposal ready for web selection")
+    finalize_proposal_cmd.add_argument("--data-root", required=True)
+    finalize_proposal_cmd.add_argument("--run-id", required=True)
+
+    materialize_chat_cmd = sub.add_parser("materialize-chat-views", help="Write page-sized selected Chat transcript files for the local viewer")
+    materialize_chat_cmd.add_argument("--data-root", required=True)
+    materialize_chat_cmd.add_argument("--run-id", required=True)
+    materialize_chat_cmd.add_argument("--page-size", type=int, default=20)
+
     assign_sources_cmd = sub.add_parser(
         "assign-sources",
         help="Attach sources (and an evidence summary) to one project candidate",
@@ -1156,6 +1267,10 @@ def main() -> int:
         print(json.dumps(classify_import_sources(data_root=args.data_root, run_id=args.run_id, classification=args.classification, source_refs=args.source_ref, note=args.note), ensure_ascii=False, indent=2))
     elif args.command == "propose-project":
         print(json.dumps(propose_project(data_root=args.data_root, run_id=args.run_id, name=args.name, summary=args.summary, source_refs=args.source_ref, candidate_ids=args.candidate_id), ensure_ascii=False, indent=2))
+    elif args.command == "finalize-proposal":
+        print(json.dumps(finalize_project_proposal(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
+    elif args.command == "materialize-chat-views":
+        print(json.dumps(materialize_proposal_chat_views(data_root=args.data_root, run_id=args.run_id, page_size=args.page_size), ensure_ascii=False, indent=2))
     elif args.command == "assign-sources":
         print(json.dumps(assign_sources(data_root=args.data_root, run_id=args.run_id, candidate_id=args.candidate_id, source_refs=args.source_ref, summary=args.summary), ensure_ascii=False, indent=2))
     elif args.command == "apply-selections":

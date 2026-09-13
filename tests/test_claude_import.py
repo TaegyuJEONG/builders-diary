@@ -698,6 +698,48 @@ class ClaudeImportTests(unittest.TestCase):
 
         self.assertEqual(entry["source_refs"], ["chat:chat-1", "chat:chat-2"])
 
+    def test_project_proposal_must_be_finalized_before_web_selection(self) -> None:
+        from skill.scripts.claude_import import finalize_project_proposal, propose_project
+
+        run_id = self._prepare()
+        proposed = propose_project(
+            data_root=self.data_root, run_id=run_id, name="Project", summary="A project.", source_refs=["chat:chat-1"],
+        )
+        proposal = json.loads((self.run_dir / "project-proposal.json").read_text(encoding="utf-8"))
+        self.assertEqual(proposal["status"], "draft")
+        self.assertEqual(finalize_project_proposal(data_root=self.data_root, run_id=run_id)["status"], "finalized")
+        self.assertEqual(proposed["id"], "project:project")
+
+    def test_project_proposal_rejects_a_source_owned_by_another_project(self) -> None:
+        from skill.scripts.claude_import import propose_project
+
+        run_id = self._prepare()
+        propose_project(
+            data_root=self.data_root, run_id=run_id, name="First", summary="First.", source_refs=["chat:chat-1"],
+        )
+        with self.assertRaisesRegex(ValueError, "already belongs to proposal"):
+            propose_project(
+                data_root=self.data_root, run_id=run_id, name="Second", summary="Second.", source_refs=["chat:chat-1"],
+            )
+
+    def test_materialized_chat_view_is_paged_and_keeps_raw_content_out_of_metadata(self) -> None:
+        from skill.scripts.claude_import import finalize_project_proposal, materialize_proposal_chat_views, propose_project
+
+        run_id = self._prepare()
+        propose_project(
+            data_root=self.data_root, run_id=run_id, name="Project", summary="A project.", source_refs=["chat:chat-1"],
+        )
+        finalize_project_proposal(data_root=self.data_root, run_id=run_id)
+        result = materialize_proposal_chat_views(data_root=self.data_root, run_id=run_id, page_size=1)
+
+        self.assertEqual(result["written"], 1)
+        index = json.loads((self.run_dir / "chat-view.json").read_text(encoding="utf-8"))
+        item = index["projects"]["project:project"][0]
+        self.assertEqual(item["title"], "Product Builder role taxonomy")
+        self.assertNotIn("private raw content", json.dumps(index))
+        page = json.loads((self.run_dir / item["pages"][0]).read_text(encoding="utf-8"))
+        self.assertEqual(page["messages"][0]["text"], "private raw content")
+
     def test_apply_selections_accepts_proposal_ids_and_merges_their_sources(self) -> None:
         from skill.scripts.claude_import import apply_selections, propose_project
 

@@ -24,14 +24,12 @@ test('import selection reads the agent proposal, never the raw discovery list', 
 test('proposal table uses human source labels instead of ids or card metadata', async () => {
   const table = await source('src/components/ImportSelectionTable.tsx');
 
-  assert.match(table, /headCell\('#'\)/);
-  assert.match(table, /headCell\('Project'\)/);
-  assert.match(table, /headCell\('Chat'\)/);
-  assert.match(table, /headCell\('Claude Code'\)/);
-  assert.match(table, /headCell\('Summary'\)/);
-  assert.doesNotMatch(table, /headCell\('Sector'\)/);
-  assert.doesNotMatch(table, /headCell\('Evidence'\)/);
-  assert.match(table, /kind="Chat"/);
-  assert.match(table, /role="dialog"/);
-  assert.match(table, /detail\.kind/);
+  assert.match(table, /head\('#'\)/);
+  assert.match(table, /head\('Project'\)/);
+  assert.match(table, /head\('Chat'\)/);
+  assert.match(table, /head\('Claude Code'\)/);
+  assert.match(table, /head\('Summary'\)/);
+  assert.doesNotMatch(table, /Sector/);
+  assert.doesNotMatch(table, /Evidence/);
+  assert.match(table, /Chat metadata from Claude export/);
 });

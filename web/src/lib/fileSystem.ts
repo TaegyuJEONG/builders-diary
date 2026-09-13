@@ -595,7 +595,7 @@ export interface ImportProposalProject {
 }
 
 /** Read only the agent-classified project proposal. Raw discovery is deliberately not UI input. */
-export async function readProjectProposal(handle: FileSystemDirectoryHandle): Promise<{ runId: string; projects: ImportProposalProject[] } | null> {
+export async function readProjectProposal(handle: FileSystemDirectoryHandle): Promise<{ runId: string; status: 'draft' | 'finalized'; projects: ImportProposalProject[] } | null> {
   try {
     const imports = await handle.getDirectoryHandle('imports');
     const runs: string[] = [];
@@ -608,10 +608,12 @@ export async function readProjectProposal(handle: FileSystemDirectoryHandle): Pr
       const manifest = await readJson(runDir, 'manifest.json');
       if (!manifest || manifest.status === 'source_task_curation') continue;
       const proposal = await readJson(runDir, 'project-proposal.json');
-      if (!proposal) return { runId, projects: [] };
+      if (!proposal) return { runId, status: 'draft', projects: [] };
+      const status = proposal.status === 'finalized' ? 'finalized' : 'draft';
       const projects = Array.isArray(proposal.projects) ? proposal.projects : [];
       return {
         runId,
+        status,
         projects: projects
           .filter((project: any) => project && project.classification === 'project')
           .map((project: any) => ({
@@ -633,6 +635,43 @@ export async function readProjectProposal(handle: FileSystemDirectoryHandle): Pr
       };
     }
     return null;
+  } catch {
+    return null;
+  }
+}
+
+export interface ChatViewEntry {
+  title: string;
+  summary: string;
+  created_at?: string | null;
+  message_count: number;
+  pages: string[];
+}
+
+export async function readChatView(handle: FileSystemDirectoryHandle, runId: string, projectId: string): Promise<{ chats: ChatViewEntry[]; errors: Array<{ title: string; message: string }> } | null> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runDir = await imports.getDirectoryHandle(runId);
+    const view = await readJson(runDir, 'chat-view.json');
+    if (!view) return null;
+    const chats = view.projects?.[projectId];
+    return {
+      chats: Array.isArray(chats) ? chats : [],
+      errors: Array.isArray(view.errors) ? view.errors.filter((error: any) => error.project_id === projectId) : [],
+    };
+  } catch (error) {
+    return { chats: [], errors: [{ title: 'Chat viewer', message: error instanceof Error ? error.message : 'Unable to read Chat viewer files.' }] };
+  }
+}
+
+export async function readChatPage(handle: FileSystemDirectoryHandle, runId: string, pagePath: string): Promise<{ messages: Array<{ sender: string; text: string; created_at?: string | null }> } | null> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runDir = await imports.getDirectoryHandle(runId);
+    const segments = pagePath.split('/').filter(Boolean);
+    let directory = runDir;
+    for (const segment of segments.slice(0, -1)) directory = await directory.getDirectoryHandle(segment);
+    return await readJson(directory, segments[segments.length - 1]);
   } catch {
     return null;
   }
