@@ -324,15 +324,16 @@ function PurposeStageBoard({
       {orderedStages.map(([stage, records]) => {
         const color = stageMeta(stage, stages).color;
         return (
-          <div key={stage} draggable onDragStart={e => { e.dataTransfer.setData('application/x-bd-stage', stage); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const task = e.dataTransfer.getData('application/x-bd-task'); const sourceStage = e.dataTransfer.getData('application/x-bd-stage'); if (task) onDropTaskToStage?.(task, stage); else if (sourceStage && sourceStage !== stage) onDropStage?.(sourceStage, stage); }} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', overflow: 'hidden', flexShrink: 0 }}>
+          <div key={stage} draggable onDragStart={e => { e.dataTransfer.setData('application/x-bd-stage', stage); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const task = e.dataTransfer.getData('application/x-bd-task'); const sourceStage = e.dataTransfer.getData('application/x-bd-stage'); if (task) onDropTaskToStage?.(task, stage); else if (sourceStage && sourceStage !== stage) onDropStage?.(sourceStage, stage); }} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${records.length ? 'var(--border)' : 'rgba(255,255,255,.06)'}`, borderRadius: 7, background: records.length ? 'var(--surface)' : 'rgba(0,0,0,.22)', overflow: 'hidden', flexShrink: 0, opacity: records.length ? 1 : .78 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }} onDragOver={e => e.preventDefault()}>
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block', flexShrink: 0 }} />
-              <span style={{ fontSize: 12.5, fontWeight: 650, color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, opacity: records.length ? 1 : .35, display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ fontSize: 12.5, fontWeight: 650, color: records.length ? 'var(--text)' : 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{records.length} task{records.length === 1 ? '' : 's'}</span>
               <button onClick={() => onCreateTask?.(stage)} title={`Add task to ${stage}`} className="mono" style={{ marginLeft: 'auto', width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', borderRadius: 3, cursor: 'pointer' }}>+</button>
               <button onClick={() => onDeleteStage?.(stage)} title={`Delete ${stage}`} className="mono" style={{ width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--danger)', borderRadius: 3, cursor: 'pointer' }}>×</button>
             </div>
             <div className="thin-scroll" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '12px 13px', overflowY: 'auto', overflowX: 'hidden' }}>
+              {records.length === 0 && <div className="mono" style={{ flex: 1, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', opacity: .65, fontSize: 11 }}>No tasks yet</div>}
               {records.map(record => (
                 <TaskCard
                   key={record.id}
