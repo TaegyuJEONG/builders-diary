@@ -307,9 +307,10 @@ function PurposeStageBoard({
     }
   }
 
-  const orderedStages = [...stageGroups.entries()].sort(([a], [b]) => (
-    stageMeta(a, stages).order - stageMeta(b, stages).order || a.localeCompare(b)
-  ));
+  const stageNames = [...new Set([...stages, ...stageGroups.keys()])];
+  const orderedStages = stageNames
+    .map(stage => [stage, stageGroups.get(stage) || []] as [string, Record[]])
+    .sort(([a], [b]) => stageMeta(a, stages).order - stageMeta(b, stages).order || a.localeCompare(b));
   if (orderedStages.length === 0) {
     return (
       <div className="mono" style={{ padding: '30px 24px', color: 'var(--text3)', fontSize: 12 }}>
