@@ -4,6 +4,8 @@ const puppeteer = require('puppeteer-core');
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const BASE = 'http://localhost:3111/?demo=1';
+const SHOTS = require('path').join(__dirname, '..', '.shots');
+const shot = (page, name) => page.screenshot({ path: require('path').join(SHOTS, name) }).catch(() => {});
 
 const panelTitle = () => {
   const aside = document.querySelector('aside');
@@ -66,6 +68,7 @@ const excerpt = text => text.replace(/\s+/g, ' ').trim().slice(0, 220);
   let title = await page.evaluate(panelTitle);
   let text = await page.evaluate(panelText);
   check('project edit panel is titled for that project', title === `Edit · ${projectName}`, title);
+  await shot(page, 'panel-1-edit-project.png');
   check('project edit panel shows project fields only',
     hasAll(text, ['Name', 'Type', 'Sector', 'One-line story', 'Logo URL', 'Save project'])
     && hasNone(text, ['Add stage', 'Create task', 'New task', 'Delete stage']),
@@ -79,6 +82,7 @@ const excerpt = text => text.replace(/\s+/g, ' ').trim().slice(0, 220);
   title = await page.evaluate(panelTitle);
   text = await page.evaluate(panelText);
   check('add project opens a create-only panel', title === 'New project or learning', title);
+  await shot(page, 'panel-2-create-project.png');
   check('create panel offers no stage or task controls',
     hasAll(text, ['Create project'])
     && hasNone(text, ['Add stage', 'Save stages', 'Create task', 'Delete project']),
@@ -94,6 +98,7 @@ const excerpt = text => text.replace(/\s+/g, ' ').trim().slice(0, 220);
   title = await page.evaluate(panelTitle);
   text = await page.evaluate(panelText);
   check('stage panel is scoped to the selected project', /^Stages · /.test(title || ''), title);
+  await shot(page, 'panel-3-stages.png');
   check('stage panel offers stage controls only',
     hasAll(text, ['Add stage', 'Save stages'])
     && hasNone(text, ['Create task', 'Delete project', 'One-line story']),
@@ -110,6 +115,7 @@ const excerpt = text => text.replace(/\s+/g, ' ').trim().slice(0, 220);
   title = await page.evaluate(panelTitle);
   text = await page.evaluate(panelText);
   check('task panel is scoped to the selected project', /^New task · /.test(title || ''), title);
+  await shot(page, 'panel-4-new-task.png');
   check('task panel offers task fields only',
     hasAll(text, ['Stage', 'Purpose', 'Task title', 'Activities', 'Create task'])
     && hasNone(text, ['Add stage', 'Delete project', 'One-line story']),
@@ -147,6 +153,7 @@ const excerpt = text => text.replace(/\s+/g, ' ').trim().slice(0, 220);
     const el = document.querySelector('[role="dialog"]');
     return el ? el.innerText.replace(/\s+/g, ' ').trim() : null;
   });
+  await shot(page, 'panel-5-delete-stage-confirm.png');
   check('removing a stage opens an in-app confirm dialog', !!dialog, dialog ? dialog.slice(0, 240) : null);
   check('the dialog names the stage and its tasks before deleting',
     !!dialog && new RegExp(stageToRemove, 'i').test(dialog) && /Task/.test(dialog) && /cannot be undone/.test(dialog),
