@@ -387,11 +387,13 @@ export function HomeContent() {
   const handleDeleteStage = useCallback(async (stage: string) => {
     if (!portfolio) return;
     const stageRecords = allRecords.filter(r => r.section === stage);
+    const selectedProjectSlug = portfolio.projects.find(p => p.id === selectedProjectId)?.slug;
+    const visibleStageRecords = selectedProjectSlug ? stageRecords.filter(r => r.project_slug === selectedProjectSlug) : stageRecords;
     const projectNames = [...new Set(stageRecords.map(r => r.projectTitle || r.project_slug || 'Unknown project'))];
     const scope = projectNames.length === 1 ? projectNames[0] : 'ALL PROJECTS';
     const token = `${scope} / ${stage}`;
     const warning = stageRecords.length
-      ? `Delete Stage “${stage}” and permanently delete ${stageRecords.length} Task${stageRecords.length === 1 ? '' : 's'} inside it?\n\nThis cannot be undone.`
+      ? `Delete Stage “${stage}” and permanently delete ${visibleStageRecords.length} visible Task${visibleStageRecords.length === 1 ? '' : 's'} (${stageRecords.length} total across all projects) inside it?\n\nThis cannot be undone.`
       : `Delete empty Stage “${stage}”?\n\nThis cannot be undone.`;
     if (!window.confirm(warning)) return;
     const typed = window.prompt(`Type exactly “${token}” to confirm Stage deletion.`);
@@ -405,7 +407,7 @@ export function HomeContent() {
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'Stage deletion failed');
     }
-  }, [allRecords, portfolio, refreshPortfolio]);
+  }, [allRecords, portfolio, refreshPortfolio, selectedProjectId]);
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
   const totalRecordCount = allRecords.length;
@@ -512,7 +514,8 @@ export function HomeContent() {
             filterState={filterState}
             mode={exploreMode}
             onModeChange={(mode) => { setExploreMode(mode); setSelectedGoalId(null); setSelectedRecordId(null); }}
-            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(null); setManagerProjectSlug(portfolio?.projects.find(p => p.id === id)?.slug || undefined); setManagerTab('projects'); setManagerOpen(true); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
+            onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(null); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
+            onEditProject={(id) => { setSelectedProjectId(id); setProjectPanelId(null); setManagerProjectSlug(portfolio?.projects.find(p => p.id === id)?.slug || undefined); setManagerTab('projects'); setManagerOpen(true); }}
             onCreateProject={() => { setManagerTab('projects'); setManagerProjectSlug(undefined); setManagerOpen(true); }}
             onDropTaskToStage={handleMoveTaskToStage}
             onCreateTask={(stage) => openManager('task', stage)}
