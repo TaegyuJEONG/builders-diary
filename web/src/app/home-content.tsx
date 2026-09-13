@@ -392,7 +392,11 @@ export function HomeContent() {
 
   const deleteStageAfterConfirm = useCallback(async () => {
     if (!portfolio || !stageDeleteTarget) return;
-    const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget);
+    const selectedProjectSlug = portfolio.projects.find(p => p.id === selectedProjectId)?.slug;
+    const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget && (!selectedProjectSlug || r.project_slug === selectedProjectSlug));
+    const selectedProject = portfolio.projects.find(p => p.slug === selectedProjectSlug);
+    const scope = selectedProject?.title || selectedProject?.name || selectedProjectSlug || 'ALL PROJECTS';
+    const token = `${scope} / ${stageDeleteTarget}`;
     try {
       for (const record of stageRecords) await deleteRecordFromFile(record.file_path);
       const handle = await loadFolderHandleFromStorage();
@@ -404,7 +408,7 @@ export function HomeContent() {
       console.error(error);
       setStageDeleteTarget(null);
     }
-  }, [allRecords, portfolio, refreshPortfolio, stageDeleteTarget]);
+  }, [allRecords, portfolio, refreshPortfolio, stageDeleteTarget, selectedProjectId]);
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
   const totalRecordCount = allRecords.length;
@@ -559,16 +563,16 @@ export function HomeContent() {
       )}
 
       {stageDeleteTarget && (() => {
-        const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget);
-        const visibleCount = selectedProjectId ? stageRecords.filter(r => r.project_slug === portfolio?.projects.find(p => p.id === selectedProjectId)?.slug).length : stageRecords.length;
-        const projectNames = [...new Set(stageRecords.map(r => r.projectTitle || r.project_slug || 'Unknown project'))];
-        const scope = projectNames.length === 1 ? projectNames[0] : 'ALL PROJECTS';
+        const selectedProjectSlug = portfolio?.projects.find(p => p.id === selectedProjectId)?.slug;
+        const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget && (!selectedProjectSlug || r.project_slug === selectedProjectSlug));
+        const selectedProject = portfolio?.projects.find(p => p.slug === selectedProjectSlug);
+        const scope = selectedProject?.title || selectedProject?.name || selectedProjectSlug || 'ALL PROJECTS';
         const token = `${scope} / ${stageDeleteTarget}`;
         return <ConfirmDialog
           open
           danger
           title={`Delete ${stageDeleteTarget} stage?`}
-          message={<><p style={{ margin: 0 }}>This permanently deletes the Stage and its Tasks.</p><p style={{ margin: '10px 0 0' }}><strong style={{ color: 'var(--danger)' }}>{visibleCount} visible Task{visibleCount === 1 ? '' : 's'}</strong> ({stageRecords.length} total across all projects) will be deleted. This cannot be undone.</p></>}
+          message={<><p style={{ margin: 0 }}>This permanently deletes the Stage and its Tasks.</p><p style={{ margin: '10px 0 0' }}><strong style={{ color: 'var(--danger)' }}>{stageRecords.length} Task{stageRecords.length === 1 ? '' : 's'}</strong> in {scope} will be deleted. This cannot be undone.</p></>}
           confirmLabel="Delete stage"
           requireText={token}
           onCancel={() => setStageDeleteTarget(null)}
