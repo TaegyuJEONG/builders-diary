@@ -575,6 +575,69 @@ export async function readProjectCandidates(handle: FileSystemDirectoryHandle): 
   }
 }
 
+export interface ImportSourcePreview {
+  title: string;
+  summary?: string;
+  first_prompt?: string;
+  created_at?: string | null;
+  message_count?: number;
+}
+
+export interface ImportProposalProject {
+  id: string;
+  classification: 'project';
+  name: string;
+  summary: string;
+  source_refs: string[];
+  candidate_ids: string[];
+  chat: ImportSourcePreview[];
+  claude_code: ImportSourcePreview[];
+}
+
+/** Read only the agent-classified project proposal. Raw discovery is deliberately not UI input. */
+export async function readProjectProposal(handle: FileSystemDirectoryHandle): Promise<{ runId: string; projects: ImportProposalProject[] } | null> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runs: string[] = [];
+    for await (const [name, entry] of imports.entries()) {
+      if (entry.kind === 'directory' && !name.startsWith('.')) runs.push(name);
+    }
+    runs.sort().reverse();
+    for (const runId of runs) {
+      const runDir = await imports.getDirectoryHandle(runId);
+      const manifest = await readJson(runDir, 'manifest.json');
+      if (!manifest || manifest.status === 'source_task_curation') continue;
+      const proposal = await readJson(runDir, 'project-proposal.json');
+      if (!proposal) return { runId, projects: [] };
+      const projects = Array.isArray(proposal.projects) ? proposal.projects : [];
+      return {
+        runId,
+        projects: projects
+          .filter((project: any) => project && project.classification === 'project')
+          .map((project: any) => ({
+            id: String(project.id),
+            classification: 'project' as const,
+            name: String(project.name || ''),
+            summary: String(project.summary || ''),
+            source_refs: Array.isArray(project.source_refs) ? project.source_refs.map(String) : [],
+            candidate_ids: Array.isArray(project.candidate_ids) ? project.candidate_ids.map(String) : [],
+            chat: Array.isArray(project.chat) ? project.chat.map((source: any) => ({
+              title: String(source.title || 'Untitled Chat'), summary: source.summary || undefined,
+              created_at: source.created_at || undefined, message_count: typeof source.message_count === 'number' ? source.message_count : undefined,
+            })) : [],
+            claude_code: Array.isArray(project.claude_code) ? project.claude_code.map((source: any) => ({
+              title: String(source.title || 'Untitled Claude Code session'), first_prompt: source.first_prompt || undefined,
+              created_at: source.created_at || undefined,
+            })) : [],
+          })),
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');

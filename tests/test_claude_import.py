@@ -582,6 +582,30 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertEqual(chat_candidate["source_refs"], [])
         self.assertIn("summary", next(c for c in self._candidates() if c["source"] == "claude_code_workspace"))
 
+    def test_project_proposal_records_human_chat_metadata_not_raw_ids(self) -> None:
+        """The web must receive only proposed projects and readable Chat labels."""
+        from skill.scripts.claude_import import propose_project
+
+        run_id = self._prepare()
+        proposal = propose_project(
+            data_root=self.data_root,
+            run_id=run_id,
+            name="PinPoint",
+            summary="Reddit GEO outreach tool configuration and design-system work.",
+            source_refs=["chat:chat-1"],
+        )
+
+        self.assertEqual(proposal["name"], "PinPoint")
+        self.assertEqual(proposal["source_refs"], ["chat:chat-1"])
+        self.assertEqual(proposal["chat"][0]["title"], "Product Builder role taxonomy")
+        self.assertEqual(proposal["chat"][0]["summary"], "Defined a repeatable Product Builder classification rule.")
+        self.assertNotIn("chat-1", str(proposal["chat"][0]), "raw UUID must not become the user-facing label")
+
+        proposal_file = json.loads((self.run_dir / "project-proposal.json").read_text(encoding="utf-8"))
+        self.assertEqual([item["name"] for item in proposal_file["projects"]], ["PinPoint"])
+        self.assertEqual(proposal_file["schema_version"], 1)
+        self.assertEqual(proposal_file["projects"][0]["classification"], "project")
+
     def test_assign_sources_links_conversations_and_reaches_the_queue(self) -> None:
         """The whole point: a chat candidate confirmed in the web must have sources."""
         from skill.scripts.claude_import import apply_selections, assign_sources, project_source_queue
@@ -674,6 +698,31 @@ class ClaudeImportTests(unittest.TestCase):
 
         self.assertEqual(entry["source_refs"], ["chat:chat-1", "chat:chat-2"])
 
+    def test_apply_selections_accepts_proposal_ids_and_merges_their_sources(self) -> None:
+        from skill.scripts.claude_import import apply_selections, propose_project
+
+        run_id = self._prepare()
+        chat = propose_project(
+            data_root=self.data_root, run_id=run_id, name="PinPoint", summary="Chat project work.", source_refs=["chat:chat-1"],
+        )
+        code = propose_project(
+            data_root=self.data_root, run_id=run_id, name="PinPoint Code", summary="Workspace work.",
+            candidate_ids=[next(c for c in self._candidates() if c["source"] == "claude_code_workspace")["id"]],
+        )
+        (self.run_dir / "selections.json").write_text(json.dumps({
+            "run_id": run_id,
+            "order": [chat["id"]],
+            "projects": [{"proposal_id": chat["id"], "name": "PinPoint", "action": "confirm", "merged_from": [code["id"]]}],
+        }), encoding="utf-8")
+
+        applied = apply_selections(data_root=self.data_root, run_id=run_id)
+        self.assertEqual(applied["confirmed"], ["pinpoint"])
+        self.assertEqual(applied["merged"], [code["id"]])
+        queue = __import__("skill.scripts.claude_import", fromlist=["project_source_queue"]).project_source_queue(
+            data_root=self.data_root, run_id=run_id, project_name="PinPoint"
+        )
+        self.assertEqual([item["source_ref"] for item in queue], ["chat:chat-1", "code:code-1"])
+
     def test_merge_and_row_order_survive_apply_selections(self) -> None:
         """A merged row must feed its sources to the parent, and row order becomes board order."""
         from skill.scripts.claude_import import apply_selections, assign_sources
@@ -723,20 +772,17 @@ class ClaudeImportTests(unittest.TestCase):
         project = json.loads((Path(self.data_root) / "code-project" / "project.json").read_text(encoding="utf-8"))
         self.assertEqual(project["order"], 0)
 
-    def test_skill_attaches_chat_sources_before_project_selection(self) -> None:
-        """A chat candidate confirmed with no sources can never produce a task card."""
+    def test_skill_records_classified_proposals_before_web_selection(self) -> None:
+        """Raw discovery must be classified into project/learning/noise before UI reads it."""
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
         step_three = skill[skill.index("## Step 3") : skill.index("## Step 4")]
 
-        self.assertIn("assign-sources", step_three)
-        self.assertIn("chat-project:", step_three)
-        self.assertIn("empty source queue", step_three)
-        self.assertIn("is_starter_project", step_three)
-        # A project confirmed without sources must be reported, not swallowed.
-        self.assertIn("without_sources", skill)
-        # The merge contract the web table writes must be documented for the agent.
-        self.assertIn("merged_from", skill)
-        self.assertIn("`order`", skill)
+        for label in ("project", "learning", "noise", "classify-sources", "propose-project", "project-proposal.json"):
+            self.assertIn(label, step_three)
+        self.assertIn("title + summary", step_three)
+        self.assertIn("raw UUIDs", step_three)
+        self.assertIn("sector", step_three.lower())
+        self.assertIn("merged_from", step_three)
 
     def test_skill_sends_a_user_without_exports_to_the_export_flow(self) -> None:
         """A user who has not exported must be walked through the export, not prepared.
@@ -812,20 +858,14 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertIn("another window", skill[:prepare].lower())
         self.assertIn("live", skill[:prepare].lower())
 
-    def test_project_selection_is_numbered_with_resume_and_web_codrive(self) -> None:
+    def test_project_selection_uses_proposal_contract_and_web_codrive(self) -> None:
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
 
-        # Numbered selection instead of an AskUserQuestion gate.
-        self.assertIn("1, 3, 6", skill)
-        self.assertIn("2, 4, 5", skill)
-        self.assertIn("skip 7, 8", skill)
-        self.assertNotIn("multiSelect", skill)
-        # Resume: skip projects already in the portfolio.
-        self.assertIn("existing_projects", skill)
-        self.assertIn("Do **not** re-propose", skill)
-        # Co-drive: web writes selections, chat applies them.
+        self.assertIn("Choose the projects to import in the web view", skill)
+        self.assertIn("project-proposal.json", skill)
         self.assertIn("selections.json", skill)
         self.assertIn("apply-selections", skill)
+        self.assertNotIn("multiSelect", skill)
 
     def test_sources_are_processed_oldest_first_with_lazy_purpose_creation(self) -> None:
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")

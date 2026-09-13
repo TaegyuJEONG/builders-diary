@@ -132,90 +132,70 @@ It does not create portfolio tasks yet.
 
 Read `project-candidates.json` and explain the source counts. Explicitly separate `new_sources`, `changed_sources`, `pending_sources`, and `unchanged_sources`; only unchanged sources with a completed Ledger outcome are skipped automatically. The web viewer refreshes this manifest automatically while it remains open.
 
-## Step 3 — Propose and confirm Projects
+## Step 3 — Classify, propose, and let the user choose
 
-Build a unified project proposal from:
+The discovery file is **not** a proposal. `project-candidates.json` contains raw Chat-project shells and every Claude Code workspace, including scratch/test folders. Never show it to the user and never ask the user to prune it.
 
-- Claude Chat Projects and chat `title + summary` metadata.
-- **All** retained Claude Code main sessions, grouped by workspace/cwd.
+### Classify metadata before reading any source in full
 
-Claude Chat exports do not provide a direct conversation-to-project UUID link. Assign a Chat conversation to a proposed project only when its title/summary and dates provide evidence. Keep ambiguous conversation IDs as `postponed` for later review; never guess, discard, or silently attach them.
-
-### Attach sources to every Chat project before the user selects
-
-A Chat project candidate starts with **no** sources. If it is confirmed that way it gets an empty source queue and can never produce a task card, so the work behind it is lost. You are the only thing that can link the conversations, so do it before presenting the proposal.
-
-For each Claude Chat project candidate:
-
-1. Read its conversations from `source-index.json` (`chat.conversations`, each with `source_id`, `title`, `summary`, `created_at`, `message_count`).
-2. Assign the conversations whose title/summary genuinely belong to that project, and write an evidence summary in the same call:
-
-```bash
-python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" assign-sources \
-  --data-root "$DATA_ROOT" \
-  --run-id "<run-id>" \
-  --candidate-id "chat-project:<project-uuid>" \
-  --source-ref "chat:<conversation-uuid>" \
-  --source-ref "chat:<conversation-uuid>" \
-  --summary "Curated the Product Builder taxonomy across 12 working sessions."
-```
-
-3. `assign-sources` refuses an unknown ref and one already assigned to a different candidate — resolve the conflict, never duplicate a conversation.
-4. Leave conversations the evidence does not place, and say which ones you left out.
-
-Prefer the deterministic evidence already on the candidate over invented prose: `is_starter_project` (Anthropic's built-in example project — never the user's work), `prompt_template`, `doc_count`, `description`, plus title/summary. Claude Code candidates need no assignment — the workspace folder is the project and its sessions are already attached.
-
-### Resume — skip what is already done
-
-Read `manifest.json` `existing_projects`. It lists every Project and Learning entry already in the portfolio. Do **not** re-propose those; instead offer to add purposes/tasks to them or to import only the remaining sources. If the user already confirmed projects in a previous run, their names are here.
-
-### Numbered selection — not a multiple-choice gate
-
-Show the full numbered proposal table first, including evidence for every merge. Then ask the user to type their selection in one line. Do **not** use `AskUserQuestion` for projects: a numbered list scales to any count and handles merges and renames without the four-option limit.
-
-Examples the user can type:
+Use Chat `title + summary + date + message_count` and Claude Code workspace/session metadata. Classify **each source**, not the user's life, into exactly one bucket:
 
 ```text
-1, 3, 6                     — confirm those projects
-2, 4, 5 → Adevinta          — merge 2, 4, 5 into one project named Adevinta
-1 → Product Builder Jobs    — confirm and rename
-skip 7, 8                   — drop those candidates
+project   — concrete work on a product, service, or venture
+learning  — standalone tool, concept, or skill learning (not one product)
+noise     — scratch, test, empty shell, greeting, or no durable work signal
 ```
 
-Interpret the typed selection literally; clarify only a genuine conflict.
+Do not invent other categories. A job application or interview can still be `project` if the source contains concrete work; it is not a separate category.
 
-For each selected or merged project, propose `name`, `sector`, and `one_liner` in the table. The project selection is approval of those fields unless the free-text response edits them. Materialize every approved project immediately:
+Claude Chat export has no direct conversation→project UUID. That does **not** mean it cannot be linked: infer the link from title/summary only when the subject is actually work on that product. A product merely mentioned in a career discussion is not enough. Keep ambiguous sources unclassified rather than force them.
+
+For Claude Code, `cwd` is normally the project. Read the first meaningful session metadata (title, first prompt, date); if that session is empty, use the earliest session with a substantive prompt. Do not read full transcripts merely to name a project.
+
+Record learning/noise decisions so they never leak into the selection table:
 
 ```bash
-python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" confirm-project \
-  --data-root "$DATA_ROOT" \
-  --run-id "<run-id>" \
-  --name "Product Builder Jobs" \
-  --sector "Talent discovery" \
-  --one-liner "Curated Product Builder roles from noisy job listings." \
-  --source-ref "chat:<conversation-id>" \
-  --source-ref "code:<session-id>"
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" classify-sources \
+  --data-root "$DATA_ROOT" --run-id "<run-id>" \
+  --classification noise --source-ref "code:<session-id>" \
+  --note "One-session scratch workspace"
 ```
 
-Pass every exact source ID belonging to the selected or merged project. The helper validates, deduplicates, and persists them. Confirming the same project again **unions** the source lists, so a merged project keeps every source you pass across calls.
+### Write only real projects to the web proposal
 
-### Co-drive with the web view
+For each project, call `propose-project`. It validates source ids, automatically adds every session from a selected Claude Code workspace, and writes `project-proposal.json` with human-readable Chat titles/summaries — never UUID labels.
 
-The user may instead confirm projects in the web view, which writes `imports/<run-id>/selections.json`. If that file exists when you reach this step, apply it instead of asking again:
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" propose-project \
+  --data-root "$DATA_ROOT" --run-id "<run-id>" \
+  --name "PinPoint" \
+  --summary "Reddit GEO outreach tool configuration and design-system work." \
+  --candidate-id "code-workspace:<workspace>" \
+  --source-ref "chat:<conversation-id>"
+```
+
+The web renders **only** `project-proposal.json.projects`. Its columns are Project, Chat, Claude Code, and Summary. Chat/Claude Code counts open a metadata detail panel containing readable titles and summaries; raw UUIDs and full transcripts stay out of the web view.
+
+### User message: short and action-only
+
+After writing the proposal, say only:
+
+```text
+Choose the projects to import in the web view, or reply with their numbers here.
+```
+
+Optionally list one short line per proposed project (`Name — N chats · N Claude Code sessions`). Do not dump raw candidate counts, rejected-source lists, UUIDs, privacy essays, or selection syntax examples unless the user asks.
+
+### Apply a web selection
+
+The web writes `imports/<run-id>/selections.json`. If it exists, apply it instead of asking again:
 
 ```bash
 python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" apply-selections \
   --data-root "$DATA_ROOT" --run-id "<run-id>"
 ```
 
-The response lists `without_sources`: projects that were written with an empty source list. Those exist in the portfolio but have an empty source queue and can never produce a task card — report them plainly and offer to attach their sources with `assign-sources` plus `confirm-project`. Never continue silently past them.
-
-The web table reads the candidate fields you filled in (`source_refs`, `summary`) alongside `source`, `session_count`, `description`, `prompt_template`, `is_starter_project` and `doc_count`, so the user sees the same evidence you did.
-
-The table also records decisions you should expect in that file:
-
-- `order` — the row order the user arranged, which `apply-selections` writes as the portfolio board order (the web sorts projects by their `order`).
-- `merged_from` — a candidate the user nested under this one. `apply-selections` unions the child's sources into the parent and does **not** write the child as its own project; the absorbed ids come back under `merged`. This is how a user merges duplicates in the web, so never re-propose a merged child as a separate project.
+`order` becomes the portfolio board order. `merged_from` contains proposal ids nested under the parent: the helper unions their sources and writes only the parent project. `sector` and `one_liner` are intentionally deferred until Task curation.
 
 Then continue to Step 4 with the confirmed projects.
 

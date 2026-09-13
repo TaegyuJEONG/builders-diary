@@ -562,6 +562,129 @@ def _load_candidates(run_dir: Path) -> dict[str, Any]:
     return data
 
 
+def _load_project_proposal(run_dir: Path) -> dict[str, Any]:
+    """Load the agent's decision layer; raw discovery stays in project-candidates.json."""
+    path = run_dir / "project-proposal.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        value = {}
+    if not isinstance(value, dict):
+        value = {}
+    return {
+        "schema_version": 1,
+        "projects": value.get("projects") if isinstance(value.get("projects"), list) else [],
+        "learning": value.get("learning") if isinstance(value.get("learning"), list) else [],
+        "noise": value.get("noise") if isinstance(value.get("noise"), list) else [],
+    }
+
+
+def _visible_source_metadata(source: dict[str, Any]) -> dict[str, Any]:
+    """Safe, human-facing source metadata for the web. Never expose UUIDs or raw text."""
+    if source.get("kind") == "chat":
+        return {
+            "title": str(source.get("title") or "Untitled Chat"),
+            "summary": str(source.get("summary") or ""),
+            "created_at": source.get("created_at"),
+            "message_count": source.get("message_count") or 0,
+        }
+    return {
+        "title": str(source.get("title") or "Untitled Claude Code session"),
+        "first_prompt": str(source.get("first_prompt") or ""),
+        "created_at": source.get("created_at"),
+    }
+
+
+def classify_import_sources(
+    *,
+    data_root: str | Path,
+    run_id: str,
+    classification: str,
+    source_refs: list[str],
+    note: str = "",
+) -> list[dict[str, Any]]:
+    """Record project-independent learning/noise decisions from source metadata."""
+    if classification not in {"learning", "noise"}:
+        raise ValueError("Classification must be learning or noise; projects use propose-project")
+    root = Path(data_root).expanduser()
+    run_dir, _ = _load_run_manifest(root, run_id)
+    catalog = _source_catalog(_load_source_index(run_dir))
+    refs = list(dict.fromkeys(source_refs))
+    unknown = [source_ref for source_ref in refs if source_ref not in catalog]
+    if unknown:
+        raise ValueError(f"Unknown source refs: {', '.join(unknown)}")
+    proposal = _load_project_proposal(run_dir)
+    existing = {str(item.get("source_ref")): item for item in proposal[classification] if isinstance(item, dict)}
+    rows = []
+    for source_ref in refs:
+        item = {"source_ref": source_ref, "note": note.strip(), **_visible_source_metadata(catalog[source_ref])}
+        existing[source_ref] = item
+        rows.append(item)
+    proposal[classification] = list(existing.values())
+    _write_json(run_dir / "project-proposal.json", proposal)
+    _append_run_event(run_dir, "sources_classified", classification=classification, source_count=len(refs))
+    return rows
+
+
+def propose_project(
+    *,
+    data_root: str | Path,
+    run_id: str,
+    name: str,
+    summary: str,
+    source_refs: list[str] | None = None,
+    candidate_ids: list[str] | None = None,
+) -> dict[str, Any]:
+    """Write one agent-classified project proposal for the web selection view.
+
+    Discovery intentionally remains raw (`project-candidates.json`). This is the
+    decision layer: only rows classified as real projects land here. Source refs
+    may be passed directly from title/summary analysis, and candidate ids add all
+    sources already belonging to a selected Claude Code workspace.
+    """
+    root = Path(data_root).expanduser()
+    run_dir, _ = _load_run_manifest(root, run_id)
+    catalog = _source_catalog(_load_source_index(run_dir))
+    candidates = _load_candidates(run_dir)["candidates"]
+    by_id = {str(item.get("id")): item for item in candidates if isinstance(item, dict) and item.get("id")}
+
+    wanted = list(dict.fromkeys(source_refs or []))
+    selected_candidates = list(dict.fromkeys(candidate_ids or []))
+    unknown_candidates = [candidate_id for candidate_id in selected_candidates if candidate_id not in by_id]
+    if unknown_candidates:
+        raise ValueError(f"Unknown candidate ids: {', '.join(unknown_candidates)}")
+    for candidate_id in selected_candidates:
+        wanted.extend(by_id[candidate_id].get("source_refs") or [])
+    wanted = list(dict.fromkeys(wanted))
+    unknown_refs = [source_ref for source_ref in wanted if source_ref not in catalog]
+    if unknown_refs:
+        raise ValueError(f"Unknown source refs: {', '.join(unknown_refs)}")
+    if not wanted:
+        raise ValueError("A project proposal needs at least one linked source")
+
+    proposal = _load_project_proposal(run_dir)
+    project_id = f"project:{_candidate_key(name)}"
+    item = next((row for row in proposal["projects"] if isinstance(row, dict) and row.get("id") == project_id), None)
+    if item is None:
+        item = {"id": project_id, "classification": "project"}
+        proposal["projects"].append(item)
+    all_refs = list(dict.fromkeys([*(item.get("source_refs") or []), *wanted]))
+    all_candidates = list(dict.fromkeys([*(item.get("candidate_ids") or []), *selected_candidates]))
+    item.update(
+        {
+            "name": name.strip(),
+            "summary": summary.strip(),
+            "candidate_ids": all_candidates,
+            "source_refs": all_refs,
+            "chat": [_visible_source_metadata(catalog[ref]) for ref in all_refs if catalog[ref].get("kind") == "chat"],
+            "claude_code": [_visible_source_metadata(catalog[ref]) for ref in all_refs if catalog[ref].get("kind") == "code"],
+        }
+    )
+    _write_json(run_dir / "project-proposal.json", proposal)
+    _append_run_event(run_dir, "project_proposed", project_id=project_id, source_count=len(all_refs))
+    return item
+
+
 def assign_sources(
     *,
     data_root: str | Path,
@@ -837,26 +960,34 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
 
     candidates_path = run_dir / "project-candidates.json"
     candidates = json.loads(candidates_path.read_text(encoding="utf-8")).get("candidates", [])
-    by_id = {candidate["id"]: candidate for candidate in candidates if isinstance(candidate, dict)}
+    by_candidate_id = {str(candidate["id"]): candidate for candidate in candidates if isinstance(candidate, dict) and candidate.get("id")}
+    proposal = _load_project_proposal(run_dir)
+    by_proposal_id = {
+        str(item["id"]): item
+        for item in proposal["projects"]
+        if isinstance(item, dict) and item.get("id")
+    }
 
     entries = [item for item in selections.get("projects", []) if isinstance(item, dict)]
     # The table's row order becomes the board order, so apply them in the order the user
     # arranged. Anything unlisted keeps its file order, after the listed rows.
     order = [str(item) for item in (selections.get("order") or [])]
 
+    def choice_id(entry: dict[str, Any]) -> str:
+        return str(entry.get("proposal_id") or entry.get("candidate_id") or "")
+
+    def source_for(choice: str) -> dict[str, Any] | None:
+        return by_proposal_id.get(choice) or by_candidate_id.get(choice)
+
     def rank(entry: dict[str, Any]) -> int:
-        candidate_id = str(entry.get("candidate_id") or "")
-        return order.index(candidate_id) if candidate_id in order else len(order)
+        selected_id = choice_id(entry)
+        return order.index(selected_id) if selected_id in order else len(order)
 
     entries.sort(key=rank)
 
     # A merge is a parent row with children. Only the parent becomes a project and it
     # inherits every child's sources; writing a child as its own project would split it.
-    absorbed = {
-        str(child)
-        for entry in entries
-        for child in (entry.get("merged_from") or [])
-    }
+    absorbed = {str(child) for entry in entries for child in (entry.get("merged_from") or [])}
 
     confirmed: list[str] = []
     dropped: list[str] = []
@@ -864,26 +995,27 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
     without_sources: list[dict[str, str]] = []
     confirm_index = 0
     for entry in entries:
-        candidate_id = str(entry.get("candidate_id") or "")
-        candidate = by_id.get(candidate_id)
-        if candidate is None or candidate_id in absorbed:
+        selected_id = choice_id(entry)
+        item = source_for(selected_id)
+        if item is None or selected_id in absorbed:
             continue
         if entry.get("action") == "drop":
-            dropped.append(candidate_id)
+            dropped.append(selected_id)
             continue
-        source_refs: list[str] = list(candidate.get("source_refs") or [])
+        source_refs: list[str] = list(item.get("source_refs") or [])
         for child_id in (entry.get("merged_from") or []):
-            child = by_id.get(str(child_id))
+            child = source_for(str(child_id))
             if child is None:
                 continue
             source_refs.extend(child.get("source_refs") or [])
             merged.append(str(child_id))
         source_refs = list(dict.fromkeys(source_refs))
-        name = str(entry.get("name") or candidate.get("name") or "Untitled").strip()
+        name = str(entry.get("name") or item.get("name") or "Untitled").strip()
         project = confirm_project(
             data_root=data_root,
             run_id=run_id,
             name=name,
+            # These fields are intentionally deferred until cards are curated.
             sector=str(entry.get("sector") or ""),
             one_liner=str(entry.get("one_liner") or ""),
             source_refs=source_refs,
@@ -892,10 +1024,7 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
         confirm_index += 1
         confirmed.append(project["slug"])
         if not source_refs:
-            # The project now exists but nothing can ever be curated into it: its source
-            # queue is empty. Surface it so the skill reports the gap instead of quietly
-            # importing nothing for that project.
-            without_sources.append({"candidate_id": candidate_id, "name": name})
+            without_sources.append({"candidate_id": selected_id, "name": name})
     return {"confirmed": confirmed, "dropped": dropped, "merged": merged, "without_sources": without_sources}
 
 
@@ -960,6 +1089,21 @@ def main() -> int:
     confirm_project_cmd.add_argument("--one-liner", default="")
     confirm_project_cmd.add_argument("--source-ref", action="append", default=None)
 
+    classify_sources_cmd = sub.add_parser("classify-sources", help="Record learning or noise sources; projects use propose-project")
+    classify_sources_cmd.add_argument("--data-root", required=True)
+    classify_sources_cmd.add_argument("--run-id", required=True)
+    classify_sources_cmd.add_argument("--classification", required=True, choices=["learning", "noise"])
+    classify_sources_cmd.add_argument("--source-ref", action="append", required=True)
+    classify_sources_cmd.add_argument("--note", default="")
+
+    propose_project_cmd = sub.add_parser("propose-project", help="Write one agent-classified project proposal for the web")
+    propose_project_cmd.add_argument("--data-root", required=True)
+    propose_project_cmd.add_argument("--run-id", required=True)
+    propose_project_cmd.add_argument("--name", required=True)
+    propose_project_cmd.add_argument("--summary", required=True)
+    propose_project_cmd.add_argument("--source-ref", action="append", default=None)
+    propose_project_cmd.add_argument("--candidate-id", action="append", default=None)
+
     assign_sources_cmd = sub.add_parser(
         "assign-sources",
         help="Attach sources (and an evidence summary) to one project candidate",
@@ -1008,6 +1152,10 @@ def main() -> int:
         print(json.dumps(list_import_runs(data_root=args.data_root), ensure_ascii=False, indent=2))
     elif args.command == "confirm-project":
         print(json.dumps(confirm_project(data_root=args.data_root, run_id=args.run_id, name=args.name, sector=args.sector, one_liner=args.one_liner, source_refs=args.source_ref), ensure_ascii=False, indent=2))
+    elif args.command == "classify-sources":
+        print(json.dumps(classify_import_sources(data_root=args.data_root, run_id=args.run_id, classification=args.classification, source_refs=args.source_ref, note=args.note), ensure_ascii=False, indent=2))
+    elif args.command == "propose-project":
+        print(json.dumps(propose_project(data_root=args.data_root, run_id=args.run_id, name=args.name, summary=args.summary, source_refs=args.source_ref, candidate_ids=args.candidate_id), ensure_ascii=False, indent=2))
     elif args.command == "assign-sources":
         print(json.dumps(assign_sources(data_root=args.data_root, run_id=args.run_id, candidate_id=args.candidate_id, source_refs=args.source_ref, summary=args.summary), ensure_ascii=False, indent=2))
     elif args.command == "apply-selections":
