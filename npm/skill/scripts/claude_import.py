@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import hashlib
 import html
 import json
 import re
@@ -53,8 +54,79 @@ def _safe_text(value: Any, limit: int = 500) -> str:
 
 
 def _write_json(path: Path, value: Any) -> None:
+    """Atomically replace a private import state JSON file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
+def _utc_now() -> str:
+    return dt.datetime.now(dt.timezone.utc).isoformat()
+
+
+def _source_fingerprint(source: dict[str, Any]) -> str:
+    """Stable local fingerprint of safe source metadata, never raw transcript text."""
+    safe = {
+        key: source.get(key)
+        for key in ("source_ref", "kind", "source_id", "title", "summary", "cwd", "created_at", "updated_at", "message_count")
+    }
+    encoded = json.dumps(safe, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+
+
+def _load_source_ledger(root: Path) -> dict[str, Any]:
+    path = root / "imports" / "source-ledger.json"
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        value = {}
+    if not isinstance(value, dict):
+        value = {}
+    sources = value.get("sources")
+    return {
+        "schema_version": 1,
+        "sources": sources if isinstance(sources, dict) else {},
+    }
+
+
+def _append_run_event(run_dir: Path, event: str, **details: Any) -> None:
+    """Append an auditable state transition without storing raw source content."""
+    payload = {"at": _utc_now(), "event": event, **details}
+    path = run_dir / "events.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as target:
+        target.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _classify_sources(root: Path, catalog: dict[str, dict[str, Any]]) -> tuple[dict[str, str], dict[str, Any]]:
+    """Update the source inventory and label each source new, changed, or unchanged."""
+    ledger = _load_source_ledger(root)
+    sources = ledger["sources"]
+    classifications: dict[str, str] = {}
+    now = _utc_now()
+    for source_ref, source in catalog.items():
+        fingerprint = _source_fingerprint(source)
+        previous: Any = sources.get(source_ref)
+        if not isinstance(previous, dict):
+            state = "new"
+            previous = {"first_seen_at": now, "status": "unseen"}
+        elif previous.get("content_hash") == fingerprint:
+            state = "pending" if previous.get("status") in {"unseen", "postponed"} else "unchanged"
+        else:
+            state = "changed"
+        previous.update({
+            "source_client": "claude",
+            "source_surface": source.get("kind"),
+            "source_id": source.get("source_id"),
+            "content_hash": fingerprint,
+            "updated_at": source.get("updated_at"),
+            "last_seen_at": now,
+        })
+        sources[source_ref] = previous
+        classifications[source_ref] = state
+    _write_json(root / "imports" / "source-ledger.json", ledger)
+    return classifications, ledger
 
 
 def _date_range(items: list[dict[str, Any]], key: str) -> dict[str, str | None]:
@@ -247,7 +319,9 @@ def _candidate_key(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
 
 
-def _project_candidates(chat_index: dict[str, Any], code_index: dict[str, Any]) -> dict[str, Any]:
+def _project_candidates(
+    chat_index: dict[str, Any], code_index: dict[str, Any], allowed_source_refs: set[str] | None = None
+) -> dict[str, Any]:
     candidates: list[dict[str, Any]] = []
     for project in chat_index.get("projects", []):
         name = project.get("name") or "Untitled Claude Project"
@@ -270,13 +344,18 @@ def _project_candidates(chat_index: dict[str, Any], code_index: dict[str, Any]) 
             sessions_by_workspace[str(workspace)].append(f"code:{session['source_id']}")
     for workspace in code_index.get("workspaces", []):
         name = workspace.get("name") or "Untitled Claude Code workspace"
+        source_refs = list(dict.fromkeys(sessions_by_workspace.get(str(workspace.get("cwd")), [])))
+        if allowed_source_refs is not None:
+            source_refs = [source_ref for source_ref in source_refs if source_ref in allowed_source_refs]
+        if not source_refs:
+            continue
         candidates.append(
             {
                 "id": f"code-workspace:{_candidate_key(workspace.get('cwd') or name)}",
                 "name": name,
                 "source": "claude_code_workspace",
                 "source_ids": [workspace.get("source_id")],
-                "source_refs": list(dict.fromkeys(sessions_by_workspace.get(str(workspace.get("cwd")), []))),
+                "source_refs": source_refs,
                 "description": "",
                 "session_count": workspace.get("session_count"),
                 "status": "proposed",
@@ -295,6 +374,8 @@ def prepare_import_run(
     root = Path(data_root).expanduser()
     chat_index = scan_export_directory(export_dir)
     code_index = scan_claude_code_sessions(claude_config_dir)
+    source_index = {"chat": chat_index, "code": code_index}
+    classifications, _ = _classify_sources(root, _source_catalog(source_index))
 
     # Resume support: surface projects already in the portfolio so the skill can
     # skip re-proposing them and continue where a previous run left off.
@@ -322,13 +403,23 @@ def prepare_import_run(
             "chat_projects": chat_index["project_count"],
             "code_sessions": code_index["session_count"],
             "code_workspaces": code_index["workspace_count"],
+            "new_sources": sum(1 for state in classifications.values() if state == "new"),
+            "changed_sources": sum(1 for state in classifications.values() if state == "changed"),
+            "unchanged_sources": sum(1 for state in classifications.values() if state == "unchanged"),
+            "pending_sources": sum(1 for state in classifications.values() if state == "pending"),
         },
         "existing_projects": existing_projects,
         "warnings": [*chat_index["warnings"], *code_index["warnings"]],
     }
     _write_json(run_dir / "manifest.json", manifest)
-    _write_json(run_dir / "source-index.json", {"chat": chat_index, "code": code_index})
-    _write_json(run_dir / "project-candidates.json", _project_candidates(chat_index, code_index))
+    _write_json(run_dir / "source-index.json", source_index)
+    _write_json(run_dir / "source-classification.json", {"sources": classifications})
+    _write_json(run_dir / "project-candidates.json", _project_candidates(
+        chat_index,
+        code_index,
+        {source_ref for source_ref, state in classifications.items() if state in {"new", "changed", "pending"}},
+    ))
+    _append_run_event(run_dir, "run_prepared", counts=manifest["counts"])
     return {"run_id": run_id, "run_dir": str(run_dir), "manifest": manifest}
 
 
@@ -347,6 +438,33 @@ def _load_run_manifest(data_root: str | Path, run_id: str) -> tuple[Path, dict[s
     except (OSError, json.JSONDecodeError) as error:
         raise FileNotFoundError(f"Import run not found: {run_id}") from error
     return run_dir, manifest
+
+
+def list_import_runs(*, data_root: str | Path) -> list[dict[str, Any]]:
+    """List resumable import runs without exposing private source indexes or transcripts."""
+    imports_root = Path(data_root).expanduser() / "imports"
+    if not imports_root.is_dir():
+        return []
+    runs: list[dict[str, Any]] = []
+    for run_dir in imports_root.iterdir():
+        if not run_dir.is_dir() or run_dir.name.startswith("."):
+            continue
+        try:
+            manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(manifest, dict) or not isinstance(manifest.get("id"), str):
+            continue
+        runs.append({
+            "id": manifest["id"],
+            "source": manifest.get("source", "claude"),
+            "status": manifest.get("status", "unknown"),
+            "created_at": manifest.get("created_at"),
+            "updated_at": manifest.get("updated_at"),
+            "counts": manifest.get("counts", {}),
+            "checkpoint": manifest.get("checkpoint"),
+        })
+    return sorted(runs, key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
 
 
 def _load_source_index(run_dir: Path) -> dict[str, Any]:
@@ -510,10 +628,14 @@ def complete_source(
     project_name: str | None,
     source_ref: str,
     outcome: str,
+    record_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Persist that one source was saved, dropped, or postponed."""
     if outcome not in {"saved", "dropped", "postponed"}:
         raise ValueError("outcome must be saved, dropped, or postponed")
+    clean_record_ids = list(dict.fromkeys(str(item).strip() for item in (record_ids or []) if str(item).strip()))
+    if outcome == "saved" and not clean_record_ids:
+        raise ValueError("A saved source requires at least one persisted Task ID (--record-id)")
     run_dir, manifest = _load_run_manifest(data_root, run_id)
     catalog = _source_catalog(_load_source_index(run_dir))
     if source_ref not in catalog:
@@ -551,9 +673,26 @@ def complete_source(
             "source_ref": source_ref,
         }
         progress.append(entry)
-    entry.update({"outcome": outcome, "updated_at": dt.datetime.now(dt.timezone.utc).isoformat()})
-    manifest["updated_at"] = entry["updated_at"]
+    timestamp = _utc_now()
+    entry.update({"outcome": outcome, "record_ids": clean_record_ids, "updated_at": timestamp})
+    manifest["updated_at"] = timestamp
+    manifest["checkpoint"] = {"stage": "source_task_curation", "last_source_ref": source_ref, "updated_at": timestamp}
     _write_json(run_dir / "manifest.json", manifest)
+
+    root = Path(data_root).expanduser()
+    ledger = _load_source_ledger(root)
+    ledger_entry = ledger["sources"].setdefault(source_ref, {})
+    prior_record_ids = ledger_entry.get("record_ids") if isinstance(ledger_entry.get("record_ids"), list) else []
+    ledger_entry.update({
+        "status": {"saved": "imported", "dropped": "dropped", "postponed": "postponed"}[outcome],
+        "project_id": project_id,
+        "project_name": project.get("name") if project else None,
+        "record_ids": list(dict.fromkeys([*prior_record_ids, *clean_record_ids])),
+        "last_run_id": run_id,
+        "completed_at": timestamp,
+    })
+    _write_json(root / "imports" / "source-ledger.json", ledger)
+    _append_run_event(run_dir, "source_completed", source_ref=source_ref, project_id=project_id, outcome=outcome, record_ids=clean_record_ids)
     return entry
 
 
@@ -650,6 +789,9 @@ def main() -> int:
     prepare.add_argument("--export-dir", required=True)
     prepare.add_argument("--claude-config-dir", default="~/.claude")
 
+    list_runs_cmd = sub.add_parser("list-runs", help="List resumable import runs without source content")
+    list_runs_cmd.add_argument("--data-root", required=True)
+
     confirm_project_cmd = sub.add_parser("confirm-project", help="Write a user-confirmed portfolio project")
     confirm_project_cmd.add_argument("--data-root", required=True)
     confirm_project_cmd.add_argument("--run-id", required=True)
@@ -680,6 +822,7 @@ def main() -> int:
     complete_source_cmd.add_argument("--project")
     complete_source_cmd.add_argument("--source-ref", required=True)
     complete_source_cmd.add_argument("--outcome", required=True, choices=["saved", "dropped", "postponed"])
+    complete_source_cmd.add_argument("--record-id", action="append", default=None)
 
     args = parser.parse_args()
     if args.command == "download-page":
@@ -691,6 +834,8 @@ def main() -> int:
         print(json.dumps(scan_claude_code_sessions(args.claude_config_dir), ensure_ascii=False, indent=2))
     elif args.command == "prepare":
         print(json.dumps(prepare_import_run(data_root=args.data_root, export_dir=args.export_dir, claude_config_dir=args.claude_config_dir), ensure_ascii=False, indent=2))
+    elif args.command == "list-runs":
+        print(json.dumps(list_import_runs(data_root=args.data_root), ensure_ascii=False, indent=2))
     elif args.command == "confirm-project":
         print(json.dumps(confirm_project(data_root=args.data_root, run_id=args.run_id, name=args.name, sector=args.sector, one_liner=args.one_liner, source_refs=args.source_ref), ensure_ascii=False, indent=2))
     elif args.command == "apply-selections":
@@ -700,7 +845,7 @@ def main() -> int:
     elif args.command == "read-source":
         print(json.dumps(read_source(data_root=args.data_root, run_id=args.run_id, project_name=args.project, source_ref=args.source_ref), ensure_ascii=False, indent=2))
     elif args.command == "complete-source":
-        print(json.dumps(complete_source(data_root=args.data_root, run_id=args.run_id, project_name=args.project, source_ref=args.source_ref, outcome=args.outcome), ensure_ascii=False, indent=2))
+        print(json.dumps(complete_source(data_root=args.data_root, run_id=args.run_id, project_name=args.project, source_ref=args.source_ref, outcome=args.outcome, record_ids=args.record_id), ensure_ascii=False, indent=2))
     return 0
 
 

@@ -70,45 +70,53 @@ LEGACY_STAGE_ALIASES = {
 ENTRY_TYPES = ["project", "learning"]
 
 
-def load_stages(root: "str | Path") -> list:
-    """Return the builder's stage list: their stages.json, else the defaults.
+def _stage_names(value) -> list[str]:
+    """Normalize a stage config into ordered, case-insensitive unique names."""
+    raw = value.get("stages") if isinstance(value, dict) else value
+    names: list[str] = []
+    for item in raw if isinstance(raw, list) else []:
+        name = (item.get("name") if isinstance(item, dict) else item) or ""
+        name = str(name).strip()
+        if name and not any(existing.casefold() == name.casefold() for existing in names):
+            names.append(name)
+    return names
 
-    Shape: [{"name": "Discovery"}, ...] — order in the file IS the display order.
+
+def load_stages(root: "str | Path") -> list:
+    """Return the default stage list from the data root, else the defaults.
+
+    Project metadata receives a copy of this list when a project is created.
+    The root list is a template for new projects, not a shared live config.
     """
     path = Path(os.path.expanduser(str(root))) / "stages.json"
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return [{"name": name} for name in DEFAULT_STAGES]
-    raw = data.get("stages") if isinstance(data, dict) else data
-    stages = []
-    for item in raw if isinstance(raw, list) else []:
-        name = (item.get("name") if isinstance(item, dict) else item) or ""
-        name = str(name).strip()
-        if name and not any(s["name"].casefold() == name.casefold() for s in stages):
-            stages.append({"name": name})
-    return stages or [{"name": name} for name in DEFAULT_STAGES]
+    names = _stage_names(data)
+    return [{"name": name} for name in (names or DEFAULT_STAGES)]
 
 
-def normalize_stage(root: "str | Path", stage: str) -> str:
-    """Map a stage name onto the builder's configured vocabulary.
+def normalize_stage(root: "str | Path", stage: str, configured: "list | None" = None) -> str:
+    """Map a stage name onto one project's configured vocabulary.
 
-    A name the builder actually configured wins as-is. Otherwise a legacy v2/v3
-    name collapses into its bucket. An unrecognized name is kept verbatim so a
-    custom stage is never silently dropped.
+    ``configured`` is the project's own list. It falls back to the root default
+    list for legacy callers that have not loaded project metadata yet.
     """
     name = (stage or "").strip()
     if not name:
         return ""
-    configured = load_stages(root)
-    for item in configured:
-        if item["name"].casefold() == name.casefold():
-            return item["name"]
+    configured_names = _stage_names(configured) if configured is not None else [
+        item["name"] for item in load_stages(root)
+    ]
+    for configured_name in configured_names:
+        if configured_name.casefold() == name.casefold():
+            return configured_name
     mapped = LEGACY_STAGE_ALIASES.get(name.casefold())
     if mapped:
-        for item in configured:
-            if item["name"].casefold() == mapped.casefold():
-                return item["name"]
+        for configured_name in configured_names:
+            if configured_name.casefold() == mapped.casefold():
+                return configured_name
         return mapped
     return name
 
@@ -253,16 +261,27 @@ def materialize_approved_evidence(record_dir: str, evidence: list[dict]) -> list
 
 
 def ensure_project(root: str, title: str, extra: "dict | None" = None) -> dict:
-    """Create or reuse a project. `extra` may carry sector/one_liner/logo/role;
-    on an existing project, non-empty extra fields update it (keeps id/slug)."""
+    """Create or reuse a project with an independent stage-list snapshot.
+
+    ``{root}/stages.json`` is copied only when a project is first created (or
+    when an old project is first reused). Later default changes do not rewrite
+    an existing project's stages.
+    """
     slug = slugify(title)
     pdir = os.path.join(root, slug)
     pjson = os.path.join(pdir, "project.json")
     existing = load_json(pjson)
     extra = {k: v for k, v in (extra or {}).items() if v}
+    default_stages = [item["name"] for item in load_stages(root)]
     if existing and existing.get("id"):
+        changed = False
+        if not _stage_names(existing.get("stages")):
+            existing["stages"] = list(default_stages)
+            changed = True
         if extra:
             existing.update(extra)
+            changed = True
+        if changed:
             existing["updated_at"] = now_iso()
             write_json(pjson, existing)
         return existing
@@ -271,6 +290,7 @@ def ensure_project(root: str, title: str, extra: "dict | None" = None) -> dict:
         "slug": slug,
         "title": title,
         "name": title,
+        "stages": list(default_stages),
         "created_at": now_iso(),
         "updated_at": now_iso(),
         "share_id": None,
@@ -337,6 +357,9 @@ def list_projects(root: str) -> list:
         if pslug.startswith(".") or not os.path.isfile(pjson):
             continue
         p = load_json(pjson) or {}
+        project_stages = _stage_names(p.get("stages")) or [
+            item["name"] for item in load_stages(root)
+        ]
         sections = []
         for gslug in sorted(os.listdir(pdir)):
             gdir = os.path.join(pdir, gslug)
@@ -352,7 +375,7 @@ def list_projects(root: str) -> list:
                     continue
                 r = load_json(rpath) or {}
                 raw = r.get("section") or CATEGORY_TO_SECTION.get(r.get("category", "")) or ""
-                stage_name = normalize_stage(root, raw) if raw else ""
+                stage_name = normalize_stage(root, raw, configured=project_stages) if raw else ""
                 if stage_name:
                     stage_counts[stage_name] = stage_counts.get(stage_name, 0) + 1
             sections.append({
@@ -440,8 +463,8 @@ def main() -> int:
         CATEGORY_TO_SECTION.get(args.category, args.category) if args.category else ""
     )
     purpose_title = args.goal or legacy_stage
-    stage = normalize_stage(root, args.stage or legacy_stage or purpose_title)
-    if not args.project or not args.title or not purpose_title or not stage:
+    raw_stage = args.stage or legacy_stage or purpose_title
+    if not args.project or not args.title or not purpose_title or not raw_stage:
         ap.error("saving a record requires --project, --title, and a purpose (--goal or --section)")
 
     # Body: from file or stdin
@@ -488,6 +511,9 @@ def main() -> int:
             "role": args.role or None, "logo": args.logo,
             "type": args.type or "project",
         })
+        stage = normalize_stage(root, raw_stage, configured=project.get("stages"))
+        if not stage:
+            raise ValueError("Task stage is required")
         # goal.json is the on-disk Purpose container. It carries no stage:
         # the stage lives on each Task so one Purpose can span the lifecycle.
         section = ensure_section(root, project, purpose_title)

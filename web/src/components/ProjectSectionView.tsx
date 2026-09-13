@@ -510,6 +510,7 @@ export function ProjectSectionView({
 }) {
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const active = projects.find(p => p.id === selectedProjectId) || null;
+  const activeStages = active?.stages?.length ? active.stages : stages;
   const visibleGoals = active ? active.goals : projects.flatMap(p => p.goals);
   const crossGoals = mode === 'project' ? [] : crossProjectGoals(projects, mode);
 
@@ -541,7 +542,7 @@ export function ProjectSectionView({
             {active || visibleGoals.length > 0 ? (
               <PurposeStageBoard
                 goals={visibleGoals}
-                stages={stages}
+                stages={activeStages}
                 selectedGoalId={selectedGoalId}
                 filterState={filterState}
                 selectedRecordId={selectedRecordId}

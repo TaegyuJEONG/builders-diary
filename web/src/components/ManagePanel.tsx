@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Portfolio, Project } from '@/lib/types';
+import { Portfolio, Project, DEFAULT_STAGES } from '@/lib/types';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import {
   createProjectInFolder, createTaskInFolder, deleteProjectFromFolder,
-  loadFolderHandleFromStorage, updateProjectInFolder, writeStages,
+  saveRecordToFile, updateProjectInFolder, updateProjectStagesInFolder,
 } from '@/lib/fileSystem';
 
 interface ManagePanelProps {
@@ -35,19 +36,28 @@ function Label({ children }: { children: React.ReactNode }) {
 
 export function ManagePanel({ portfolio, onClose, onRefresh, onCreated, initialTab = 'projects', initialStage, initialProjectSlug, createOnly = false }: ManagePanelProps) {
   const [tab, setTab] = useState<'projects' | 'stages' | 'task'>(initialTab);
-  const [stages, setStages] = useState<string[]>(portfolio.stages || ['Discovery', 'Build', 'Growth']);
   const [selectedSlug, setSelectedSlug] = useState(initialProjectSlug || portfolio.projects[0]?.slug || '');
   const selected = useMemo(() => portfolio.projects.find(p => p.slug === selectedSlug), [portfolio.projects, selectedSlug]);
+  const defaultStages = useMemo(() => portfolio.stages || [...DEFAULT_STAGES], [portfolio.stages]);
+  const [stages, setStages] = useState<string[]>(selected?.stages || defaultStages);
   const [projectDraft, setProjectDraft] = useState<Partial<Project>>({});
   const [newProject, setNewProject] = useState({ name: '', type: 'project' as 'project' | 'learning', sector: '', oneLiner: '', logo: '' });
-  const [newTask, setNewTask] = useState({ projectSlug: initialProjectSlug || portfolio.projects[0]?.slug || '', title: '', purpose: '', activity: '', stage: initialStage || stages[0] || 'Discovery' });
+  const [newTask, setNewTask] = useState({ projectSlug: initialProjectSlug || portfolio.projects[0]?.slug || '', title: '', purpose: '', activity: '', stage: initialStage || (selected?.stages || defaultStages)[0] || 'Discovery' });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [stageDeleteRequest, setStageDeleteRequest] = useState<{ cleaned: string[]; stages: string[] } | null>(null);
 
   useEffect(() => {
     if (!selected) return;
+    const nextStages = selected.stages || defaultStages;
     setProjectDraft({ ...selected });
-  }, [selected?.id]);
+    setStages([...nextStages]);
+    setNewTask(value => ({
+      ...value,
+      projectSlug: selected.slug,
+      stage: nextStages.includes(value.stage) ? value.stage : nextStages[0] || 'Discovery',
+    }));
+  }, [selected?.id, selected?.stages, defaultStages]);
 
   async function run(action: () => Promise<void>, success: string): Promise<boolean> {
     setBusy(true); setMessage('');
@@ -57,11 +67,35 @@ export function ManagePanel({ portfolio, onClose, onRefresh, onCreated, initialT
   }
 
   async function saveStages() {
+    if (!selected) { setMessage('Select a project first.'); return; }
     const cleaned = stages.map(s => s.trim()).filter((s, i, all) => s && all.findIndex(x => x.toLowerCase() === s.toLowerCase()) === i);
     if (!cleaned.length) { setMessage('Keep at least one stage.'); return; }
-    const root = await loadFolderHandleFromStorage();
-    if (!root) { setMessage('Folder is not connected.'); return; }
-    await run(async () => { await writeStages(root as any, cleaned); setStages(cleaned); }, 'Stages saved.');
+
+    const previous = selected.stages || defaultStages;
+    const removed = previous.filter(stage => !cleaned.some(next => next.toLowerCase() === stage.toLowerCase()));
+    const added = cleaned.filter(stage => !previous.some(old => old.toLowerCase() === stage.toLowerCase()));
+    // A single removed + single added name is an unambiguous row rename.
+    const rename = removed.length === 1 && added.length === 1 ? { from: removed[0], to: added[0] } : null;
+    const tasks = selected.goals.flatMap(goal => goal.records);
+    const blocked = removed
+      .filter(stage => !rename || stage.toLowerCase() !== rename.from.toLowerCase())
+      .some(stage => tasks.some(task => (task.section || '').toLowerCase() === stage.toLowerCase()));
+    if (blocked) {
+      setMessage('Move or delete the Tasks in a stage before removing it.');
+      return;
+    }
+
+    await run(async () => {
+      if (rename) {
+        for (const task of tasks) {
+          if ((task.section || '').toLowerCase() === rename.from.toLowerCase()) {
+            await saveRecordToFile({ file_path: task.file_path, title: task.title, section: rename.to });
+          }
+        }
+      }
+      await updateProjectStagesInFolder(selected.slug, cleaned);
+      setStages(cleaned);
+    }, 'Project stages saved.');
   }
 
   async function moveProject(index: number, delta: number) {
@@ -133,7 +167,8 @@ export function ManagePanel({ portfolio, onClose, onRefresh, onCreated, initialT
           )}
           {tab === 'stages' && (
             <>
-              <p style={{ color: 'var(--text2)', fontSize: 12, lineHeight: 1.55, margin: '0 0 14px' }}>Stages group Tasks. Rename, reorder, add, or remove them to match how you work.</p>
+              <div style={{ marginBottom: 14 }}><Label>Project</Label><select style={fieldStyle} value={selectedSlug} onChange={e => setSelectedSlug(e.target.value)}>{portfolio.projects.map(project => <option key={project.id} value={project.slug}>{project.type === 'learning' ? 'Learning · ' : ''}{project.title}</option>)}</select></div>
+              <p style={{ color: 'var(--text2)', fontSize: 12, lineHeight: 1.55, margin: '0 0 14px' }}>These Stages belong only to {selected?.title || 'this Project'}. Rename, reorder, add, or remove them to match this work.</p>
               {stages.map((stage, index) => (
                 <div key={`${index}-${stage}`} style={{ display: 'flex', gap: 5, marginBottom: 6 }}>
                   <input style={{ ...fieldStyle, flex: 1 }} value={stage} onChange={e => setStages(v => v.map((s, i) => i === index ? e.target.value : s))} />

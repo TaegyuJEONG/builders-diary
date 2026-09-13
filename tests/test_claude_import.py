@@ -149,6 +149,49 @@ class ClaudeImportTests(unittest.TestCase):
         code_candidate = next(c for c in candidates["candidates"] if c["source"] == "claude_code_workspace")
         self.assertEqual(code_candidate["source_refs"], ["code:code-1"])
 
+    def test_prepare_uses_source_ledger_to_classify_unchanged_sources(self) -> None:
+        from skill.scripts.claude_import import prepare_import_run
+
+        first = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        first_manifest = json.loads((Path(first["run_dir"]) / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(first_manifest["counts"]["new_sources"], 3)
+        self.assertEqual(first_manifest["counts"]["unchanged_sources"], 0)
+        ledger = json.loads((self.data_root / "imports" / "source-ledger.json").read_text(encoding="utf-8"))
+        self.assertEqual(set(ledger["sources"]), {"chat:chat-1", "chat:chat-2", "code:code-1"})
+
+        from skill.scripts.claude_import import complete_source, confirm_project
+        confirm_project(
+            data_root=self.data_root,
+            run_id=first["run_id"],
+            name="Product Builder Jobs",
+            source_refs=["code:code-1"],
+        )
+        complete_source(
+            data_root=self.data_root,
+            run_id=first["run_id"],
+            project_name="Product Builder Jobs",
+            source_ref="code:code-1",
+            outcome="saved",
+            record_ids=["r-first"],
+        )
+
+        second = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        second_manifest = json.loads((Path(second["run_dir"]) / "manifest.json").read_text(encoding="utf-8"))
+        self.assertEqual(second_manifest["counts"]["new_sources"], 0)
+        self.assertEqual(second_manifest["counts"]["changed_sources"], 0)
+        self.assertEqual(second_manifest["counts"]["unchanged_sources"], 1)
+        self.assertEqual(second_manifest["counts"]["pending_sources"], 2)
+        second_candidates = json.loads((Path(second["run_dir"]) / "project-candidates.json").read_text(encoding="utf-8"))
+        self.assertFalse(any(candidate["source"] == "claude_code_workspace" for candidate in second_candidates["candidates"]))
+
     def test_installer_dry_run_includes_daily_and_import_skills(self) -> None:
         result = subprocess.run(
             ["node", str(ROOT / "npm" / "bin" / "cli.js"), "install", "--tools", "claude", "--dry-run"],
@@ -168,6 +211,21 @@ class ClaudeImportTests(unittest.TestCase):
         )
         self.assertIn("builders-diary/SKILL.md", result.stdout)
         self.assertNotIn("builders-diary-import", result.stdout)
+
+    def test_list_import_runs_exposes_resumable_state_without_source_content(self) -> None:
+        from skill.scripts.claude_import import list_import_runs, prepare_import_run
+
+        run = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        runs = list_import_runs(data_root=self.data_root)
+
+        self.assertEqual(runs[0]["id"], run["run_id"])
+        self.assertEqual(runs[0]["status"], "project_selection")
+        self.assertIn("counts", runs[0])
+        self.assertNotIn("source_index", runs[0])
 
     def test_confirmed_project_materializes_without_eager_purpose(self) -> None:
         from skill.scripts.claude_import import confirm_project, prepare_import_run
@@ -291,6 +349,59 @@ class ClaudeImportTests(unittest.TestCase):
         )
         self.assertIsNone(postponed["project_id"])
         self.assertEqual(postponed["outcome"], "postponed")
+
+    def test_complete_source_checkpoints_ledger_and_event_log(self) -> None:
+        from skill.scripts.claude_import import complete_source, confirm_project, prepare_import_run
+
+        run = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        confirm_project(
+            data_root=self.data_root,
+            run_id=run["run_id"],
+            name="Product Builder Jobs",
+            source_refs=["code:code-1"],
+        )
+        complete_source(
+            data_root=self.data_root,
+            run_id=run["run_id"],
+            project_name="Product Builder Jobs",
+            source_ref="code:code-1",
+            outcome="saved",
+            record_ids=["r-example"],
+        )
+
+        ledger = json.loads((self.data_root / "imports" / "source-ledger.json").read_text(encoding="utf-8"))
+        self.assertEqual(ledger["sources"]["code:code-1"]["status"], "imported")
+        self.assertEqual(ledger["sources"]["code:code-1"]["record_ids"], ["r-example"])
+        events = [json.loads(line) for line in (Path(run["run_dir"]) / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["event"], "source_completed")
+        self.assertEqual(events[-1]["outcome"], "saved")
+
+    def test_saved_source_requires_at_least_one_task_id(self) -> None:
+        from skill.scripts.claude_import import complete_source, confirm_project, prepare_import_run
+
+        run = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        confirm_project(
+            data_root=self.data_root,
+            run_id=run["run_id"],
+            name="Product Builder Jobs",
+            source_refs=["code:code-1"],
+        )
+        with self.assertRaisesRegex(ValueError, "at least one persisted Task ID"):
+            complete_source(
+                data_root=self.data_root,
+                run_id=run["run_id"],
+                project_name="Product Builder Jobs",
+                source_ref="code:code-1",
+                outcome="saved",
+            )
 
     def test_read_source_rejects_source_not_selected_for_project(self) -> None:
         from skill.scripts.claude_import import confirm_project, prepare_import_run, read_source

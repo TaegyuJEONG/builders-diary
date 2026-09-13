@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { SelectOption, SearchableSelect } from './SearchableSelect';
-import { Project } from '@/lib/types';
+import { Project, ImportRun } from '@/lib/types';
 
 interface HeaderProps {
   projects: Project[];
@@ -26,6 +26,8 @@ interface HeaderProps {
   isLoading?: boolean;
   /** AI tools the user has installed the skill for (from onboarding). */
   selectedClients?: string[];
+  importRuns?: ImportRun[];
+  onOpenImport?: () => void;
 }
 
 /** Small pill badge showing a count. */
@@ -184,14 +186,22 @@ const COMING_SOON_TOOLS = ['cursor', 'windsurf', 'antigravity', 'codex'];
 /** Tools manager popover — shows connected tools + a command to add another. */
 function ToolsPopover({
   selectedClients,
+  importRuns = [],
+  onOpenImport,
   onClose,
 }: {
   selectedClients: string[];
+  importRuns?: ImportRun[];
+  onOpenImport?: () => void;
   onClose: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [addTool, setAddTool] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [importCopied, setImportCopied] = useState(false);
+  const latestImport = importRuns[0];
+  const importNeedsReview = latestImport?.status === 'project_selection';
+  const importLabel = !latestImport ? 'Import history' : importNeedsReview ? 'Review import' : `Resume import · ${latestImport.status.replace(/_/g, ' ')}`;
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -206,6 +216,13 @@ function ToolsPopover({
     navigator.clipboard.writeText(snippet).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const copyImportPrompt = () => {
+    navigator.clipboard.writeText('/builders-diary-import').then(() => {
+      setImportCopied(true);
+      setTimeout(() => setImportCopied(false), 2000);
     });
   };
 
@@ -247,6 +264,20 @@ function ToolsPopover({
             ))}
           </div>
         )}
+      </div>
+
+      <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 7, fontFamily: 'IBM Plex Mono, monospace' }}>Claude history</div>
+        <div style={{ fontSize: 11, lineHeight: 1.45, color: 'var(--text2)', marginBottom: 8 }}>
+          {latestImport
+            ? `${latestImport.counts?.new_sources ?? 0} new · ${latestImport.counts?.changed_sources ?? 0} changed · ${latestImport.counts?.pending_sources ?? 0} pending · ${latestImport.counts?.unchanged_sources ?? 0} unchanged`
+            : 'Discover selected Claude Chat and Claude Code work locally.'}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => { if (importNeedsReview) onOpenImport?.(); else copyImportPrompt(); }} className="mono" style={{ fontSize: 10.5, padding: '5px 9px', borderRadius: 3, border: '1px solid var(--accent)', background: 'transparent', color: 'var(--accent)', cursor: 'pointer' }}>
+            {importNeedsReview ? importLabel : importCopied ? '✓ Copied' : importLabel}
+          </button>
+        </div>
       </div>
 
       {/* Add another */}
@@ -331,6 +362,8 @@ export function Header({
 
   isLoading = false,
   selectedClients = [],
+  importRuns = [],
+  onOpenImport,
 }: HeaderProps) {
   const [filterOpen, setFilterOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -348,8 +381,9 @@ export function Header({
   const projectScopedRecords = selectedProject
     ? selectedProject.goals.flatMap(g => g.records)
     : projects.flatMap(p => p.goals.flatMap(g => g.records));
+  const configuredStages = selectedProject?.stages?.length ? selectedProject.stages : stages;
   const stageNames = Array.from(new Set([
-    ...stages,
+    ...configuredStages,
     ...projectScopedRecords.map(r => r.section).filter((s): s is string => !!s),
   ]));
   const stageOptions: SelectOption[] = stageNames.map(stage => ({
@@ -502,7 +536,7 @@ export function Header({
           </svg>
         </button>
         {toolsOpen && (
-          <ToolsPopover selectedClients={selectedClients} onClose={() => setToolsOpen(false)} />
+          <ToolsPopover selectedClients={selectedClients} importRuns={importRuns} onOpenImport={onOpenImport} onClose={() => setToolsOpen(false)} />
         )}
       </div>
 

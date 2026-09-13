@@ -175,6 +175,10 @@ export interface ImportRun {
     chat_projects?: number;
     code_sessions?: number;
     code_workspaces?: number;
+    new_sources?: number;
+    changed_sources?: number;
+    unchanged_sources?: number;
+    pending_sources?: number;
   };
   warnings?: string[];
 }
@@ -186,6 +190,7 @@ export interface Project {
   name?: string;             // v3 alias of title
   type?: EntryType;          // project (default) | learning
   order?: number;            // user-defined portfolio order
+  stages?: string[];          // project-owned lifecycle stages, copied from defaults on creation
   sector?: string;           // v3 — e.g. "Marketplace SaaS"
   oneLiner?: string;         // v3 — one-line description
   role?: string;             // legacy optional metadata; not inferred or displayed

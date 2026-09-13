@@ -15,7 +15,7 @@ import { Portfolio, Project, Record, ImportRun } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
-  readInstallMarker, scanImportRuns, updateProjectInFolder, deleteProjectFromFolder, writeStages,
+  readInstallMarker, scanImportRuns, updateProjectInFolder, updateProjectStagesInFolder, deleteProjectFromFolder,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -327,12 +327,14 @@ export function HomeContent() {
 
   const handleReorderStages = useCallback(async (source: string, target: string) => {
     if (!portfolio || source === target) return;
-    const stages = [...(portfolio.stages || [])]; const from = stages.indexOf(source); const to = stages.indexOf(target);
+    const project = portfolio.projects.find(item => item.id === selectedProjectId);
+    if (!project) return;
+    const stages = [...(project.stages || portfolio.stages || [])]; const from = stages.indexOf(source); const to = stages.indexOf(target);
     if (from < 0 || to < 0) return;
     stages.splice(to, 0, stages.splice(from, 1)[0]);
-    const handle = await loadFolderHandleFromStorage();
-    if (handle) { await writeStages(handle, stages); await refreshPortfolio(); }
-  }, [portfolio, refreshPortfolio]);
+    await updateProjectStagesInFolder(project.slug, stages);
+    await refreshPortfolio();
+  }, [portfolio, refreshPortfolio, selectedProjectId]);
 
 
   const projectPanel = projectPanelId ? portfolio?.projects.find(p => p.id === projectPanelId) : null;
@@ -372,9 +374,10 @@ export function HomeContent() {
 
   const handleMoveTaskToStage = useCallback(async (sourceId: string, targetStage: string, beforeId?: string) => {
     if (!portfolio) return;
+    const targetProjectSlug = portfolio.projects.find(project => project.id === selectedProjectId)?.slug;
     const record = allRecords.find(r => r.id === sourceId);
-    if (!record) return;
-    const stageRecords = allRecords.filter(r => r.section === targetStage && r.id !== sourceId);
+    if (!record || !targetProjectSlug || record.project_slug !== targetProjectSlug) return;
+    const stageRecords = allRecords.filter(r => r.project_slug === targetProjectSlug && r.section === targetStage && r.id !== sourceId);
     const insertionIndex = beforeId ? Math.max(0, stageRecords.findIndex(r => r.id === beforeId)) : stageRecords.length;
     const moved = { ...record, section: targetStage, order: insertionIndex };
     stageRecords.splice(insertionIndex, 0, moved);
@@ -383,7 +386,7 @@ export function HomeContent() {
       await saveRecordToFile({ file_path: task.file_path, title: task.title, section: targetStage, order: i });
     }
     await refreshPortfolio();
-  }, [allRecords, portfolio, refreshPortfolio]);
+  }, [allRecords, portfolio, refreshPortfolio, selectedProjectId]);
 
   const handleDeleteStage = useCallback((stage: string) => {
     setStageDeleteTarget(stage);
@@ -397,10 +400,10 @@ export function HomeContent() {
     const scope = selectedProject?.title || selectedProject?.name || selectedProjectSlug || 'ALL PROJECTS';
     const token = `${scope} / ${stageDeleteTarget}`;
     try {
-      // A stage action inside a Project only removes that Project's Tasks.
-      // `stages.json` is the canonical portfolio configuration and can only be
-      // changed through Manage portfolio.
       for (const record of stageRecords) await deleteRecordFromFile(record.file_path);
+      if (selectedProject) {
+        await updateProjectStagesInFolder(selectedProject.slug, (selectedProject.stages || portfolio.stages || []).filter(stage => stage !== stageDeleteTarget));
+      }
       setStageDeleteTarget(null);
       await refreshPortfolio();
     } catch (error) {

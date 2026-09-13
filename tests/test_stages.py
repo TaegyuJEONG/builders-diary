@@ -35,6 +35,42 @@ class StageVocabularyTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual([s["name"] for s in load_stages(tmp)], ["Discovery", "Build", "Growth"])
 
+    def test_new_project_copies_default_stages_into_project_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(root, project="First project", goal="Purpose", stage="Discovery", title="First task")
+
+            project = json.loads((root / "first-project" / "project.json").read_text(encoding="utf-8"))
+            self.assertEqual(project["stages"], ["Discovery", "Build", "Growth"])
+
+    def test_each_project_keeps_its_own_stage_list_when_defaults_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(root, project="First project", goal="Purpose", stage="Discovery", title="First task")
+            (root / "stages.json").write_text(
+                json.dumps({"stages": [{"name": "Discovery"}, {"name": "Launch"}]}),
+                encoding="utf-8",
+            )
+            save(root, project="Second project", goal="Purpose", stage="Discovery", title="Second task")
+
+            first = json.loads((root / "first-project" / "project.json").read_text(encoding="utf-8"))
+            second = json.loads((root / "second-project" / "project.json").read_text(encoding="utf-8"))
+            self.assertEqual(first["stages"], ["Discovery", "Build", "Growth"])
+            self.assertEqual(second["stages"], ["Discovery", "Launch"])
+
+    def test_legacy_project_receives_own_stages_when_it_is_reused(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(root, project="Legacy project", goal="Purpose", stage="Discovery", title="Legacy task")
+            project_path = root / "legacy-project" / "project.json"
+            project = json.loads(project_path.read_text(encoding="utf-8"))
+            project.pop("stages", None)
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+
+            save(root, project="Legacy project", goal="Purpose", stage="Build", title="Second task")
+            migrated = json.loads(project_path.read_text(encoding="utf-8"))
+            self.assertEqual(migrated["stages"], ["Discovery", "Build", "Growth"])
+
     def test_legacy_seven_stage_names_map_into_three_buckets(self) -> None:
         import sys
 

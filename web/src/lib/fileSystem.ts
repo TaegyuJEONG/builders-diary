@@ -319,7 +319,20 @@ export async function scanFolderStructure(handle: FileSystemDirectoryHandle): Pr
   return { path: handle.name, projects, stages };
 }
 
-/** Read the builder's editable stage list (stages.json), else the defaults. */
+/** Read and clean an ordered stage list from project metadata or a fallback. */
+export function readProjectStages(raw: unknown, fallback: string[] = [...DEFAULT_STAGES]): string[] {
+  const value = raw && typeof raw === 'object' && !Array.isArray(raw)
+    ? (raw as { stages?: unknown }).stages
+    : raw;
+  const names: string[] = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    const name = String(typeof item === 'string' ? item : (item as { name?: unknown })?.name ?? '').trim();
+    if (name && !names.some(existing => existing.toLowerCase() === name.toLowerCase())) names.push(name);
+  }
+  return names.length ? names : [...fallback];
+}
+
+/** Read the builder's default stage template (stages.json), else the defaults. */
 export async function readStages(handle: FileSystemDirectoryHandle): Promise<string[]> {
   try {
     const fh = await handle.getFileHandle('stages.json');
@@ -361,7 +374,7 @@ async function writeJsonFile(folder: FileSystemDirectoryHandle, name: string, va
 
 /** Create a Project or Learning entry directly from the web UI. */
 export async function createProjectInFolder(input: {
-  name: string; type?: EntryType; sector?: string; oneLiner?: string; logo?: string; order?: number;
+  name: string; type?: EntryType; sector?: string; oneLiner?: string; logo?: string; order?: number; stages?: string[];
 }): Promise<void> {
   const root = await loadFolderHandleFromStorage();
   if (!root) throw new Error('Builder’s Diary folder is not connected');
@@ -372,9 +385,11 @@ export async function createProjectInFolder(input: {
   const existing = await readJson(folder, 'project.json');
   if (existing?.id) throw new Error('A project with this name already exists');
   const now = new Date().toISOString();
+  const stages = readProjectStages(input.stages, await readStages(root));
   await writeJsonFile(folder, 'project.json', {
     id: `p-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
     slug, title: name, name, type: input.type || 'project',
+    stages,
     sector: input.sector || undefined,
     one_liner: input.oneLiner || undefined,
     logo: input.logo || undefined,
@@ -398,6 +413,25 @@ export async function updateProjectInFolder(project: Project): Promise<void> {
     one_liner: project.oneLiner || '',
     logo: project.logo || null,
     order: project.order,
+    ...(Array.isArray(project.stages) ? { stages: project.stages } : {}),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+/** Persist only the selected project's stage list. */
+export async function updateProjectStagesInFolder(projectSlug: string, stages: string[]): Promise<void> {
+  if (!projectSlug || projectSlug.startsWith('.') || projectSlug.includes('/')) {
+    throw new Error('Invalid project slug');
+  }
+  const root = await loadFolderHandleFromStorage();
+  if (!root) throw new Error('Builder’s Diary folder is not connected');
+  const folder = await root.getDirectoryHandle(projectSlug);
+  const existing = await readJson(folder, 'project.json') || {};
+  const cleaned = readProjectStages(stages, []);
+  if (!cleaned.length) throw new Error('Keep at least one stage.');
+  await writeJsonFile(folder, 'project.json', {
+    ...existing,
+    stages: cleaned,
     updated_at: new Date().toISOString(),
   });
 }
@@ -548,6 +582,7 @@ async function scanProjectFolder(
   // Must have project.json to be considered a valid project
   const meta = await readJson(projectFolder, 'project.json');
   if (!meta) return null;
+  const projectStages = readProjectStages(meta.stages, stages);
 
   const goals: Goal[] = [];
 
@@ -556,7 +591,7 @@ async function scanProjectFolder(
     if (entry.kind !== 'directory') continue;
 
     const goalFolder = entry as FileSystemDirectoryHandle;
-    const goal = await scanGoalFolder(goalFolder, name, stages);
+    const goal = await scanGoalFolder(goalFolder, name, projectStages);
     if (goal) goals.push(goal);
   }
 
@@ -590,6 +625,7 @@ async function scanProjectFolder(
     role: meta.role || undefined,
     logo: meta.logo || null,
     tags: Array.isArray(meta.tags) ? meta.tags : undefined,
+    stages: projectStages,
     created_at: meta.created_at,
     goals: enrichedGoals,
   };
