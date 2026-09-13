@@ -57,6 +57,18 @@ export function stageMeta(stage: string, configured: string[] = [...DEFAULT_STAG
   return SECTION_META[stage] ?? { color: 'var(--text3)', order: 900 };
 }
 
+/** The stage a Task is displayed under: its own `section` wins, else its Purpose's
+ *  pre-v4 stage, else Build — always normalized into the project's stage list.
+ *  Single source of truth: the board, the stage filter and every stage deletion
+ *  must agree on which Tasks belong to a stage. */
+export function resolveRecordStage(
+  record: { section?: string; category?: string | null },
+  goalStage?: string,
+  configured: string[] = [...DEFAULT_STAGES],
+): string {
+  return normalizeStage(record.section || goalStage || 'Build', configured);
+}
+
 /** Task progress — builder-facing, not PM status. */
 export type Progress = 'done' | 'ongoing' | 'dropped' | 'undecided';
 

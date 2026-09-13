@@ -20,12 +20,47 @@ test('projects own their stage list in the data model and filesystem scan', asyn
   assert.match(fileSystem, /updateProjectStagesInFolder/);
 });
 
-test('Manage portfolio edits the selected project stages instead of root stages.json', async () => {
+test('stage edits are written to the project, never to the portfolio stage template', async () => {
+  const [managePanel, homeContent] = await Promise.all([
+    source('src/components/ManagePanel.tsx'),
+    source('src/app/home-content.tsx'),
+  ]);
+
+  for (const file of [managePanel, homeContent]) {
+    assert.doesNotMatch(file, /writeStages\(/, 'only the root template file may use writeStages');
+    assert.match(file, /updateProjectStagesInFolder/);
+  }
+});
+
+test('the side panel is scoped to a single job instead of portfolio tabs', async () => {
   const managePanel = await source('src/components/ManagePanel.tsx');
 
-  assert.match(managePanel, /updateProjectStagesInFolder/);
-  assert.doesNotMatch(managePanel, /writeStages\(/);
-  assert.match(managePanel, /selected\.stages/);
+  for (const kind of ['create-project', 'edit-project', 'stages', 'new-task']) {
+    assert.match(managePanel, new RegExp(`kind: '${kind}'`), `missing ${kind} mode`);
+  }
+  assert.doesNotMatch(managePanel, /createOnly/, 'no portfolio-wide create/edit switch');
+  assert.doesNotMatch(managePanel, /Manage portfolio/, 'no portfolio-wide management surface');
+});
+
+test('deleting a stage still confirms through an in-app dialog that lists its tasks', async () => {
+  const managePanel = await source('src/components/ManagePanel.tsx');
+
+  assert.match(managePanel, /ConfirmDialog/);
+  assert.match(managePanel, /stageRemoval/);
+  assert.match(managePanel, /deleteRecordFromFile\(task\.file_path\)/);
+  assert.doesNotMatch(managePanel, /window\.confirm/, 'product actions use the themed dialog');
+});
+
+test('every stage deletion resolves Tasks the same way the board does', async () => {
+  const [homeContent, managePanel, projectView] = await Promise.all([
+    source('src/app/home-content.tsx'),
+    source('src/components/ManagePanel.tsx'),
+    source('src/components/ProjectSectionView.tsx'),
+  ]);
+
+  for (const file of [homeContent, managePanel, projectView]) {
+    assert.match(file, /resolveRecordStage/, 'stage membership must come from one resolver');
+  }
 });
 
 test('project board and filters use the active project stage list', async () => {
@@ -37,6 +72,5 @@ test('project board and filters use the active project stage list', async () => 
 
   assert.match(projectView, /active\?\.stages/);
   assert.match(header, /selectedProject\?\.stages/);
-  assert.match(homeContent, /updateProjectStagesInFolder/);
-  assert.match(homeContent, /project_slug === targetProjectSlug/);
+  assert.match(homeContent, /selectedRecordProjectStages/);
 });

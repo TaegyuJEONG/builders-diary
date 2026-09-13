@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Project, Goal, Record, DEFAULT_STAGES, normalizeStage, stageMeta } from '@/lib/types';
+import { Project, Goal, Record, DEFAULT_STAGES, normalizeStage, stageMeta, resolveRecordStage } from '@/lib/types';
 import { FilterState, recordPasses, buildProjectToolbox } from '@/lib/portfolio';
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -135,9 +135,9 @@ function ProjectCard({
 
 // ── Task card (inside a section box) ──
 function TaskCard({
-  record, selected, filterState, stacked = false, onSelect, onDropTask,
+  record, selected, filterState, stacked = false, draggable: isDraggable = true, onSelect, onDropTask,
 }: {
-  record: Record; selected: boolean; filterState: FilterState; stacked?: boolean; onSelect: () => void; onDropTask?: (sourceId: string, beforeId?: string) => void;
+  record: Record; selected: boolean; filterState: FilterState; stacked?: boolean; draggable?: boolean; onSelect: () => void; onDropTask?: (sourceId: string, beforeId?: string) => void;
 }) {
   const ev = record.evidence || [];
   const hasHighlight = !!record.highlight || !!record.judgment || ev.some(e => e.type === 'judgment');
@@ -147,7 +147,7 @@ function TaskCard({
     <div
       data-rid={record.id}
       onClick={onSelect}
-      draggable
+      draggable={isDraggable}
       onDragStart={e => { e.stopPropagation(); e.dataTransfer.setData('application/x-bd-task', record.id); e.dataTransfer.effectAllowed = 'move'; }}
       onDragOver={e => e.preventDefault()}
       onDrop={e => { e.preventDefault(); e.stopPropagation(); const source = e.dataTransfer.getData('application/x-bd-task'); if (source && source !== record.id) onDropTask?.(source, record.id); }}
@@ -282,7 +282,7 @@ function TaskCard({
 function PurposeStageBoard({
   goals, stages, selectedGoalId, filterState, selectedRecordId, onSelectRecord,
   onDropTaskToStage, onCreateTask, onDeleteStage,
-  onDropStage, onCreateStage,
+  onDropStage, onCreateStage, editable = false,
 }: {
   goals: Goal[];
   stages: string[];
@@ -295,6 +295,8 @@ function PurposeStageBoard({
   onDeleteStage?: (stage: string) => void;
   onDropStage?: (sourceStage: string, targetStage: string) => void;
   onCreateStage?: () => void;
+  /** Stages belong to one project, so editing is offered only in a single-project view. */
+  editable?: boolean;
 }) {
   const stageGroups = new Map<string, Record[]>();
   for (const goal of goals) {
@@ -324,13 +326,13 @@ function PurposeStageBoard({
       {orderedStages.map(([stage, records]) => {
         const color = stageMeta(stage, stages).color;
         return (
-          <div key={stage} draggable onDragStart={e => { e.dataTransfer.setData('application/x-bd-stage', stage); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const task = e.dataTransfer.getData('application/x-bd-task'); const sourceStage = e.dataTransfer.getData('application/x-bd-stage'); if (task) onDropTaskToStage?.(task, stage); else if (sourceStage && sourceStage !== stage) onDropStage?.(sourceStage, stage); }} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${records.length ? 'var(--border)' : 'rgba(255,255,255,.06)'}`, borderRadius: 7, background: records.length ? 'var(--surface)' : 'rgba(0,0,0,.22)', overflow: 'hidden', flexShrink: 0, opacity: records.length ? 1 : .78 }}>
+          <div key={stage} draggable={editable} onDragStart={e => { e.dataTransfer.setData('application/x-bd-stage', stage); e.dataTransfer.effectAllowed = 'move'; }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (!editable) return; const task = e.dataTransfer.getData('application/x-bd-task'); const sourceStage = e.dataTransfer.getData('application/x-bd-stage'); if (task) onDropTaskToStage?.(task, stage); else if (sourceStage && sourceStage !== stage) onDropStage?.(sourceStage, stage); }} style={{ width: 280, minWidth: 280, height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${records.length ? 'var(--border)' : 'rgba(255,255,255,.06)'}`, borderRadius: 7, background: records.length ? 'var(--surface)' : 'rgba(0,0,0,.22)', overflow: 'hidden', flexShrink: 0, opacity: records.length ? 1 : .78 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 13px', borderBottom: '1px solid var(--border)' }} onDragOver={e => e.preventDefault()}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, opacity: records.length ? 1 : .35, display: 'inline-block', flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, fontWeight: 650, color: records.length ? 'var(--text)' : 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{stage}</span>
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text3)' }}>{records.length} task{records.length === 1 ? '' : 's'}</span>
-              <button onClick={() => onCreateTask?.(stage)} title={`Add task to ${stage}`} className="mono" style={{ marginLeft: 'auto', width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', borderRadius: 3, cursor: 'pointer' }}>+</button>
-              <button onClick={() => onDeleteStage?.(stage)} title={`Delete ${stage}`} className="mono" style={{ width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--danger)', borderRadius: 3, cursor: 'pointer' }}>×</button>
+              {editable && <button onClick={() => onCreateTask?.(stage)} title={`Add task to ${stage}`} className="mono" style={{ marginLeft: 'auto', width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--text2)', borderRadius: 3, cursor: 'pointer' }}>+</button>}
+              {editable && <button onClick={() => onDeleteStage?.(stage)} title={`Delete ${stage}`} className="mono" style={{ width: 22, height: 22, border: '1px solid var(--border)', background: 'transparent', color: 'var(--danger)', borderRadius: 3, cursor: 'pointer' }}>×</button>}
             </div>
             <div className="thin-scroll" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 10, padding: '12px 13px', overflowY: 'auto', overflowX: 'hidden' }}>
               {records.length === 0 && <div className="mono" style={{ flex: 1, minHeight: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text3)', opacity: .65, fontSize: 11 }}>No tasks yet</div>}
@@ -341,6 +343,7 @@ function PurposeStageBoard({
                   selected={record.id === selectedRecordId}
                   filterState={filterState}
                   stacked
+                  draggable={editable}
                   onDropTask={(sourceId, beforeId) => onDropTaskToStage?.(sourceId, stage, beforeId)}
                   onSelect={() => onSelectRecord(record.id)}
                 />
@@ -349,7 +352,7 @@ function PurposeStageBoard({
           </div>
         );
       })}
-      <button onClick={onCreateStage} title="Create stage" className="mono" style={{ width: 280, minWidth: 280, height: 58, alignSelf: 'flex-start', border: '1px dashed var(--border2)', borderRadius: 7, background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>+ Stage</button>
+      {editable && <button onClick={onCreateStage} title="Create stage" className="mono" style={{ width: 280, minWidth: 280, height: 58, alignSelf: 'flex-start', border: '1px dashed var(--border2)', borderRadius: 7, background: 'transparent', color: 'var(--text2)', fontSize: 12, cursor: 'pointer' }}>+ Stage</button>}
     </div>
   );
 }
@@ -454,7 +457,7 @@ function resolveLifecycleStage(
   goalStage?: string,
   stages: string[] = [...DEFAULT_STAGES],
 ): string {
-  return normalizeStage(record.section || goalStage || 'Build', stages);
+  return resolveRecordStage(record, goalStage, stages);
 }
 
 function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
@@ -552,6 +555,7 @@ export function ProjectSectionView({
                 onDeleteStage={onDeleteStage}
                 onDropStage={onDropStage}
                 onCreateStage={onCreateStage}
+                editable={!!active}
               />
             ) : (
               <div className="mono" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text3)', fontSize: 12 }}>

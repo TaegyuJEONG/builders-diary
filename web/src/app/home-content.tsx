@@ -6,12 +6,12 @@ import { ProjectSectionView, ExploreMode } from '@/components/ProjectSectionView
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
-import { ManagePanel } from '@/components/ManagePanel';
+import { ManagePanel, ManageMode } from '@/components/ManagePanel';
 import { ImportReview } from '@/components/ImportReview';
 import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { Portfolio, Project, Record, ImportRun } from '@/lib/types';
+import { Portfolio, Project, Record, ImportRun, DEFAULT_STAGES, resolveRecordStage } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
@@ -65,12 +65,9 @@ export function HomeContent() {
   // filters
   const [selectedMindset, setSelectedMindset] = useState<string[]>([]);
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const [managerOpen, setManagerOpen] = useState(false);
   const [importReviewOpen, setImportReviewOpen] = useState(false);
   const [projectPanelId, setProjectPanelId] = useState<string | null>(null);
-  const [managerTab, setManagerTab] = useState<'projects' | 'stages' | 'task'>('projects');
-  const [managerStage, setManagerStage] = useState<string | undefined>();
-  const [managerProjectSlug, setManagerProjectSlug] = useState<string | undefined>();
+  const [managerMode, setManagerMode] = useState<ManageMode | null>(null);
   const [stageDeleteTarget, setStageDeleteTarget] = useState<string | null>(null);
 
   const refreshPortfolio = useCallback(async () => {
@@ -308,12 +305,12 @@ export function HomeContent() {
     setSelectedRecordId(null);
   }, []);
 
-  const openManager = useCallback((tab: 'projects' | 'stages' | 'task', stage?: string) => {
-    setManagerTab(tab);
-    setManagerStage(stage);
-    setManagerProjectSlug(selectedProjectId ? portfolio?.projects.find(p => p.id === selectedProjectId)?.slug : portfolio?.projects[0]?.slug);
-    setManagerOpen(true);
-  }, [portfolio, selectedProjectId]);
+  // Each panel is scoped to one job for one project — never portfolio-wide settings.
+  const openManager = useCallback((mode: ManageMode) => setManagerMode(mode), []);
+  const closeManager = useCallback(() => setManagerMode(null), []);
+  const projectSlugOf = useCallback((projectId: string | null) => (
+    projectId ? portfolio?.projects.find(p => p.id === projectId)?.slug : undefined
+  ), [portfolio]);
 
   const handleReorderProjects = useCallback(async (sourceId: string, targetId: string) => {
     if (!portfolio || sourceId === targetId) return;
@@ -392,17 +389,28 @@ export function HomeContent() {
     setStageDeleteTarget(stage);
   }, []);
 
+  /** Tasks the board displays under a stage for one project. Deleting a stage
+   *  removes exactly this set, so the confirm dialog can never under-report it. */
+  const tasksInStage = useCallback((project: Project | undefined, stage: string): Record[] => {
+    if (!project) return [];
+    const stages = project.stages?.length ? project.stages : (portfolio?.stages || [...DEFAULT_STAGES]);
+    return project.goals.flatMap(goal => goal.records.filter(record => (
+      resolveRecordStage(record, goal.stage, stages).toLowerCase() === (stage || '').trim().toLowerCase()
+    )));
+  }, [portfolio]);
+
   const deleteStageAfterConfirm = useCallback(async () => {
     if (!portfolio || !stageDeleteTarget) return;
-    const selectedProjectSlug = portfolio.projects.find(p => p.id === selectedProjectId)?.slug;
-    const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget && (!selectedProjectSlug || r.project_slug === selectedProjectSlug));
-    const selectedProject = portfolio.projects.find(p => p.slug === selectedProjectSlug);
-    const scope = selectedProject?.title || selectedProject?.name || selectedProjectSlug || 'ALL PROJECTS';
-    const token = `${scope} / ${stageDeleteTarget}`;
+    const selectedProject = portfolio.projects.find(p => p.id === selectedProjectId);
+    const stageRecords = tasksInStage(selectedProject, stageDeleteTarget);
     try {
       for (const record of stageRecords) await deleteRecordFromFile(record.file_path);
       if (selectedProject) {
-        await updateProjectStagesInFolder(selectedProject.slug, (selectedProject.stages || portfolio.stages || []).filter(stage => stage !== stageDeleteTarget));
+        const current = selectedProject.stages || portfolio.stages || [];
+        await updateProjectStagesInFolder(
+          selectedProject.slug,
+          current.filter(stage => stage.toLowerCase() !== stageDeleteTarget.toLowerCase()),
+        );
       }
       setStageDeleteTarget(null);
       await refreshPortfolio();
@@ -410,7 +418,7 @@ export function HomeContent() {
       console.error(error);
       setStageDeleteTarget(null);
     }
-  }, [allRecords, portfolio, refreshPortfolio, stageDeleteTarget, selectedProjectId]);
+  }, [portfolio, refreshPortfolio, stageDeleteTarget, selectedProjectId, tasksInStage]);
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
   const totalRecordCount = allRecords.length;
@@ -423,6 +431,15 @@ export function HomeContent() {
     () => allRecords.find(r => r.id === selectedRecordId) || null,
     [allRecords, selectedRecordId]
   );
+
+  // The Task editor's stage dropdown belongs to the Task's own project, not the whole portfolio.
+  const selectedRecordProjectStages = useMemo(() => {
+    if (!portfolio) return undefined;
+    const owner = selectedRecord?.project_slug
+      ? portfolio.projects.find(p => p.slug === selectedRecord.project_slug)
+      : undefined;
+    return owner?.stages?.length ? owner.stages : portfolio.stages;
+  }, [portfolio, selectedRecord]);
 
   // reset card selection if the selected record no longer exists in the portfolio
   useEffect(() => {
@@ -518,13 +535,13 @@ export function HomeContent() {
             mode={exploreMode}
             onModeChange={(mode) => { setExploreMode(mode); setSelectedGoalId(null); setSelectedRecordId(null); }}
             onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(null); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
-            onEditProject={(id) => { setSelectedProjectId(id); setProjectPanelId(null); setManagerProjectSlug(portfolio?.projects.find(p => p.id === id)?.slug || undefined); setManagerTab('projects'); setManagerOpen(true); }}
-            onCreateProject={() => { setManagerTab('projects'); setManagerProjectSlug(undefined); setManagerOpen(true); }}
+            onEditProject={(id) => { const slug = projectSlugOf(id); if (slug) openManager({ kind: 'edit-project', projectSlug: slug }); }}
+            onCreateProject={() => openManager({ kind: 'create-project' })}
             onDropTaskToStage={handleMoveTaskToStage}
-            onCreateTask={(stage) => openManager('task', stage)}
+            onCreateTask={(stage) => { const slug = projectSlugOf(selectedProjectId); if (slug) openManager({ kind: 'new-task', projectSlug: slug, stage }); }}
             onDeleteStage={handleDeleteStage}
             onDropStage={handleReorderStages}
-            onCreateStage={() => openManager('stages')}
+            onCreateStage={() => { const slug = projectSlugOf(selectedProjectId); if (slug) openManager({ kind: 'stages', projectSlug: slug }); }}
             selectedRecordId={selectedRecordId}
             onSelectRecord={setSelectedRecordId}
           />
@@ -535,7 +552,7 @@ export function HomeContent() {
           <div style={{ width: 400, flexShrink: 0, overflow: 'hidden' }} className="detail-col">
             <DetailPanel
               record={selectedRecord}
-              stages={portfolio.stages}
+              stages={selectedRecordProjectStages}
               onClose={() => setSelectedRecordId(null)}
               onSave={handleSaveRecord}
               onDelete={handleDeleteRecord}
@@ -552,30 +569,34 @@ export function HomeContent() {
         )}
       </div>
 
-      {managerOpen && (
+      {managerMode && (
         <ManagePanel
           portfolio={portfolio}
-          initialTab={managerTab}
-          initialStage={managerStage}
-          initialProjectSlug={managerProjectSlug}
-          createOnly={!managerProjectSlug}
-          onClose={() => setManagerOpen(false)}
-          onCreated={() => setManagerOpen(false)}
+          mode={managerMode}
+          onClose={closeManager}
+          onCreated={closeManager}
           onRefresh={refreshPortfolio}
         />
       )}
 
       {stageDeleteTarget && (() => {
-        const selectedProjectSlug = portfolio?.projects.find(p => p.id === selectedProjectId)?.slug;
-        const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget && (!selectedProjectSlug || r.project_slug === selectedProjectSlug));
-        const selectedProject = portfolio?.projects.find(p => p.slug === selectedProjectSlug);
-        const scope = selectedProject?.title || selectedProject?.name || selectedProjectSlug || 'ALL PROJECTS';
+        const selectedProject = portfolio?.projects.find(p => p.id === selectedProjectId);
+        const scope = selectedProject?.title || selectedProject?.name || 'this project';
+        const stageRecords = tasksInStage(selectedProject, stageDeleteTarget);
         const token = `${scope} / ${stageDeleteTarget}`;
         return <ConfirmDialog
           open
           danger
           title={`Delete ${stageDeleteTarget} stage?`}
-          message={<><p style={{ margin: 0 }}>This permanently deletes the Stage and its Tasks.</p><p style={{ margin: '10px 0 0' }}><strong style={{ color: 'var(--danger)' }}>{stageRecords.length} Task{stageRecords.length === 1 ? '' : 's'}</strong> in {scope} will be deleted. This cannot be undone.</p></>}
+          message={<>
+            <p style={{ margin: 0 }}>This permanently deletes the Stage and its {stageRecords.length} Task{stageRecords.length === 1 ? '' : 's'} in {scope}. This cannot be undone.</p>
+            {stageRecords.length > 0 && (
+              <ul style={{ margin: '10px 0 0', paddingLeft: 18 }}>
+                {stageRecords.slice(0, 8).map(record => <li key={record.id} style={{ marginBottom: 3 }}>{record.title}</li>)}
+              </ul>
+            )}
+            {stageRecords.length > 8 && <p style={{ margin: '8px 0 0' }}>+{stageRecords.length - 8} more</p>}
+          </>}
           confirmLabel="Delete stage"
           requireText={token}
           onCancel={() => setStageDeleteTarget(null)}
