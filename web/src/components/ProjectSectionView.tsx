@@ -527,12 +527,7 @@ export function ProjectSectionView({
                 onDropProject={onDropProject}
               />
             ))}
-            <div style={{ position: 'relative', alignSelf: 'center' }}>
-              <button onClick={() => setCreateMenuOpen(v => !v)} className="mono" title="Create project or learning" style={{ width: 38, minWidth: 38, height: 38, border: '1px dashed var(--border2)', background: 'transparent', color: 'var(--text2)', borderRadius: 5, fontSize: 18, cursor: 'pointer' }}>+</button>
-              {createMenuOpen && (
-                <button onClick={() => { setCreateMenuOpen(false); onCreateProject?.(); }} className="mono" style={{ position: 'absolute', top: 44, right: 0, zIndex: 10, width: 190, padding: '10px 12px', textAlign: 'left', background: 'var(--card)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 6, boxShadow: '0 8px 24px rgba(0,0,0,.25)', cursor: 'pointer', fontSize: 11 }}>Create project or learning</button>
-              )}
-            </div>
+            <button onClick={onCreateProject} className="mono" title="Create project or learning" style={{ width: 38, minWidth: 38, height: 38, alignSelf: 'center', border: '1px dashed var(--border2)', background: 'transparent', color: 'var(--text2)', borderRadius: 5, fontSize: 18, cursor: 'pointer' }}>+</button>
           </div>
 
           {/* Row 2: sections of the selected project */}
