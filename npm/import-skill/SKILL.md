@@ -176,6 +176,18 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" propose-project \
 
 The web renders **only** `project-proposal.json.projects`. Its columns are Project, Chat, Claude Code, and Summary. Chat/Claude Code counts open a metadata detail panel containing readable titles and summaries; raw UUIDs and full transcripts stay out of the web view.
 
+After all project/learning/noise decisions and `propose-project` calls are complete, seal the proposal before asking the user to save:
+
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" finalize-proposal \
+  --data-root "$DATA_ROOT" --run-id "<run-id>"
+
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" materialize-chat-views \
+  --data-root "$DATA_ROOT" --run-id "<run-id>" --page-size 20
+```
+
+The web keeps Save disabled while the proposal is `draft`. It enables Save only after `finalize-proposal` succeeds. `materialize-chat-views` writes only proposed Chat transcripts, split into page-sized files; missing or damaged sources are reported in `chat-view.json` without aborting the other projects.
+
 ### User message: short and action-only
 
 After writing the proposal, say only:
