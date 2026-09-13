@@ -536,7 +536,7 @@ export function ProjectSectionView({
 
           {/* Row 2: sections of the selected project */}
           <div style={{ flex: 1, minHeight: 0 }}>
-            {visibleGoals.length > 0 ? (
+            {active || visibleGoals.length > 0 ? (
               <PurposeStageBoard
                 goals={visibleGoals}
                 stages={stages}
