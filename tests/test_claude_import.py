@@ -531,13 +531,18 @@ class ClaudeImportTests(unittest.TestCase):
 
     def test_skill_opens_with_live_viewer_preflight(self) -> None:
         skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
-        viewer = skill.index("http://localhost:3111")
+        viewer = skill.index("https://web-one-alpha-57.vercel.app")
         prepare = skill.index(" prepare ")
         helper_help = skill.index(" --help")
 
         self.assertLess(viewer, prepare)
         self.assertLess(viewer, helper_help)
         self.assertIn("curl", skill[:prepare])
+        # The viewer is the deployed site. The skill must never send the user to a
+        # local port (nothing in the product starts one), and it must gate on the
+        # installer's own data-folder marker instead.
+        self.assertNotIn("localhost:3111", skill)
+        self.assertIn(".builders-diary.json", skill[:prepare])
         self.assertIn("another window", skill[:prepare].lower())
         self.assertIn("live", skill[:prepare].lower())
 

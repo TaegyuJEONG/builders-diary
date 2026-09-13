@@ -359,7 +359,7 @@ captured?, evidence count, path) and the section rollup:
 ```
 Saved 3 tasks.
   Discovery: 2 done  ·  Build: 1 done
-View your portfolio: http://localhost:3111
+View your portfolio: https://web-one-alpha-57.vercel.app
 ```
 
 For a dry run, report the provisional project, per-task sections, task count, and approved evidence

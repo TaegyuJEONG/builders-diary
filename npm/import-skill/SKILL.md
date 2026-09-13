@@ -30,17 +30,31 @@ This is a **local import workflow**, not the daily `builders-diary` session reco
 
 ## Step 0 — Open the live portfolio first
 
-Before scanning exports or proposing anything, verify that the local viewer is reachable:
+The viewer is the deployed site:
 
-```bash
-curl -fsS --max-time 3 http://localhost:3111 >/dev/null
+```
+https://web-one-alpha-57.vercel.app
 ```
 
-- If it fails, stop before creating an import run. Tell the user the Builder's Diary web server must be running on port 3111; do not guess another URL.
-- If it succeeds, the **first user-facing message** must share [http://localhost:3111](http://localhost:3111) and say: "Open this in another window. Confirmed projects, Purposes, section chips, and Tasks will appear here live as you approve them."
-- Continue only after the server check succeeds. The page polls the connected local folder, so no manual reload should be needed.
+It is a static page that reads the folder the user connected in the browser. There is no local server, no port, and nothing for the user to start.
 
-Only after the viewer succeeds, verify and use this installed helper:
+Before scanning exports or proposing anything, verify that onboarding is finished and that the viewer is reachable:
+
+```bash
+curl -fsS --max-time 10 https://web-one-alpha-57.vercel.app >/dev/null
+for root in "$HOME/Documents/builders-diary" "$HOME/builders-diary"; do
+  [ -f "$root/.builders-diary.json" ] && echo "$root" && break
+done
+```
+
+- If the marker is missing, stop before creating an import run: the user has not finished onboarding. Tell them to open https://web-one-alpha-57.vercel.app, run the install command shown there, and connect the portfolio folder. Never guess or create a different folder.
+- If the site is unreachable, stop before creating an import run and say the viewer could not be reached; do not guess another URL.
+- If both pass, the **first user-facing message** must share [https://web-one-alpha-57.vercel.app](https://web-one-alpha-57.vercel.app) and say: "Open this in another window and leave it open beside us. Confirmed projects, Purposes, section chips, and Tasks will appear here live as you approve them."
+- Continue only after both checks pass. The page polls the connected local folder, so no manual reload should be needed.
+
+Use the folder printed above as `DATA_ROOT` for the rest of this run.
+
+Only after the viewer check succeeds, verify and use this installed helper:
 
 ```bash
 python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" --help
