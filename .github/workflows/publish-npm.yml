@@ -21,5 +21,5 @@ jobs:
           registry-url: https://registry.npmjs.org
       - name: Use npm trusted publishing client
         run: npm install --global npm@11.5.1
-      - name: Publish with npm trusted publishing
-        run: npm publish
+      - name: Stage package with npm trusted publishing
+        run: npm stage publish
