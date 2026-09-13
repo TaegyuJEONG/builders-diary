@@ -11,6 +11,7 @@ import { ImportProgress } from '@/components/ImportProgress';
 import { ImportReview } from '@/components/ImportReview';
 import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { Portfolio, Project, Record, ImportRun } from '@/lib/types';
 import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
@@ -71,6 +72,7 @@ export function HomeContent() {
   const [managerTab, setManagerTab] = useState<'projects' | 'stages' | 'task'>('projects');
   const [managerStage, setManagerStage] = useState<string | undefined>();
   const [managerProjectSlug, setManagerProjectSlug] = useState<string | undefined>();
+  const [stageDeleteTarget, setStageDeleteTarget] = useState<string | null>(null);
 
   const refreshPortfolio = useCallback(async () => {
     const handle = await loadFolderHandleFromStorage();
@@ -384,30 +386,25 @@ export function HomeContent() {
     await refreshPortfolio();
   }, [allRecords, portfolio, refreshPortfolio]);
 
-  const handleDeleteStage = useCallback(async (stage: string) => {
-    if (!portfolio) return;
-    const stageRecords = allRecords.filter(r => r.section === stage);
-    const selectedProjectSlug = portfolio.projects.find(p => p.id === selectedProjectId)?.slug;
-    const visibleStageRecords = selectedProjectSlug ? stageRecords.filter(r => r.project_slug === selectedProjectSlug) : stageRecords;
-    const projectNames = [...new Set(stageRecords.map(r => r.projectTitle || r.project_slug || 'Unknown project'))];
-    const scope = projectNames.length === 1 ? projectNames[0] : 'ALL PROJECTS';
-    const token = `${scope} / ${stage}`;
-    const warning = stageRecords.length
-      ? `Delete Stage “${stage}” and permanently delete ${visibleStageRecords.length} visible Task${visibleStageRecords.length === 1 ? '' : 's'} (${stageRecords.length} total across all projects) inside it?\n\nThis cannot be undone.`
-      : `Delete empty Stage “${stage}”?\n\nThis cannot be undone.`;
-    if (!window.confirm(warning)) return;
-    const typed = window.prompt(`Type exactly “${token}” to confirm Stage deletion.`);
-    if (typed !== token) return;
+  const handleDeleteStage = useCallback((stage: string) => {
+    setStageDeleteTarget(stage);
+  }, []);
+
+  const deleteStageAfterConfirm = useCallback(async () => {
+    if (!portfolio || !stageDeleteTarget) return;
+    const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget);
     try {
       for (const record of stageRecords) await deleteRecordFromFile(record.file_path);
       const handle = await loadFolderHandleFromStorage();
       if (!handle) throw new Error('Builder’s Diary folder is not connected');
-      await writeStages(handle, (portfolio.stages || []).filter(s => s !== stage));
+      await writeStages(handle, (portfolio.stages || []).filter(s => s !== stageDeleteTarget));
+      setStageDeleteTarget(null);
       await refreshPortfolio();
     } catch (error) {
-      window.alert(error instanceof Error ? error.message : 'Stage deletion failed');
+      console.error(error);
+      setStageDeleteTarget(null);
     }
-  }, [allRecords, portfolio, refreshPortfolio, selectedProjectId]);
+  }, [allRecords, portfolio, refreshPortfolio, stageDeleteTarget]);
 
   // Total records across the whole portfolio (ignores filters) — drives the empty banner.
   const totalRecordCount = allRecords.length;
@@ -561,6 +558,23 @@ export function HomeContent() {
         />
       )}
 
+      {stageDeleteTarget && (() => {
+        const stageRecords = allRecords.filter(r => r.section === stageDeleteTarget);
+        const visibleCount = selectedProjectId ? stageRecords.filter(r => r.project_slug === portfolio?.projects.find(p => p.id === selectedProjectId)?.slug).length : stageRecords.length;
+        const projectNames = [...new Set(stageRecords.map(r => r.projectTitle || r.project_slug || 'Unknown project'))];
+        const scope = projectNames.length === 1 ? projectNames[0] : 'ALL PROJECTS';
+        const token = `${scope} / ${stageDeleteTarget}`;
+        return <ConfirmDialog
+          open
+          danger
+          title={`Delete ${stageDeleteTarget} stage?`}
+          message={<><p style={{ margin: 0 }}>This permanently deletes the Stage and its Tasks.</p><p style={{ margin: '10px 0 0' }}><strong style={{ color: 'var(--danger)' }}>{visibleCount} visible Task{visibleCount === 1 ? '' : 's'}</strong> ({stageRecords.length} total across all projects) will be deleted. This cannot be undone.</p></>}
+          confirmLabel="Delete stage"
+          requireText={token}
+          onCancel={() => setStageDeleteTarget(null)}
+          onConfirm={deleteStageAfterConfirm}
+        />;
+      })()}
       {importReviewOpen && (
         <ImportReview onClose={() => setImportReviewOpen(false)} onSaved={refreshPortfolio} />
       )}
