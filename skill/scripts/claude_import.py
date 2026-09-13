@@ -231,6 +231,8 @@ def scan_export_directory(export_dir: str | Path) -> dict[str, Any]:
                             "source_id": row.get("uuid"),
                             "name": row.get("name") or "",
                             "description": row.get("description") or "",
+                            "prompt_template": row.get("prompt_template") or "",
+                            "is_starter_project": bool(row.get("is_starter_project")),
                             "created_at": row.get("created_at"),
                             "updated_at": row.get("updated_at"),
                             "doc_count": len(row.get("docs") or []),
@@ -371,8 +373,14 @@ def _project_candidates(
                 "name": name,
                 "source": "claude_chat_project",
                 "source_ids": [project.get("source_id")],
+                # Claude Chat exports carry no conversation→project link, so this stays
+                # empty until the agent assigns conversations (assign-sources).
                 "source_refs": [],
                 "description": project.get("description") or "",
+                "prompt_template": project.get("prompt_template") or "",
+                "is_starter_project": bool(project.get("is_starter_project")),
+                "doc_count": project.get("doc_count") or 0,
+                "summary": "",
                 "session_count": None,
                 "status": "proposed",
             }
@@ -397,6 +405,7 @@ def _project_candidates(
                 "source_ids": [workspace.get("source_id")],
                 "source_refs": source_refs,
                 "description": "",
+                "summary": "",
                 "session_count": workspace.get("session_count"),
                 "status": "proposed",
             }
@@ -542,6 +551,80 @@ def _validated_source_path(path: str | Path, allowed_root: str | Path) -> Path:
     return candidate
 
 
+def _load_candidates(run_dir: Path) -> dict[str, Any]:
+    path = run_dir / "project-candidates.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise FileNotFoundError("project-candidates.json not found — run prepare first") from error
+    if not isinstance(data, dict) or not isinstance(data.get("candidates"), list):
+        raise ValueError("project-candidates.json is malformed")
+    return data
+
+
+def assign_sources(
+    *,
+    data_root: str | Path,
+    run_id: str,
+    candidate_id: str,
+    source_refs: list[str] | None = None,
+    summary: str | None = None,
+) -> dict[str, Any]:
+    """Record the agent's source assignment and evidence summary for one candidate.
+
+    Claude Chat exports carry no conversation→project link, so only the agent can decide
+    which conversations belong to which project, from titles and summaries. This writes
+    that judgment back into project-candidates.json — the file the web selection view and
+    apply-selections both read. Without it a chat project is confirmed with zero sources
+    and its source queue is empty, so no task cards can ever be produced for it.
+    """
+    root = Path(data_root).expanduser()
+    run_dir, _ = _load_run_manifest(root, run_id)
+    data = _load_candidates(run_dir)
+    candidates = data["candidates"]
+    target = next(
+        (item for item in candidates if isinstance(item, dict) and item.get("id") == candidate_id),
+        None,
+    )
+    if target is None:
+        raise ValueError(f"Unknown candidate: {candidate_id}")
+
+    if source_refs:
+        catalog = _source_catalog(_load_source_index(run_dir))
+        wanted = list(dict.fromkeys(source_refs))
+        unknown = [source_ref for source_ref in wanted if source_ref not in catalog]
+        if unknown:
+            raise ValueError(f"Unknown source refs: {', '.join(unknown)}")
+        # One source belongs to exactly one project. A second assignment would
+        # double-count it, so report the conflict instead of silently moving it.
+        claimed = {
+            source_ref
+            for item in candidates
+            if isinstance(item, dict) and item.get("id") != candidate_id
+            for source_ref in (item.get("source_refs") or [])
+        }
+        conflicts = [source_ref for source_ref in wanted if source_ref in claimed]
+        if conflicts:
+            raise ValueError(
+                "Already assigned to another candidate: "
+                f"{', '.join(conflicts)} — remove it there first."
+            )
+        target["source_refs"] = list(dict.fromkeys([*(target.get("source_refs") or []), *wanted]))
+
+    if summary is not None:
+        target["summary"] = _safe_text(summary, 600)
+
+    _write_json(run_dir / "project-candidates.json", data)
+    _append_run_event(
+        run_dir,
+        "sources_assigned",
+        candidate_id=candidate_id,
+        source_refs=target.get("source_refs") or [],
+        summary_written=summary is not None,
+    )
+    return target
+
+
 def confirm_project(
     *,
     data_root: str | Path,
@@ -569,7 +652,10 @@ def confirm_project(
         item = {"id": project["id"], "name": project.get("name") or project["title"], "slug": project["slug"]}
         confirmed.append(item)
     if source_refs is not None:
-        item["source_refs"] = source_refs
+        # Union, never replace: the skill passes every source of a merged project, and a
+        # project can be confirmed more than once (e.g. once per merged candidate).
+        # Overwriting silently dropped the earlier sources.
+        item["source_refs"] = list(dict.fromkeys([*(item.get("source_refs") or []), *source_refs]))
     manifest["status"] = "source_task_curation"
     manifest["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
     _write_json(run_dir / "manifest.json", manifest)
@@ -749,6 +835,7 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
 
     confirmed: list[str] = []
     dropped: list[str] = []
+    without_sources: list[dict[str, str]] = []
     for selection in selections.get("projects", []):
         if not isinstance(selection, dict):
             continue
@@ -760,16 +847,22 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
             dropped.append(candidate_id)
             continue
         name = str(selection.get("name") or candidate.get("name") or "Untitled").strip()
+        source_refs = candidate.get("source_refs") or []
         project = confirm_project(
             data_root=data_root,
             run_id=run_id,
             name=name,
             sector=str(selection.get("sector") or ""),
             one_liner=str(selection.get("one_liner") or ""),
-            source_refs=candidate.get("source_refs") or [],
+            source_refs=source_refs,
         )
         confirmed.append(project["slug"])
-    return {"confirmed": confirmed, "dropped": dropped}
+        if not source_refs:
+            # The project now exists but nothing can ever be curated into it: its source
+            # queue is empty. Surface it so the skill reports the gap instead of quietly
+            # importing nothing for that project.
+            without_sources.append({"candidate_id": str(candidate_id), "name": name})
+    return {"confirmed": confirmed, "dropped": dropped, "without_sources": without_sources}
 
 
 def create_download_page(manifest_path: str | Path, output_path: str | Path) -> Path:
@@ -833,6 +926,16 @@ def main() -> int:
     confirm_project_cmd.add_argument("--one-liner", default="")
     confirm_project_cmd.add_argument("--source-ref", action="append", default=None)
 
+    assign_sources_cmd = sub.add_parser(
+        "assign-sources",
+        help="Attach sources (and an evidence summary) to one project candidate",
+    )
+    assign_sources_cmd.add_argument("--data-root", required=True)
+    assign_sources_cmd.add_argument("--run-id", required=True)
+    assign_sources_cmd.add_argument("--candidate-id", required=True)
+    assign_sources_cmd.add_argument("--summary", default=None)
+    assign_sources_cmd.add_argument("--source-ref", action="append", default=None)
+
     apply_selections_cmd = sub.add_parser("apply-selections", help="Materialize project selections written by the web view")
     apply_selections_cmd.add_argument("--data-root", required=True)
     apply_selections_cmd.add_argument("--run-id", required=True)
@@ -871,6 +974,8 @@ def main() -> int:
         print(json.dumps(list_import_runs(data_root=args.data_root), ensure_ascii=False, indent=2))
     elif args.command == "confirm-project":
         print(json.dumps(confirm_project(data_root=args.data_root, run_id=args.run_id, name=args.name, sector=args.sector, one_liner=args.one_liner, source_refs=args.source_ref), ensure_ascii=False, indent=2))
+    elif args.command == "assign-sources":
+        print(json.dumps(assign_sources(data_root=args.data_root, run_id=args.run_id, candidate_id=args.candidate_id, source_refs=args.source_ref, summary=args.summary), ensure_ascii=False, indent=2))
     elif args.command == "apply-selections":
         print(json.dumps(apply_selections(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "source-queue":

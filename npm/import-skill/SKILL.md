@@ -141,6 +141,30 @@ Build a unified project proposal from:
 
 Claude Chat exports do not provide a direct conversation-to-project UUID link. Assign a Chat conversation to a proposed project only when its title/summary and dates provide evidence. Keep ambiguous conversation IDs as `postponed` for later review; never guess, discard, or silently attach them.
 
+### Attach sources to every Chat project before the user selects
+
+A Chat project candidate starts with **no** sources. If it is confirmed that way it gets an empty source queue and can never produce a task card, so the work behind it is lost. You are the only thing that can link the conversations, so do it before presenting the proposal.
+
+For each Claude Chat project candidate:
+
+1. Read its conversations from `source-index.json` (`chat.conversations`, each with `source_id`, `title`, `summary`, `created_at`, `message_count`).
+2. Assign the conversations whose title/summary genuinely belong to that project, and write an evidence summary in the same call:
+
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" assign-sources \
+  --data-root "$DATA_ROOT" \
+  --run-id "<run-id>" \
+  --candidate-id "chat-project:<project-uuid>" \
+  --source-ref "chat:<conversation-uuid>" \
+  --source-ref "chat:<conversation-uuid>" \
+  --summary "Curated the Product Builder taxonomy across 12 working sessions."
+```
+
+3. `assign-sources` refuses an unknown ref and one already assigned to a different candidate — resolve the conflict, never duplicate a conversation.
+4. Leave conversations the evidence does not place, and say which ones you left out.
+
+Prefer the deterministic evidence already on the candidate over invented prose: `is_starter_project` (Anthropic's built-in example project — never the user's work), `prompt_template`, `doc_count`, `description`, plus title/summary. Claude Code candidates need no assignment — the workspace folder is the project and its sessions are already attached.
+
 ### Resume — skip what is already done
 
 Read `manifest.json` `existing_projects`. It lists every Project and Learning entry already in the portfolio. Do **not** re-propose those; instead offer to add purposes/tasks to them or to import only the remaining sources. If the user already confirmed projects in a previous run, their names are here.
@@ -173,7 +197,7 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" confirm-project \
   --source-ref "code:<session-id>"
 ```
 
-Pass every exact source ID belonging to the selected or merged project. The helper validates, deduplicates, and persists them so a long import can resume safely.
+Pass every exact source ID belonging to the selected or merged project. The helper validates, deduplicates, and persists them. Confirming the same project again **unions** the source lists, so a merged project keeps every source you pass across calls.
 
 ### Co-drive with the web view
 
@@ -183,6 +207,10 @@ The user may instead confirm projects in the web view, which writes `imports/<ru
 python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" apply-selections \
   --data-root "$DATA_ROOT" --run-id "<run-id>"
 ```
+
+The response lists `without_sources`: projects that were written with an empty source list. Those exist in the portfolio but have an empty source queue and can never produce a task card — report them plainly and offer to attach their sources with `assign-sources` plus `confirm-project`. Never continue silently past them.
+
+The web table reads the candidate fields you filled in (`source_refs`, `summary`) alongside `source`, `session_count`, `description`, `prompt_template`, `is_starter_project` and `doc_count`, so the user sees the same evidence you did.
 
 Then continue to Step 4 with the confirmed projects.
 

@@ -531,6 +531,159 @@ class ClaudeImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "HTTPS"):
             create_download_page(manifest, self.base / "unsafe.html")
 
+    def _prepare(self) -> str:
+        from skill.scripts.claude_import import prepare_import_run
+
+        result = prepare_import_run(
+            data_root=self.data_root,
+            export_dir=self.export_dir,
+            claude_config_dir=self.config_dir,
+        )
+        self.run_dir = Path(result["run_dir"])
+        return result["run_id"]
+
+    def _candidates(self) -> list[dict]:
+        return json.loads((self.run_dir / "project-candidates.json").read_text(encoding="utf-8"))["candidates"]
+
+    def test_scan_extracts_chat_project_evidence_fields(self) -> None:
+        """is_starter_project / prompt_template / doc_count decide the evidence line."""
+        from skill.scripts.claude_import import scan_export_directory
+
+        self._write_zip(
+            "projects-002.zip",
+            "projects/starter.json",
+            {
+                "uuid": "project-starter",
+                "name": "How to use Claude",
+                "description": "",
+                "prompt_template": "Guide me through the database relations.",
+                "is_starter_project": True,
+                "docs": [{"uuid": "doc-1", "filename": "guide.md"}],
+            },
+        )
+
+        rows = {row["name"]: row for row in scan_export_directory(self.export_dir)["projects"]}
+
+        self.assertTrue(rows["How to use Claude"]["is_starter_project"])
+        self.assertEqual(rows["How to use Claude"]["prompt_template"], "Guide me through the database relations.")
+        self.assertEqual(rows["How to use Claude"]["doc_count"], 1)
+        # The plain fixture project has neither, and must not be marked as a starter.
+        self.assertFalse(rows["ProductBuilderJob"]["is_starter_project"])
+        self.assertEqual(rows["ProductBuilderJob"]["prompt_template"], "")
+
+    def test_candidates_carry_the_evidence_fields_and_an_empty_summary(self) -> None:
+        self._prepare()
+        chat_candidate = next(c for c in self._candidates() if c["source"] == "claude_chat_project")
+
+        for field in ("summary", "prompt_template", "is_starter_project", "doc_count"):
+            self.assertIn(field, chat_candidate)
+        self.assertEqual(chat_candidate["summary"], "")
+        # Claude Chat exports carry no conversation→project link: still empty at prepare.
+        self.assertEqual(chat_candidate["source_refs"], [])
+        self.assertIn("summary", next(c for c in self._candidates() if c["source"] == "claude_code_workspace"))
+
+    def test_assign_sources_links_conversations_and_reaches_the_queue(self) -> None:
+        """The whole point: a chat candidate confirmed in the web must have sources."""
+        from skill.scripts.claude_import import apply_selections, assign_sources, project_source_queue
+
+        run_id = self._prepare()
+        chat_candidate = next(c for c in self._candidates() if c["source"] == "claude_chat_project")
+
+        updated = assign_sources(
+            data_root=self.data_root,
+            run_id=run_id,
+            candidate_id=chat_candidate["id"],
+            source_refs=["chat:chat-1"],
+            summary="Defined a repeatable Product Builder classification rule.",
+        )
+        self.assertEqual(updated["source_refs"], ["chat:chat-1"])
+        self.assertEqual(updated["summary"], "Defined a repeatable Product Builder classification rule.")
+
+        # Re-assigning the same ref must not duplicate it.
+        again = assign_sources(
+            data_root=self.data_root, run_id=run_id, candidate_id=chat_candidate["id"], source_refs=["chat:chat-1"]
+        )
+        self.assertEqual(again["source_refs"], ["chat:chat-1"])
+
+        (self.run_dir / "selections.json").write_text(
+            json.dumps({"run_id": run_id, "projects": [{"candidate_id": chat_candidate["id"], "name": "Product Builder Jobs"}]}),
+            encoding="utf-8",
+        )
+
+        applied = apply_selections(data_root=self.data_root, run_id=run_id)
+        self.assertIn("product-builder-jobs", applied["confirmed"])
+        self.assertEqual(applied["without_sources"], [])
+
+        queue = project_source_queue(
+            data_root=self.data_root, run_id=run_id, project_name="Product Builder Jobs"
+        )
+        self.assertEqual([item["source_ref"] for item in queue], ["chat:chat-1"])
+
+    def test_assign_sources_rejects_unknown_and_already_claimed_refs(self) -> None:
+        from skill.scripts.claude_import import assign_sources
+
+        run_id = self._prepare()
+        candidates = self._candidates()
+        chat_candidate = next(c for c in candidates if c["source"] == "claude_chat_project")
+        code_candidate = next(c for c in candidates if c["source"] == "claude_code_workspace")
+
+        with self.assertRaisesRegex(ValueError, "Unknown candidate"):
+            assign_sources(data_root=self.data_root, run_id=run_id, candidate_id="nope", source_refs=[])
+
+        with self.assertRaisesRegex(ValueError, "Unknown source refs"):
+            assign_sources(
+                data_root=self.data_root, run_id=run_id, candidate_id=chat_candidate["id"], source_refs=["chat:missing"]
+            )
+
+        assign_sources(
+            data_root=self.data_root, run_id=run_id, candidate_id=chat_candidate["id"], source_refs=["chat:chat-1"]
+        )
+        with self.assertRaisesRegex(ValueError, "Already assigned to another candidate"):
+            assign_sources(
+                data_root=self.data_root, run_id=run_id, candidate_id=code_candidate["id"], source_refs=["chat:chat-1"]
+            )
+
+    def test_apply_selections_reports_projects_left_without_sources(self) -> None:
+        """A confirmed project with no sources can never be curated — say so."""
+        from skill.scripts.claude_import import apply_selections
+
+        run_id = self._prepare()
+        chat_candidate = next(c for c in self._candidates() if c["source"] == "claude_chat_project")
+
+        (self.run_dir / "selections.json").write_text(
+            json.dumps({"run_id": run_id, "projects": [{"candidate_id": chat_candidate["id"], "name": "No Sources"}]}),
+            encoding="utf-8",
+        )
+
+        applied = apply_selections(data_root=self.data_root, run_id=run_id)
+
+        self.assertEqual([entry["name"] for entry in applied["without_sources"]], ["No Sources"])
+
+    def test_confirming_a_merged_project_unions_source_refs(self) -> None:
+        """Two confirmations for one project must accumulate, not replace."""
+        from skill.scripts.claude_import import confirm_project
+
+        run_id = self._prepare()
+        confirm_project(data_root=self.data_root, run_id=run_id, name="Merged", source_refs=["chat:chat-1"])
+        confirm_project(data_root=self.data_root, run_id=run_id, name="Merged", source_refs=["chat:chat-2"])
+
+        manifest = json.loads((self.run_dir / "manifest.json").read_text(encoding="utf-8"))
+        entry = next(item for item in manifest["confirmed_projects"] if item["name"] == "Merged")
+
+        self.assertEqual(entry["source_refs"], ["chat:chat-1", "chat:chat-2"])
+
+    def test_skill_attaches_chat_sources_before_project_selection(self) -> None:
+        """A chat candidate confirmed with no sources can never produce a task card."""
+        skill = (ROOT / "npm" / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
+        step_three = skill[skill.index("## Step 3") : skill.index("## Step 4")]
+
+        self.assertIn("assign-sources", step_three)
+        self.assertIn("chat-project:", step_three)
+        self.assertIn("empty source queue", step_three)
+        self.assertIn("is_starter_project", step_three)
+        # A project confirmed without sources must be reported, not swallowed.
+        self.assertIn("without_sources", skill)
+
     def test_skill_sends_a_user_without_exports_to_the_export_flow(self) -> None:
         """A user who has not exported must be walked through the export, not prepared.
 
