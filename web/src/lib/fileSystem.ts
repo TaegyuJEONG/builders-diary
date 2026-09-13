@@ -299,11 +299,22 @@ export async function scanFolderStructure(handle: FileSystemDirectoryHandle): Pr
     console.error('Error scanning folder:', error);
   }
 
-  // User-defined order wins; unranked projects fall back to recency.
-  projects.sort((a, b) =>
-    (a.order ?? 999) - (b.order ?? 999)
-    || (b.created_at || '').localeCompare(a.created_at || '')
+  // User-defined order wins. Legacy projects without an order are appended
+  // chronologically after the explicitly ordered projects.
+  const maxExplicitOrder = projects.reduce((max, project) => (
+    typeof project.order === 'number' ? Math.max(max, project.order) : max
+  ), -1);
+  const unrankedOrder = new Map(
+    projects
+      .filter(project => typeof project.order !== 'number')
+      .sort((a, b) => (a.created_at || '').localeCompare(b.created_at || ''))
+      .map((project, index) => [project.id, maxExplicitOrder + 1 + index])
   );
+  projects.sort((a, b) => {
+    const aOrder = typeof a.order === 'number' ? a.order : unrankedOrder.get(a.id) ?? 999999;
+    const bOrder = typeof b.order === 'number' ? b.order : unrankedOrder.get(b.id) ?? 999999;
+    return aOrder - bOrder;
+  });
 
   return { path: handle.name, projects, stages };
 }
