@@ -11,6 +11,7 @@ interface ManagePanelProps {
   portfolio: Portfolio;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  onCreated?: () => void;
   initialTab?: 'projects' | 'stages' | 'task';
   initialStage?: string;
   initialProjectSlug?: string;
@@ -32,7 +33,7 @@ function Label({ children }: { children: React.ReactNode }) {
   return <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 5 }}>{children}</div>;
 }
 
-export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'projects', initialStage, initialProjectSlug, createOnly = false }: ManagePanelProps) {
+export function ManagePanel({ portfolio, onClose, onRefresh, onCreated, initialTab = 'projects', initialStage, initialProjectSlug, createOnly = false }: ManagePanelProps) {
   const [tab, setTab] = useState<'projects' | 'stages' | 'task'>(initialTab);
   const [stages, setStages] = useState<string[]>(portfolio.stages || ['Discovery', 'Build', 'Growth']);
   const [selectedSlug, setSelectedSlug] = useState(initialProjectSlug || portfolio.projects[0]?.slug || '');
@@ -48,10 +49,10 @@ export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'proje
     setProjectDraft({ ...selected });
   }, [selected?.id]);
 
-  async function run(action: () => Promise<void>, success: string) {
+  async function run(action: () => Promise<void>, success: string): Promise<boolean> {
     setBusy(true); setMessage('');
-    try { await action(); await onRefresh(); setMessage(success); }
-    catch (error) { setMessage(error instanceof Error ? error.message : 'Something went wrong'); }
+    try { await action(); await onRefresh(); setMessage(success); return true; }
+    catch (error) { setMessage(error instanceof Error ? error.message : 'Something went wrong'); return false; }
     finally { setBusy(false); }
   }
 
@@ -126,7 +127,7 @@ export function ManagePanel({ portfolio, onClose, onRefresh, initialTab = 'proje
                 <select style={fieldStyle} value={newProject.type} onChange={e => setNewProject(v => ({ ...v, type: e.target.value as 'project' | 'learning' }))}><option value="project">Project</option><option value="learning">Learning</option></select>
                 <input style={fieldStyle} placeholder="Sector (optional)" value={newProject.sector} onChange={e => setNewProject(v => ({ ...v, sector: e.target.value }))} />
                 <input style={fieldStyle} placeholder="One-line story (optional)" value={newProject.oneLiner} onChange={e => setNewProject(v => ({ ...v, oneLiner: e.target.value }))} />
-                <button disabled={busy || !newProject.name.trim()} onClick={() => run(async () => { await createProjectInFolder({ ...newProject, order: portfolio.projects.length }); setNewProject({ name: '', type: 'project', sector: '', oneLiner: '', logo: '' }); }, 'Created.')} style={{ ...buttonStyle, color: 'var(--accent)' }}>Create</button>
+                <button disabled={busy || !newProject.name.trim()} onClick={async () => { const created = await run(async () => { await createProjectInFolder({ ...newProject, order: portfolio.projects.length }); setNewProject({ name: '', type: 'project', sector: '', oneLiner: '', logo: '' }); }, 'Created.'); if (created) onCreated?.(); }} style={{ ...buttonStyle, color: 'var(--accent)' }}>Create</button>
               </div>
             </>
           )}

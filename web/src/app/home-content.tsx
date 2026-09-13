@@ -558,6 +558,7 @@ export function HomeContent() {
           initialProjectSlug={managerProjectSlug}
           createOnly={!managerProjectSlug}
           onClose={() => setManagerOpen(false)}
+          onCreated={() => setManagerOpen(false)}
           onRefresh={refreshPortfolio}
         />
       )}
