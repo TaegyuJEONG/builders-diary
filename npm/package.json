@@ -1,6 +1,6 @@
 {
   "name": "builders-diary",
-  "version": "1.9.3",
+  "version": "1.9.4",
   "description": "Record what you actually judged in a work session — a local, judgment-first portfolio for AI-native builders. Installs a skill into Claude Code, Cursor, Windsurf, Codex, or Antigravity.",
   "bin": {
     "builders-diary": "bin/cli.js"
