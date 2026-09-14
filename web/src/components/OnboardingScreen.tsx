@@ -30,7 +30,7 @@ function installCommand(sources: SourceId[]) {
   const tools = ['claude'];
   if (sources.includes('cursor')) tools.push('cursor');
   if (sources.includes('codex')) tools.push('codex');
-  return `npx --yes builders-diary@${installerPackage.version} install --tools ${tools.join(',')}`;
+  return `npx --yes builders-diary@${installerPackage.version} install --tools ${tools.join(',')} --sources ${sources.join(',')}`;
 }
 
 export function OnboardingScreen({ onSelectFolder, isLoading, error, folderConnected, connectNonce = 0, folderPath, selectedClients, setSelectedClients, onComplete, importRuns = [], importRefreshKey = 0 }: OnboardingScreenProps) {

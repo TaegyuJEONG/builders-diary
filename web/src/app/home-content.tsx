@@ -30,7 +30,7 @@ const CONNECTED_KEY = 'builders-diary-connected';
 const ONBOARDING_DONE_KEY = 'builders-diary-onboarding-done';
 const TOOLS_KEY = 'builders-diary-tools';
 // Keep this aligned with npm/package.json when a release is prepared.
-const CURRENT_INSTALLER_VERSION = '1.9.1';
+const CURRENT_INSTALLER_VERSION = '1.10.2';
 
 function isOlderVersion(installed: string, current: string): boolean {
   const parse = (value: string) => value.split('-', 1)[0].split('.').slice(0, 3).map(Number);
@@ -100,12 +100,6 @@ export function HomeContent() {
     const forceReset = typeof window !== 'undefined'
       && new URLSearchParams(window.location.search).get('reset') === '1';
 
-    // Always restore selected tools (used by onboarding + header manager).
-    try {
-      const savedTools = localStorage.getItem(TOOLS_KEY);
-      if (savedTools) setSelectedClientsState(JSON.parse(savedTools));
-    } catch { /* ignore */ }
-
     if (forceReset) {
       localStorage.removeItem(CONNECTED_KEY);
       localStorage.removeItem(ONBOARDING_DONE_KEY);
@@ -137,6 +131,12 @@ export function HomeContent() {
       && localStorage.getItem(ONBOARDING_DONE_KEY) === '1';
 
     if (wasDone) {
+      // Restore a completed portfolio's source labels for the header only. A
+      // fresh onboarding must always begin with no selected source.
+      try {
+        const savedTools = localStorage.getItem(TOOLS_KEY);
+        if (savedTools) setSelectedClientsState(JSON.parse(savedTools));
+      } catch { /* ignore */ }
       // 온보딩을 마친 적 있으면 IndexedDB에서 폴더 핸들 복원 시도
       (async () => {
         try {

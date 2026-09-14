@@ -45,6 +45,19 @@ test('custom data root without --dry-run creates the folder and marker without t
   }
 });
 
+test('installer records the selected sources for the import skill', () => {
+  const base = mkdtempSync(path.join(tmpdir(), 'bd-installer-'));
+  try {
+    const root = path.join(base, 'portfolio');
+    const result = runCli(['install', '--tools', 'claude,cursor', '--sources', 'claude,cursor', '--data-root', root]);
+    assert.equal(result.status, 0, result.stderr);
+    const marker = JSON.parse(readFileSync(path.join(root, '.builders-diary.json'), 'utf8'));
+    assert.deepEqual(marker.import_sources, ['claude', 'cursor']);
+  } finally {
+    rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test('a tilde data root is expanded to the home directory', () => {
   const target = '~/.builders-diary-plan-test-' + process.pid;
   const expanded = target.replace('~', process.env.HOME || tmpdir());

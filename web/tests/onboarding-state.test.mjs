@@ -34,6 +34,14 @@ test('an arbitrary connected folder without a marker offers another folder choic
   assert.match(onboarding, /Choose another folder/);
 });
 
+test('a fresh onboarding does not restore a previous source choice', async () => {
+  const home = await source('src/app/home-content.tsx');
+
+  assert.match(home, /const wasDone = typeof window !== 'undefined'/);
+  assert.match(home, /if \(wasDone\) \{[\s\S]*?const savedTools = localStorage\.getItem\(TOOLS_KEY\)/);
+  assert.doesNotMatch(home, /\/\/ Always restore selected tools/);
+});
+
 test('route choices are neutral until the user explicitly clicks one', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 

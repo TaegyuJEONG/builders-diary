@@ -36,6 +36,7 @@ const IMPORT_PAYLOAD = ['SKILL.md'];
 const IMPORT_SCRIPT_TOKEN = '{{BUILDERS_DIARY_IMPORT_SCRIPT}}';
 const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py', 'adapters', 'client_roots.py', 'source_dedup.py'];
 const DEFAULT_IMPORT_CLIENTS = ['claude'];
+const IMPORT_SOURCE_IDS = new Set(['claude', 'cursor', 'codex', 'hermes']);
 const DEFAULT_CLAUDE_ADAPTER_IDS = ['claude_chat_export', 'claude_code'];
 
 function defaultImportMetadata(marker = {}) {
@@ -81,12 +82,14 @@ function copyRecursive(src, dest) {
 }
 
 function parseArgs(argv) {
-  const args = { _: [], tools: 'claude', dryRun: false, dataRoot: null };
+  const args = { _: [], tools: 'claude', sources: 'claude', dryRun: false, dataRoot: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') args.dryRun = true;
     else if (a === '--tools') args.tools = argv[++i] || '';
     else if (a.startsWith('--tools=')) args.tools = a.slice('--tools='.length);
+    else if (a === '--sources') args.sources = argv[++i] || '';
+    else if (a.startsWith('--sources=')) args.sources = a.slice('--sources='.length);
     else if (a === '--data-root') args.dataRoot = argv[++i] || '';
     else if (a.startsWith('--data-root=')) args.dataRoot = a.slice('--data-root='.length);
     else if (a === '-h' || a === '--help') args.help = true;
@@ -132,7 +135,18 @@ function cmdInstall(args) {
   }
 
   const tools = args.tools.split(',').map(t => t.trim()).filter(Boolean);
+  const sources = args.sources.split(',').map(source => source.trim()).filter(Boolean);
   const unknown = tools.filter(t => !TOOL_DIRS[t]);
+  const unknownSources = sources.filter(source => !IMPORT_SOURCE_IDS.has(source));
+  if (unknownSources.length) {
+    console.error(`ERROR: unknown import source(s): ${unknownSources.join(', ')}`);
+    console.error(`Supported: ${Array.from(IMPORT_SOURCE_IDS).join(', ')}`);
+    process.exit(1);
+  }
+  if (!sources.length) {
+    console.error('ERROR: choose at least one import source');
+    process.exit(1);
+  }
   if (unknown.length) {
     console.error(`ERROR: unknown tool(s): ${unknown.join(', ')}`);
     console.error(`Supported: ${Object.keys(TOOL_DIRS).join(', ')}`);
@@ -254,6 +268,7 @@ function cmdInstall(args) {
     ...marker,
     version,
     tools: mergedTools,
+    import_sources: Array.from(new Set(sources)),
     root: dataRoot,
     installed_at: new Date().toISOString(),
     enabled_clients: metadata.enabled_clients,

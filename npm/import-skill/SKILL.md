@@ -101,13 +101,30 @@ Re-run `scan-export` before moving on: Step 2 must start with `conversations-*.z
 
 ## Step 2 — Build a local source index
 
-Use the connected Builder's Diary folder as `DATA_ROOT` (usually `~/Documents/builders-diary`). The export directory is normally `~/Downloads`.
+Use the connected Builder's Diary folder as `DATA_ROOT` (usually `~/Documents/builders-diary`). The export directory is normally `~/Downloads`. The installer saved the user's source selection in the local marker; preserve it without asking them to type paths:
 
 ```bash
+IMPORT_SOURCES="$(python3 - "$DATA_ROOT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+try:
+    marker = json.loads((Path(sys.argv[1]) / '.builders-diary.json').read_text(encoding='utf-8'))
+except (OSError, ValueError, json.JSONDecodeError):
+    marker = {}
+selected = marker.get('import_sources', ['claude'])
+if not isinstance(selected, list):
+    selected = ['claude']
+print(','.join(item for item in selected if item in {'cursor', 'codex', 'hermes'}))
+PY
+)"
+
 python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" prepare \
   --data-root "$DATA_ROOT" \
   --export-dir "$HOME/Downloads" \
-  --claude-config-dir "$HOME/.claude"
+  --claude-config-dir "$HOME/.claude" \
+  --sources "$IMPORT_SOURCES"
 ```
 
 The helper writes only below:
