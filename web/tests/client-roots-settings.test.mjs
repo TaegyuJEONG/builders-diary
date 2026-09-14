@@ -8,17 +8,19 @@ const source = relativePath => readFile(
   'utf8',
 );
 
-test('settings exposes detected clients without automatic home-directory scanning', async () => {
+test('folder import connection requires an explicit user choice and never scans home directories', async () => {
   const [settings, fileSystem] = await Promise.all([
     source('src/components/ClientRootsSettings.tsx'),
     source('src/lib/fileSystem.ts'),
   ]);
-  assert.match(settings, /Detected clients/);
-  assert.match(settings, /Choose a source folder/);
-  assert.match(settings, /opt in|Opt in/i);
-  assert.match(settings, /Claude Code/);
+
+  assert.match(settings, /Choose the folder containing its local history/);
+  assert.match(settings, /Choose this folder/);
   assert.match(settings, /Cursor/);
+  assert.match(settings, /Codex CLI/);
+  assert.match(settings, /Hermes/);
   assert.doesNotMatch(settings, /scanHome|readdir\(.*home|recursive.*home/i);
+  assert.match(settings, /selectFolder/);
   assert.match(fileSystem, /readImportConfig/);
   assert.match(fileSystem, /writeImportConfig/);
 });
