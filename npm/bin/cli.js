@@ -34,7 +34,7 @@ const SCRIPT_TOKEN = '{{BUILDERS_DIARY_SCRIPT}}';
 const IMPORT_SKILL_NAME = 'builders-diary-import';
 const IMPORT_PAYLOAD = ['SKILL.md'];
 const IMPORT_SCRIPT_TOKEN = '{{BUILDERS_DIARY_IMPORT_SCRIPT}}';
-const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py'];
+const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py', 'adapters'];
 
 function resolveHome(p) {
   return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;

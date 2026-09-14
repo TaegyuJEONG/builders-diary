@@ -222,6 +222,18 @@ def _date_range(items: list[dict[str, Any]], key: str) -> dict[str, str | None]:
 
 def scan_export_directory(export_dir: str | Path) -> dict[str, Any]:
     """Read supported Claude export ZIP metadata without exposing raw chats."""
+    try:
+        from .adapters.claude_chat_export import ClaudeChatExportAdapter
+    except ImportError:
+        try:
+            from adapters.claude_chat_export import ClaudeChatExportAdapter
+        except ImportError:
+            ClaudeChatExportAdapter = None
+    if ClaudeChatExportAdapter is not None:
+        return ClaudeChatExportAdapter(export_dir).legacy_index()
+
+    # Kept below as historical reference for the legacy shape; the adapter above
+    # is the sole implementation used by callers.
     directory = Path(export_dir).expanduser()
     if not directory.is_dir():
         raise FileNotFoundError(f"Export directory not found: {directory}")
@@ -331,6 +343,18 @@ def _read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def scan_claude_code_sessions(config_dir: str | Path) -> dict[str, Any]:
     """Read every main Claude Code transcript; never scan subagent folders."""
+    try:
+        from .adapters.claude_code import ClaudeCodeAdapter
+    except ImportError:
+        try:
+            from adapters.claude_code import ClaudeCodeAdapter
+        except ImportError:
+            ClaudeCodeAdapter = None
+    if ClaudeCodeAdapter is not None:
+        return ClaudeCodeAdapter(config_dir).legacy_index()
+
+    # Kept below as historical reference for the legacy shape; the adapter above
+    # is the sole implementation used by callers.
     config = Path(config_dir).expanduser()
     projects_root = config / "projects"
     if not projects_root.is_dir():
@@ -990,30 +1014,18 @@ def read_source(
         raise ValueError(f"Source is not assigned to confirmed project: {source_ref}")
 
     if metadata["kind"] == "code":
-        projects_root = Path(source_index["code"]["config_dir"]) / "projects"
-        transcript = _validated_source_path(metadata["transcript_file"], projects_root)
-        content: Any = _read_jsonl(transcript)
+        try:
+            from .adapters.claude_code import ClaudeCodeAdapter
+        except ImportError:
+            from adapters.claude_code import ClaudeCodeAdapter
+        _validated_source_path(metadata["transcript_file"], Path(source_index["code"]["config_dir"]) / "projects")
+        content = ClaudeCodeAdapter(source_index["code"]["config_dir"]).read(str(metadata["source_id"])).content
     else:
-        content = None
-        export_dir = Path(source_index["chat"]["export_dir"])
-        archive_names = source_index["chat"].get("archives", {}).get("conversations", [])
-        for archive_name in archive_names:
-            archive_path = _validated_source_path(export_dir / archive_name, export_dir)
-            with zipfile.ZipFile(archive_path) as archive:
-                for name in archive.namelist():
-                    if not name.endswith("conversations.json"):
-                        continue
-                    rows = _json_from_zip(archive, name)
-                    content = next(
-                        (row for row in rows if isinstance(row, dict) and row.get("uuid") == metadata.get("source_id")),
-                        None,
-                    )
-                    if content is not None:
-                        break
-            if content is not None:
-                break
-        if content is None:
-            raise FileNotFoundError(f"Chat source content not found: {source_ref}")
+        try:
+            from .adapters.claude_chat_export import ClaudeChatExportAdapter
+        except ImportError:
+            from adapters.claude_chat_export import ClaudeChatExportAdapter
+        content = ClaudeChatExportAdapter(source_index["chat"]["export_dir"]).read(str(metadata["source_id"])).content
     return {"source_ref": source_ref, "metadata": metadata, "content": content}
 
 
