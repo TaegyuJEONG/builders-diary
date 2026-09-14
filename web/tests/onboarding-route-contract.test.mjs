@@ -22,6 +22,8 @@ test('a fresh browser starts with installer guidance and keeps folder choice beh
   assert.match(onboarding, /adds the skills needed for Claude Code/);
   assert.match(onboarding, />\s*Installed — continue\s*</);
   assert.ok(onboarding.includes("(installAcknowledged && markerStatus !== 'ok') && <StepCard n={2}"));
+  assert.ok(onboarding.includes("done={installAcknowledged || markerStatus === 'ok'}"));
+  assert.ok(onboarding.includes("markerStatus === 'ok' || installAcknowledged ?"));
   assert.doesNotMatch(onboarding, /Works with/);
   assert.doesNotMatch(onboarding, /Install the skill/);
   assert.doesNotMatch(onboarding, /adapter|absolute source root|client history connections|enabled|coming soon/i);

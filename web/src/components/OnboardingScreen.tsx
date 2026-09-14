@@ -96,8 +96,8 @@ export function OnboardingScreen({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <StepCard n={1} active={markerStatus !== 'ok'} done={markerStatus === 'ok'} title="Install Builder&apos;s Diary">
-            {markerStatus === 'ok' ? <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Installed</div> : <>
+          <StepCard n={1} active={!installAcknowledged && markerStatus !== 'ok'} done={installAcknowledged || markerStatus === 'ok'} title="Install Builder&apos;s Diary">
+            {markerStatus === 'ok' || installAcknowledged ? <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Installed</div> : <>
               <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 12px' }}>
                 Run this once. It adds the skills needed for Claude Code.
               </p>
