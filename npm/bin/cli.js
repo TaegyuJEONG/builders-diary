@@ -62,12 +62,14 @@ function copyRecursive(src, dest) {
 }
 
 function parseArgs(argv) {
-  const args = { _: [], tools: 'claude', dryRun: false };
+  const args = { _: [], tools: 'claude', dryRun: false, dataRoot: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--dry-run') args.dryRun = true;
     else if (a === '--tools') args.tools = argv[++i] || '';
     else if (a.startsWith('--tools=')) args.tools = a.slice('--tools='.length);
+    else if (a === '--data-root') args.dataRoot = argv[++i] || '';
+    else if (a.startsWith('--data-root=')) args.dataRoot = a.slice('--data-root='.length);
     else if (a === '-h' || a === '--help') args.help = true;
     else args._.push(a);
   }
@@ -80,6 +82,7 @@ function printHelp() {
 Usage:
   npx --yes builders-diary@latest install --tools claude,cursor,antigravity   Install the skill
   npx --yes builders-diary@latest install --tools claude --dry-run  Preview, write nothing
+  npx --yes builders-diary@latest install --tools claude --data-root ~/work/my-portfolio
   npx --yes builders-diary@latest list                            Show supported tools
 
 Supported tools: ${Object.keys(TOOL_DIRS).join(', ')}
@@ -117,7 +120,28 @@ function cmdInstall(args) {
     process.exit(1);
   }
 
-  console.log(`Builder's Diary skill — ${args.dryRun ? 'DRY RUN (nothing written)' : 'installing'}\n`);
+  console.log(`Builder's Diary skill — ${args.dryRun ? 'DRY RUN (nothing written)' : 'installing'}\\n`);
+
+  // Resolve the target data root before copying so a dry run reports the
+  // folder the marker would land in, and an invalid root fails before any write.
+  let dataRoot;
+  if (args.dataRoot) {
+    const expanded = resolveHome(args.dataRoot);
+    if (!path.isAbsolute(expanded)) {
+      console.error('ERROR: --data-root must be an absolute path (a ~/ path is expanded first)');
+      process.exit(1);
+    }
+    const resolved = path.resolve(expanded);
+    if (fs.existsSync(resolved) && !fs.statSync(resolved).isDirectory()) {
+      console.error(`ERROR: --data-root exists and is not a folder: ${resolved}`);
+      process.exit(1);
+    }
+    dataRoot = resolved;
+  } else {
+    const docs = path.join(os.homedir(), 'Documents');
+    dataRoot = path.join(fs.existsSync(docs) ? docs : os.homedir(), SKILL_NAME);
+  }
+  console.log(`Data folder ${args.dryRun ? 'target' : 'root'} \\u2192 ${dataRoot.replace(os.homedir(), '~')}`);
 
   for (const tool of tools) {
     const dest = path.join(resolveHome(TOOL_DIRS[tool]), SKILL_NAME);
@@ -188,11 +212,7 @@ function cmdInstall(args) {
 
   // Create the data folder the skill saves to, and drop an install marker
   // so the web app can verify the install when the user connects the folder.
-  // Root rule (shared with the skill + web): ~/Documents/builders-diary when
-  // ~/Documents exists, else ~/builders-diary. Documents is used because the
-  // browser folder picker can open directly inside it (startIn: 'documents').
-  const docs = path.join(os.homedir(), 'Documents');
-  const dataRoot = path.join(fs.existsSync(docs) ? docs : os.homedir(), SKILL_NAME);
+  // The root was already resolved above so dry runs report the same folder.
   fs.mkdirSync(dataRoot, { recursive: true });
 
   const markerPath = path.join(dataRoot, '.builders-diary.json');
