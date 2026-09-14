@@ -34,7 +34,25 @@ const SCRIPT_TOKEN = '{{BUILDERS_DIARY_SCRIPT}}';
 const IMPORT_SKILL_NAME = 'builders-diary-import';
 const IMPORT_PAYLOAD = ['SKILL.md'];
 const IMPORT_SCRIPT_TOKEN = '{{BUILDERS_DIARY_IMPORT_SCRIPT}}';
-const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py', 'adapters'];
+const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py', 'adapters', 'client_roots.py'];
+const DEFAULT_IMPORT_CLIENTS = ['claude'];
+const DEFAULT_CLAUDE_ADAPTER_IDS = ['claude_chat_export', 'claude_code'];
+
+function defaultImportMetadata(marker = {}) {
+  const clients = marker.clients && typeof marker.clients === 'object' ? marker.clients : {};
+  return {
+    enabled_clients: Array.from(new Set([...(marker.enabled_clients || []), ...DEFAULT_IMPORT_CLIENTS])),
+    source_roots: Array.isArray(marker.source_roots) ? marker.source_roots : [],
+    clients: {
+      ...clients,
+      claude: {
+        enabled: true,
+        adapter_ids: DEFAULT_CLAUDE_ADAPTER_IDS,
+        roots: Array.isArray(clients.claude?.roots) ? clients.claude.roots : [],
+      },
+    },
+  };
+}
 
 function resolveHome(p) {
   return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
@@ -225,12 +243,25 @@ function cmdInstall(args) {
   const mergedTools = Array.from(new Set([...(marker.tools || []), ...tools]));
   let version = '0.0.0';
   try { version = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version; } catch { /* ignore */ }
+  const metadata = defaultImportMetadata(marker);
+  const importConfig = {
+    schema_version: 1,
+    enabled_clients: metadata.enabled_clients,
+    clients: metadata.clients,
+    source_roots: metadata.source_roots,
+  };
   fs.writeFileSync(markerPath, JSON.stringify({
+    ...marker,
     version,
     tools: mergedTools,
     root: dataRoot,
     installed_at: new Date().toISOString(),
+    enabled_clients: metadata.enabled_clients,
+    clients: metadata.clients,
+    source_roots: metadata.source_roots,
   }, null, 2) + '\n');
+  fs.mkdirSync(path.join(dataRoot, 'imports'), { recursive: true });
+  fs.writeFileSync(path.join(dataRoot, 'imports', 'config.json'), JSON.stringify(importConfig, null, 2) + '\n');
 
   const shownRoot = dataRoot.replace(os.homedir(), '~');
   console.log(`\u2713 Data folder ready \u2192 ${shownRoot}`);

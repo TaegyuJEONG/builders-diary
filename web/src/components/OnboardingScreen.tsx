@@ -10,6 +10,7 @@ import { ImportRun } from '@/lib/types';
 import { ImportProgress } from '@/components/ImportProgress';
 import { ImportSelectionTable } from '@/components/ImportSelectionTable';
 import { ClaudeExportDownload } from '@/components/ClaudeExportDownload';
+import { ClientRootsSettings } from '@/components/ClientRootsSettings';
 
 interface OnboardingScreenProps {
   /** Opens the native folder picker; resolves when a folder is connected. */
@@ -364,6 +365,7 @@ export function OnboardingScreen({
               {/* ── STEP 3: Choose how to add work (revealed after folder connects) ── */}
               {markerStatus === 'ok' && (
                 <StepCard n={3} active done={false} title="Choose how to add work">
+                  <ClientRootsSettings />
                   {latestRun && (
                     <div style={{ marginBottom: 14 }}>
                       <ImportProgress runs={importRuns} toolId={selectedClients[0] || 'claude'} />

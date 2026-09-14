@@ -127,13 +127,39 @@ export async function loadFolderHandleFromStorage(): Promise<FileSystemDirectory
   });
 }
 
+export type ImportClientRoot = { client_id: string; adapter_id: string; path: string };
+export type ImportConfig = {
+  schema_version?: number;
+  enabled_clients?: string[];
+  clients?: { [clientId: string]: { enabled?: boolean; adapter_ids?: string[]; roots?: ImportClientRoot[] } };
+  source_roots?: ImportClientRoot[];
+};
+
+export async function readImportConfig(handle: FileSystemDirectoryHandle): Promise<ImportConfig> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const fh = await imports.getFileHandle('config.json');
+    return JSON.parse(await (await fh.getFile()).text()) as ImportConfig;
+  } catch {
+    return { schema_version: 1, enabled_clients: ['claude'], source_roots: [] };
+  }
+}
+
+export async function writeImportConfig(handle: FileSystemDirectoryHandle, config: ImportConfig): Promise<void> {
+  const imports = await handle.getDirectoryHandle('imports', { create: true });
+  const fh = await imports.getFileHandle('config.json', { create: true });
+  const writable = await (fh as any).createWritable();
+  await writable.write(JSON.stringify(config, null, 2) + '\n');
+  await writable.close();
+}
+
 /**
  * Read the install marker the npx installer drops into the data folder.
  * Returns the parsed marker, or null if this folder wasn't set up by the installer.
  */
 export async function readInstallMarker(
   handle: FileSystemDirectoryHandle
-): Promise<{ version?: string; tools?: string[] } | null> {
+): Promise<{ version?: string; tools?: string[]; source_roots?: ImportClientRoot[]; enabled_clients?: string[]; clients?: { [clientId: string]: { enabled?: boolean; adapter_ids?: string[]; roots?: ImportClientRoot[] } } } | null> {
   try {
     const fh = await handle.getFileHandle('.builders-diary.json');
     const file = await fh.getFile();
