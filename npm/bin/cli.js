@@ -120,7 +120,7 @@ function cmdInstall(args) {
     process.exit(1);
   }
 
-  console.log(`Builder's Diary skill — ${args.dryRun ? 'DRY RUN (nothing written)' : 'installing'}\\n`);
+  console.log(`Builder's Diary skill — ${args.dryRun ? 'DRY RUN (nothing written)' : 'installing'}\n`);
 
   // Resolve the target data root before copying so a dry run reports the
   // folder the marker would land in, and an invalid root fails before any write.
@@ -141,7 +141,7 @@ function cmdInstall(args) {
     const docs = path.join(os.homedir(), 'Documents');
     dataRoot = path.join(fs.existsSync(docs) ? docs : os.homedir(), SKILL_NAME);
   }
-  console.log(`Data folder ${args.dryRun ? 'target' : 'root'} \\u2192 ${dataRoot.replace(os.homedir(), '~')}`);
+  console.log(`Data folder ${args.dryRun ? 'target' : 'root'} → ${dataRoot.replace(os.homedir(), '~')}`);
 
   for (const tool of tools) {
     const dest = path.join(resolveHome(TOOL_DIRS[tool]), SKILL_NAME);
