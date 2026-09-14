@@ -834,6 +834,33 @@ export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHan
   return { status: 'timeout', error: 'Claude Code did not apply the project selection in time.' };
 }
 
+export async function writeProjectMergeAction(handle: FileSystemDirectoryHandle, runId: string, targetSlug: string, sourceSlug: string): Promise<void> {
+  if (!targetSlug.trim() || !sourceSlug.trim() || targetSlug === sourceSlug || /[./\\\\]/.test(targetSlug) || /[./\\\\]/.test(sourceSlug)) {
+    throw new Error('Choose two different existing projects.');
+  }
+  const imports = await handle.getDirectoryHandle('imports');
+  const runDir = await imports.getDirectoryHandle(runId);
+  const actions = await runDir.getDirectoryHandle('actions', { create: true });
+  const file = await actions.getFileHandle('project-merge.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'project.merge', run_id: runId, created_at: new Date().toISOString(), payload: { target_slug: targetSlug, source_slug: sourceSlug } }, null, 2) + '\n');
+  await writable.close();
+}
+
+export async function waitForProjectMergeResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; target_slug?: string; source_slug?: string; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const imports = await handle.getDirectoryHandle('imports');
+      const runDir = await imports.getDirectoryHandle(runId);
+      const result = await readJson(await runDir.getDirectoryHandle('results'), 'project-merge.json');
+      if (result) return result;
+    } catch { /* helper may not have created the result directory yet */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'The project merge was not applied in time.' };
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');
@@ -852,6 +879,7 @@ async function scanProjectFolder(
   // Must have project.json to be considered a valid project
   const meta = await readJson(projectFolder, 'project.json');
   if (!meta) return null;
+  if (meta.merged_into) return null;
   const projectStages = readProjectStages(meta.stages, stages);
 
   const goals: Goal[] = [];

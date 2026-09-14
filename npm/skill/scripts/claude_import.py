@@ -50,6 +50,7 @@ EXPORT_CATEGORIES = {"conversations", "projects", "memories", "light_metadata"}
 VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
 WEB_ACTIONS = {
     "project-confirm": "project.confirm",
+    "project-merge": "project.merge",
     "task-approve": "task.approve",
     "task-drop": "task.drop",
 }
@@ -1284,7 +1285,16 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
         return previous
     action = read_action(path, run_id=run_id, action_name=WEB_ACTIONS[action_name])
     payload = action["payload"]
-    if action_name == "project-confirm":
+    if action_name == "project-merge":
+        try:
+            from .project_actions import merge_projects
+        except ImportError:
+            from project_actions import merge_projects
+        result = {"status": "applied", **merge_projects(
+            data_root, target_slug=payload["target_slug"], source_slug=payload["source_slug"]
+        )}
+        event_details = {"action": "project.merge", "target_slug": payload["target_slug"], "source_slug": payload["source_slug"]}
+    elif action_name == "project-confirm":
         projects = payload.get("projects")
         if not isinstance(projects, list) or not all(isinstance(project, dict) for project in projects):
             raise ValueError("Invalid project.confirm projects payload")

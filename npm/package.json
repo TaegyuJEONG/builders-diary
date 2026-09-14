@@ -9,6 +9,8 @@
     "bin/cli.js",
     "skill/SKILL.md",
     "skill/scripts/save_record.py",
+    "skill/scripts/action_protocol.py",
+    "skill/scripts/project_actions.py",
     "skill/scripts/claude_import.py",
     "import-skill/SKILL.md"
   ],

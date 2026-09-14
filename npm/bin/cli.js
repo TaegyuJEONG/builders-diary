@@ -34,6 +34,7 @@ const SCRIPT_TOKEN = '{{BUILDERS_DIARY_SCRIPT}}';
 const IMPORT_SKILL_NAME = 'builders-diary-import';
 const IMPORT_PAYLOAD = ['SKILL.md'];
 const IMPORT_SCRIPT_TOKEN = '{{BUILDERS_DIARY_IMPORT_SCRIPT}}';
+const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py'];
 
 function resolveHome(p) {
   return p.startsWith('~') ? path.join(os.homedir(), p.slice(1)) : p;
@@ -192,6 +193,9 @@ function cmdInstall(args) {
         console.log(`    would copy claude_import.py → ${importScript.replace(os.homedir(), '~')}`);
       } else {
         copyRecursive(path.join(src, 'scripts', 'claude_import.py'), importScript);
+        for (const helper of IMPORT_HELPER_SCRIPTS) {
+          copyRecursive(path.join(src, 'scripts', helper), path.join(importDest, 'scripts', helper));
+        }
         const importSkillFile = path.join(importDest, 'SKILL.md');
         const importSkillText = fs.readFileSync(importSkillFile, 'utf8');
         if (!importSkillText.includes(IMPORT_SCRIPT_TOKEN)) {

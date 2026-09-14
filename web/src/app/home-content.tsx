@@ -17,6 +17,7 @@ import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
   readInstallMarker, scanImportRuns, updateProjectInFolder, updateProjectStagesInFolder, deleteProjectFromFolder,
+  writeProjectMergeAction, waitForProjectMergeResult,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -374,6 +375,16 @@ export function HomeContent() {
     setSelectedProjectId(null);
   }, [refreshPortfolio]);
 
+  const handleMergeProjects = useCallback(async (targetSlug: string, sourceSlug: string) => {
+    const handle = await loadFolderHandleFromStorage();
+    const runId = importRuns[0]?.id;
+    if (!handle || !runId) throw new Error('An active import run is required to merge projects.');
+    await writeProjectMergeAction(handle, runId, targetSlug, sourceSlug);
+    const result = await waitForProjectMergeResult(handle, runId);
+    if (!result || result.status !== 'applied') throw new Error(result?.error || 'Project merge was not applied.');
+    await refreshPortfolio();
+  }, [importRuns, refreshPortfolio]);
+
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
     () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage, activity: selectedActivity }),
@@ -567,6 +578,7 @@ export function HomeContent() {
             onModeChange={(mode) => { setExploreMode(mode); setSelectedGoalId(null); setSelectedRecordId(null); }}
             onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(null); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
             onEditProject={(id) => { const slug = projectSlugOf(id); if (slug) openManager({ kind: 'edit-project', projectSlug: slug }); }}
+            onMergeProject={(id) => setProjectPanelId(id)}
             onCreateProject={() => openManager({ kind: 'create-project' })}
             onDropTaskToStage={handleMoveTaskToStage}
             onCreateTask={(stage) => { const slug = projectSlugOf(selectedProjectId); if (slug) openManager({ kind: 'new-task', projectSlug: slug, stage }); }}
@@ -596,6 +608,8 @@ export function HomeContent() {
             onClose={() => setProjectPanelId(null)}
             onSave={handleSaveProject}
             onDelete={handleDeleteProject}
+            projects={portfolio.projects}
+            onMerge={handleMergeProjects}
           />
         )}
       </div>

@@ -8,6 +8,8 @@ interface ProjectDetailPanelProps {
   onClose: () => void;
   onSave: (project: Project) => Promise<void>;
   onDelete: (project: Project) => Promise<void>;
+  projects?: Project[];
+  onMerge?: (targetSlug: string, sourceSlug: string) => Promise<void>;
 }
 
 const field: React.CSSProperties = {
@@ -16,7 +18,7 @@ const field: React.CSSProperties = {
   fontFamily: 'inherit', outline: 'none',
 };
 
-export function ProjectDetailPanel({ project, onClose, onSave, onDelete }: ProjectDetailPanelProps) {
+export function ProjectDetailPanel({ project, onClose, onSave, onDelete, projects = [], onMerge }: ProjectDetailPanelProps) {
   const [draft, setDraft] = useState({
     title: project.title || project.name || '',
     type: (project.type || 'project') as 'project' | 'learning',
@@ -25,6 +27,9 @@ export function ProjectDetailPanel({ project, onClose, onSave, onDelete }: Proje
     logo: project.logo || '',
   });
   const [saving, setSaving] = useState(false);
+  const [targetSlug, setTargetSlug] = useState(project.slug);
+  const [sourceSlug, setSourceSlug] = useState('');
+  const [mergeState, setMergeState] = useState('');
 
   useEffect(() => {
     setDraft({
@@ -35,6 +40,14 @@ export function ProjectDetailPanel({ project, onClose, onSave, onDelete }: Proje
       logo: project.logo || '',
     });
   }, [project.id]);
+
+  async function confirmMerge() {
+    if (!onMerge || !sourceSlug || targetSlug === sourceSlug) return;
+    if (!window.confirm(`Merge ${sourceSlug} into ${targetSlug}? The source will be retained as a redirect.`)) return;
+    setMergeState('Waiting for helper result…');
+    try { await onMerge(targetSlug, sourceSlug); setMergeState('Projects merged.'); }
+    catch (error) { setMergeState(error instanceof Error ? error.message : 'Project merge failed.'); }
+  }
 
   async function save() {
     setSaving(true);
@@ -57,6 +70,15 @@ export function ProjectDetailPanel({ project, onClose, onSave, onDelete }: Proje
           <div><label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 5 }}>Sector</label><input style={field} value={draft.sector} onChange={e => setDraft(d => ({ ...d, sector: e.target.value }))} /></div>
           <div><label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 5 }}>One-line story</label><textarea style={field} rows={4} value={draft.oneLiner} onChange={e => setDraft(d => ({ ...d, oneLiner: e.target.value }))} /></div>
           <div><label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 5 }}>Logo URL</label><input style={field} value={draft.logo} onChange={e => setDraft(d => ({ ...d, logo: e.target.value }))} /></div>
+          {onMerge && projects.length > 1 && <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 8 }}>Merge projects</div>
+            <label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', marginBottom: 4 }}>Target</label>
+            <select aria-label="Merge target" style={field} value={targetSlug} onChange={e => setTargetSlug(e.target.value)}>{projects.map(item => <option key={item.slug} value={item.slug}>{item.title}</option>)}</select>
+            <label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', margin: '8px 0 4px' }}>Source</label>
+            <select aria-label="Merge source" style={field} value={sourceSlug} onChange={e => setSourceSlug(e.target.value)}><option value="">Choose a project</option>{projects.filter(item => item.slug !== targetSlug).map(item => <option key={item.slug} value={item.slug}>{item.title}</option>)}</select>
+            <button disabled={saving || !sourceSlug || targetSlug === sourceSlug} onClick={confirmMerge} className="mono" style={{ marginTop: 9, width: '100%', padding: 9, background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>Confirm merge</button>
+            {mergeState && <div className="mono" style={{ marginTop: 7, fontSize: 10, color: mergeState.endsWith('.') && !mergeState.includes('failed') ? 'var(--accent)' : 'var(--text2)' }}>{mergeState}</div>}
+          </div>}
         </div>
       </div>
       <div style={{ padding: 14, borderTop: '1px solid var(--border)', display: 'flex', gap: 8 }}>
