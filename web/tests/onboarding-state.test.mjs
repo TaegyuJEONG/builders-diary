@@ -17,14 +17,13 @@ test('onboarding derives its step from the folder handle and install marker', as
   assert.match(onboarding, /CaptureMode|captureMode|Choose how to add work/);
 });
 
-test('a connected valid installation never shows the tool selection step again', async () => {
+test('a connected valid installation keeps the capture choice visible until explicit completion', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
   const home = await source('src/app/home-content.tsx');
 
-  // The choose step must be conditional, not the unconditional first render.
   assert.match(onboarding, /phase === 'choose'/);
-  // The home gate must allow an already-installed connected user past setup.
   assert.match(home, /installMarker/);
+  assert.match(home, /A connected folder alone does not complete onboarding/);
 });
 
 test('an arbitrary connected folder without a marker offers initialization, not an error', async () => {
