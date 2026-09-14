@@ -61,9 +61,9 @@ function Toolbox({ project }: { project: Project }) {
 
 // ── Project card (row 1) ──
 function ProjectCard({
-  project, selected, onSelect, onEdit, onMerge, onDropProject,
+  project, selected, onSelect, onEdit, onMerge, onSplit, onDropProject,
 }: {
-  project: Project; selected: boolean; onSelect: () => void; onEdit?: () => void; onMerge?: () => void; onDropProject?: (sourceId: string, targetId: string) => void;
+  project: Project; selected: boolean; onSelect: () => void; onEdit?: () => void; onMerge?: () => void; onSplit?: () => void; onDropProject?: (sourceId: string, targetId: string) => void;
 }) {
   const taskCount = project.goals.reduce((s, g) => s + g.records.length, 0);
   return (
@@ -91,6 +91,7 @@ function ProjectCard({
     >
       <button onClick={e => { e.stopPropagation(); onEdit?.(); }} title={`Edit ${project.title || project.slug}`} aria-label={`Edit ${project.title || project.slug}`} style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text2)', cursor: 'pointer', fontSize: 12 }}>✎</button>
       <button onClick={e => { e.stopPropagation(); onMerge?.(); }} className="mono" style={{ position: 'absolute', top: 8, right: 38, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text2)', cursor: 'pointer', fontSize: 9, padding: '5px 6px' }}>Merge projects</button>
+      <button onClick={e => { e.stopPropagation(); onSplit?.(); }} className="mono" style={{ position: 'absolute', top: 38, right: 8, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text2)', cursor: 'pointer', fontSize: 9, padding: '5px 6px' }}>Split project</button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
         {/* Logo or initial badge */}
         {project.logo ? (
@@ -491,7 +492,7 @@ function crossProjectGoals(projects: Project[], mode: ExploreMode): Goal[] {
 // ── Top-level 3-level view ──
 export function ProjectSectionView({
   projects, stages = [...DEFAULT_STAGES], selectedProjectId, selectedGoalId, filterState, mode, onModeChange, onSelectProject,
-  selectedRecordId, onSelectRecord, onDropProject, onEditProject, onMergeProject, onCreateProject, onDropTaskToStage, onCreateTask, onDeleteStage, onDropStage, onCreateStage,
+  selectedRecordId, onSelectRecord, onDropProject, onEditProject, onMergeProject, onSplitProject, onCreateProject, onDropTaskToStage, onCreateTask, onDeleteStage, onDropStage, onCreateStage,
 }: {
   projects: Project[];
   stages?: string[];
@@ -504,6 +505,7 @@ export function ProjectSectionView({
   onDropProject?: (sourceId: string, targetId: string) => void;
   onEditProject?: (id: string) => void;
   onMergeProject?: (id: string) => void;
+  onSplitProject?: (id: string) => void;
   onCreateProject?: () => void;
   onDropTaskToStage?: (sourceId: string, targetStage: string, beforeId?: string) => void;
   onCreateTask?: (stage: string) => void;
@@ -537,6 +539,7 @@ export function ProjectSectionView({
                 onSelect={() => onSelectProject(p.id)}
                 onEdit={() => onEditProject?.(p.id)}
                 onMerge={() => onMergeProject?.(p.id)}
+                onSplit={() => onSplitProject?.(p.id)}
                 onDropProject={onDropProject}
               />
             ))}

@@ -24,3 +24,23 @@ test('web merge writes declarative action and waits for helper result', async ()
   assert.match(home, /wait.*merge|merge.*result/i);
   assert.doesNotMatch(home, /removeEntry\([^)]*source/);
 });
+
+test('project detail exposes explicit split selection and confirmation', async () => {
+  const [view, detail] = await Promise.all([
+    source('src/components/ProjectSectionView.tsx'),
+    source('src/components/ProjectDetailPanel.tsx'),
+  ]);
+  assert.match(view, /Split project/);
+  assert.match(detail, /Split project/);
+  assert.match(detail, /selectedTaskIds/);
+  assert.match(detail, /Confirm split/);
+});
+
+test('web split writes declarative action and polls its result without filesystem mutation', async () => {
+  const [fs, home] = await Promise.all([source('src/lib/fileSystem.ts'), source('src/app/home-content.tsx')]);
+  assert.match(fs, /project-split\.json/);
+  assert.match(fs, /project\.split/);
+  assert.match(fs, /waitForProjectSplitResult/);
+  assert.match(home, /wait.*split|split.*result/i);
+  assert.doesNotMatch(home, /removeEntry\([^)]*split/);
+});

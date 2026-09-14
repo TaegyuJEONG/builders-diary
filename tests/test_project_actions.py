@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from skill.scripts.action_protocol import create_action
-from skill.scripts.project_actions import merge_projects
+from skill.scripts.project_actions import merge_projects, split_project
 
 
 class ProjectMergeTests(unittest.TestCase):
@@ -66,6 +66,52 @@ class ProjectMergeTests(unittest.TestCase):
     def test_project_merge_action_is_allowlisted(self):
         action = create_action("project.merge", "run-1", {"target_slug": "target", "source_slug": "source"})
         self.assertEqual(action["action"], "project.merge")
+
+    def test_split_moves_only_explicit_task_ids_and_preserves_source_provenance(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.make_project(root, "source", "p-source", "Source", {"id": "g-one", "slug": "one", "title": "One"}, [
+                {"id": "r-move", "folder": "20260101-000-move", "title": "Move", "source_refs": ["src-a"]},
+                {"id": "r-stay", "folder": "20260102-000-stay", "title": "Stay", "source_refs": ["src-b"]},
+            ], source_refs=["src-a", "src-b"])
+
+            result = split_project(root, source_slug="source", new_slug="new-project", new_title="New Project", task_ids=["r-move"])
+
+            self.assertEqual(result["status"], "applied")
+            moved = json.loads((root / "new-project" / "one" / "20260101-000-move" / "record.json").read_text())
+            self.assertEqual(moved["project_id"], result["new_project_id"])
+            self.assertEqual(moved["project_slug"], "new-project")
+            self.assertEqual(moved["source_refs"], ["src-a"])
+            self.assertTrue((root / "source" / "one" / "20260102-000-stay" / "record.json").exists())
+            self.assertFalse((root / "source" / "one" / "20260101-000-move").exists())
+
+    def test_split_moves_tasks_by_explicit_source_refs_and_rewrites_goal_breadcrumb(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.make_project(root, "source", "p-source", "Source", {"id": "g-one", "slug": "one", "title": "One"}, [
+                {"id": "r-move", "folder": "20260101-000-move", "title": "Move", "source_refs": ["src-a"]},
+                {"id": "r-stay", "folder": "20260102-000-stay", "title": "Stay", "source_refs": ["src-b"]},
+            ])
+            split_project(root, source_slug="source", new_slug="new-project", new_title="New Project", source_refs=["src-a"])
+            goal = json.loads((root / "new-project" / "one" / "goal.json").read_text())
+            self.assertEqual(goal["project_slug"], "new-project")
+            self.assertTrue((root / "source" / "one" / "20260102-000-stay" / "record.json").exists())
+
+    def test_split_requires_explicit_selection_and_rolls_back_atomically(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.make_project(root, "source", "p-source", "Source", {"id": "g-one", "slug": "one", "title": "One"}, [{"id": "r-a", "folder": "20260101-000-a", "title": "A"}])
+            with self.assertRaisesRegex(ValueError, "explicit"):
+                split_project(root, source_slug="source", new_slug="new-project", new_title="New Project")
+            self.assertFalse((root / "new-project").exists())
+            with self.assertRaisesRegex(ValueError, "does not exist"):
+                split_project(root, source_slug="source", new_slug="new-project", new_title="New Project", task_ids=["missing"])
+            self.assertFalse((root / "new-project").exists())
+            self.assertTrue((root / "source" / "one" / "20260101-000-a" / "record.json").exists())
+
+    def test_project_split_action_is_allowlisted(self):
+        action = create_action("project.split", "run-1", {"source_slug": "source", "new_slug": "new", "new_title": "New", "task_ids": ["r-a"], "source_refs": []})
+        self.assertEqual(action["action"], "project.split")
 
 
 if __name__ == "__main__":

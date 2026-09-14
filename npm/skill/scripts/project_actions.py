@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -145,6 +146,121 @@ def merge_projects(data_root: str | Path, *, target_slug: str, source_slug: str)
         if source_dir.exists():
             shutil.rmtree(source_dir)
         shutil.copytree(snapshot / "target", target_dir)
+        shutil.copytree(snapshot / "source", source_dir)
+        raise
+    finally:
+        shutil.rmtree(snapshot, ignore_errors=True)
+
+
+def split_project(
+    data_root: str | Path,
+    *,
+    source_slug: str,
+    new_slug: str,
+    new_title: str,
+    task_ids: list[str] | None = None,
+    source_refs: list[str] | None = None,
+) -> dict[str, Any]:
+    """Create a new project and move only explicitly selected Tasks/source refs.
+
+    The source project is never replaced by a redirect: an empty source remains a
+    normal project. The snapshot covers both projects, so a partial move cannot
+    leak if validation, filesystem, or breadcrumb rewriting fails.
+    """
+    root = Path(data_root).expanduser().resolve()
+    source_slug = _safe_slug(source_slug, "source project slug")
+    new_slug = _safe_slug(new_slug, "new project slug")
+    if source_slug == new_slug:
+        raise ValueError("Source and new project slugs must be different")
+    if not isinstance(new_title, str) or not new_title.strip():
+        raise ValueError("New project title is required")
+    selected_ids = {item for item in (task_ids or []) if isinstance(item, str) and item.strip()}
+    selected_refs = {item for item in (source_refs or []) if isinstance(item, str) and item.strip()}
+    if not selected_ids and not selected_refs:
+        raise ValueError("An explicit task or source selection is required")
+
+    source_dir, target_dir = root / source_slug, root / new_slug
+    if not source_dir.is_dir():
+        raise ValueError("Source project must exist")
+    if target_dir.exists():
+        raise ValueError("New project already exists")
+    source_meta = _read(source_dir / "project.json")
+    if source_meta.get("merged_into"):
+        raise ValueError("Merged redirect projects cannot be split")
+    source_meta.setdefault("slug", source_slug)
+    snapshot = Path(tempfile.mkdtemp(prefix="builders-diary-split-"))
+    try:
+        shutil.copytree(source_dir, snapshot / "source")
+        target_dir.mkdir(parents=True)
+        new_id = f"p-{uuid.uuid4().hex[:8]}"
+        target_meta = dict(source_meta)
+        target_meta.update({"id": new_id, "slug": new_slug, "title": new_title.strip(), "name": new_title.strip()})
+        target_meta.pop("merged_into", None)
+        target_meta["source_refs"] = []
+        write_json_atomic(target_dir / "project.json", target_meta)
+
+        found_ids: set[str] = set()
+        found_refs: set[str] = set()
+        matched_refs: set[str] = set()
+        moved = 0
+        for purpose_dir in sorted(source_dir.iterdir()):
+            if not purpose_dir.is_dir() or purpose_dir.name.startswith("."):
+                continue
+            goal_path = purpose_dir / "goal.json"
+            if not goal_path.is_file():
+                raise ValueError(f"Purpose is missing goal.json: {purpose_dir.name}")
+            goal = _read(goal_path)
+            goal.setdefault("slug", purpose_dir.name)
+            goal.setdefault("id", f"goal-{purpose_dir.name}")
+            selected: list[tuple[Path, dict[str, Any]]] = []
+            for task_dir in sorted(purpose_dir.iterdir()):
+                if not task_dir.is_dir() or task_dir.name.startswith("."):
+                    continue
+                record_path = task_dir / "record.json"
+                if not record_path.is_file():
+                    raise ValueError(f"Task is missing record.json: {task_dir.name}")
+                record = _read(record_path)
+                record_id = str(record.get("id") or "")
+                record_refs = {item for item in record.get("source_refs", []) if isinstance(item, str)}
+                if record_id in selected_ids or record_refs.intersection(selected_refs):
+                    selected.append((task_dir, record))
+                    if record_id:
+                        found_ids.add(record_id)
+                    found_refs.update(record_refs)
+                    matched_refs.update(record_refs.intersection(selected_refs))
+            if not selected:
+                continue
+            target_purpose = target_dir / purpose_dir.name
+            target_purpose.mkdir(parents=True, exist_ok=True)
+            goal["project_slug"] = new_slug
+            write_json_atomic(target_purpose / "goal.json", goal)
+            for task_dir, record in selected:
+                destination = target_purpose / task_dir.name
+                if destination.exists():
+                    raise ValueError(f"Task destination already exists: {task_dir.name}")
+                shutil.move(str(task_dir), str(destination))
+                _rewrite_record(destination / "record.json", target_meta, goal, destination.name)
+                moved += 1
+            if not any(item.is_dir() for item in purpose_dir.iterdir()):
+                shutil.rmtree(purpose_dir)
+
+        missing_ids = selected_ids - found_ids
+        if missing_ids:
+            raise ValueError(f"Selected task ID does not exist: {sorted(missing_ids)[0]}")
+        if selected_refs and not matched_refs:
+            raise ValueError("Selected source refs do not exist")
+        target_meta["source_refs"] = sorted(found_refs)
+        write_json_atomic(target_dir / "project.json", target_meta)
+        return {
+            "status": "applied", "source_slug": source_slug, "new_slug": new_slug,
+            "new_project_id": new_id, "moved_task_ids": sorted(found_ids), "source_refs": sorted(found_refs),
+            "moved_tasks": moved,
+        }
+    except Exception:
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
+        if source_dir.exists():
+            shutil.rmtree(source_dir)
         shutil.copytree(snapshot / "source", source_dir)
         raise
     finally:

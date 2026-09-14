@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
-ALLOWED_ACTIONS = {"project.confirm", "project.merge", "task.approve", "task.drop"}
+ALLOWED_ACTIONS = {"project.confirm", "project.merge", "project.split", "task.approve", "task.drop"}
 RESULT_STATUSES = {"applied", "rejected", "error", "timeout"}
 _ENVELOPE_KEYS = {"schema_version", "action_id", "action", "run_id", "created_at", "payload"}
 _RESULT_KEYS = {"schema_version", "action_id", "status", "applied_at", "result", "error"}
@@ -39,6 +39,7 @@ def _validate_payload(action: Any, payload: Any) -> None:
     expected = (
         {"projects"} if action == "project.confirm"
         else {"target_slug", "source_slug"} if action == "project.merge"
+        else {"source_slug", "new_slug", "new_title", "task_ids", "source_refs"} if action == "project.split"
         else {"task"} if action == "task.approve"
         else {"proposal_id"}
     )
@@ -47,6 +48,13 @@ def _validate_payload(action: Any, payload: Any) -> None:
     if action == "project.merge":
         if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
             raise ValueError(f"{action} payload has invalid fields")
+    elif action == "project.split":
+        if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in {"source_slug", "new_slug", "new_title"}):
+            raise ValueError(f"{action} payload has invalid fields")
+        if not all(isinstance(payload.get(key), list) and all(isinstance(item, str) and item.strip() for item in payload[key]) for key in {"task_ids", "source_refs"}):
+            raise ValueError(f"{action} payload has invalid fields")
+        if not payload["task_ids"] and not payload["source_refs"]:
+            raise ValueError(f"{action} requires an explicit selection")
     elif not isinstance(payload[next(iter(expected))], (list if action == "project.confirm" else dict if action == "task.approve" else str)):
         raise ValueError(f"{action} payload has invalid fields")
 

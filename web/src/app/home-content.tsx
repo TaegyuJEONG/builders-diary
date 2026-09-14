@@ -17,7 +17,7 @@ import {
   selectFolder, scanFolderStructure, verifyFolderPermission, hasFolderPermission,
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
   readInstallMarker, scanImportRuns, updateProjectInFolder, updateProjectStagesInFolder, deleteProjectFromFolder,
-  writeProjectMergeAction, waitForProjectMergeResult,
+  writeProjectMergeAction, waitForProjectMergeResult, writeProjectSplitAction, waitForProjectSplitResult,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -385,6 +385,16 @@ export function HomeContent() {
     await refreshPortfolio();
   }, [importRuns, refreshPortfolio]);
 
+  const handleSplitProjects = useCallback(async (sourceSlug: string, newSlug: string, newTitle: string, taskIds: string[], sourceRefs: string[]) => {
+    const handle = await loadFolderHandleFromStorage();
+    const runId = importRuns[0]?.id;
+    if (!handle || !runId) throw new Error('An active import run is required to split projects.');
+    await writeProjectSplitAction(handle, runId, sourceSlug, newSlug, newTitle, taskIds, sourceRefs);
+    const result = await waitForProjectSplitResult(handle, runId);
+    if (!result || result.status !== 'applied') throw new Error(result?.error || 'Project split was not applied.');
+    await refreshPortfolio();
+  }, [importRuns, refreshPortfolio]);
+
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
     () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage, activity: selectedActivity }),
@@ -579,6 +589,7 @@ export function HomeContent() {
             onSelectProject={(id) => { setExploreMode('project'); setSelectedProjectId(id); setProjectPanelId(null); setSelectedStage(null); setSelectedActivity(null); setSelectedGoalId(null); setSelectedRecordId(null); }}
             onEditProject={(id) => { const slug = projectSlugOf(id); if (slug) openManager({ kind: 'edit-project', projectSlug: slug }); }}
             onMergeProject={(id) => setProjectPanelId(id)}
+            onSplitProject={(id) => setProjectPanelId(id)}
             onCreateProject={() => openManager({ kind: 'create-project' })}
             onDropTaskToStage={handleMoveTaskToStage}
             onCreateTask={(stage) => { const slug = projectSlugOf(selectedProjectId); if (slug) openManager({ kind: 'new-task', projectSlug: slug, stage }); }}
@@ -610,6 +621,7 @@ export function HomeContent() {
             onDelete={handleDeleteProject}
             projects={portfolio.projects}
             onMerge={handleMergeProjects}
+            onSplit={handleSplitProjects}
           />
         )}
       </div>

@@ -861,6 +861,32 @@ export async function waitForProjectMergeResult(handle: FileSystemDirectoryHandl
   return { status: 'timeout', error: 'The project merge was not applied in time.' };
 }
 
+export async function writeProjectSplitAction(handle: FileSystemDirectoryHandle, runId: string, sourceSlug: string, newSlug: string, newTitle: string, taskIds: string[], sourceRefs: string[] = []): Promise<void> {
+  if (!sourceSlug.trim() || !newSlug.trim() || !newTitle.trim() || sourceSlug === newSlug || /[./\\\\]/.test(sourceSlug) || /[./\\\\]/.test(newSlug)) throw new Error('Choose a new project name and at least one selected Task.');
+  if (!taskIds.length && !sourceRefs.length) throw new Error('Select at least one Task or source.');
+  const imports = await handle.getDirectoryHandle('imports');
+  const runDir = await imports.getDirectoryHandle(runId);
+  const actions = await runDir.getDirectoryHandle('actions', { create: true });
+  const file = await actions.getFileHandle('project-split.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'project.split', run_id: runId, created_at: new Date().toISOString(), payload: { source_slug: sourceSlug, new_slug: newSlug, new_title: newTitle.trim(), task_ids: taskIds, source_refs: sourceRefs } }, null, 2) + '\\n');
+  await writable.close();
+}
+
+export async function waitForProjectSplitResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; new_slug?: string; moved_task_ids?: string[]; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const imports = await handle.getDirectoryHandle('imports');
+      const runDir = await imports.getDirectoryHandle(runId);
+      const result = await readJson(await runDir.getDirectoryHandle('results'), 'project-split.json');
+      if (result) return result;
+    } catch { /* helper may not have created the result directory yet */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'The project split was not applied in time.' };
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');

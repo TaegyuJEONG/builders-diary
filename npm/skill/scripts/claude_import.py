@@ -51,6 +51,7 @@ VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
 WEB_ACTIONS = {
     "project-confirm": "project.confirm",
     "project-merge": "project.merge",
+    "project-split": "project.split",
     "task-approve": "task.approve",
     "task-drop": "task.drop",
 }
@@ -1294,6 +1295,20 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
             data_root, target_slug=payload["target_slug"], source_slug=payload["source_slug"]
         )}
         event_details = {"action": "project.merge", "target_slug": payload["target_slug"], "source_slug": payload["source_slug"]}
+    elif action_name == "project-split":
+        try:
+            from .project_actions import split_project
+        except ImportError:
+            from project_actions import split_project
+        result = {"status": "applied", **split_project(
+            data_root,
+            source_slug=payload["source_slug"],
+            new_slug=payload["new_slug"],
+            new_title=payload["new_title"],
+            task_ids=payload["task_ids"],
+            source_refs=payload["source_refs"],
+        )}
+        event_details = {"action": "project.split", "source_slug": payload["source_slug"], "new_slug": payload["new_slug"]}
     elif action_name == "project-confirm":
         projects = payload.get("projects")
         if not isinstance(projects, list) or not all(isinstance(project, dict) for project in projects):
