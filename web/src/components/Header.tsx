@@ -139,8 +139,7 @@ function FilterPopover({
       {/* Tools */}
       <div style={{ padding: '10px 14px' }}>
         <div style={{ fontSize: 10, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, fontFamily: 'IBM Plex Mono, monospace' }}>
-          Tools
-        </div>
+          Tool categories        </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {toolOptions.map(o => {
             const active = selectedTools.includes(o.value);

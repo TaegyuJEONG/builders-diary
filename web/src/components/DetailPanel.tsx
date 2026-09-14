@@ -561,19 +561,20 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
                   </div>
                 </div>
               )}
-              {record.toolTags && record.toolTags.length > 0 && (
+              {(record.toolTags && record.toolTags.length > 0 || Object.values(record.toolCategories || {}).some(items => items.length > 0)) && (
                 <div>
                   <div className="mono" style={{
                     fontSize: 9, color: 'var(--text3)', marginBottom: 4,
                     textTransform: 'uppercase', letterSpacing: '0.06em',
                   }}>Tools</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
-                    {record.toolTags.map(tag => (
-                      <span key={tag} className="mono" style={{
-                        fontSize: 11, padding: '3px 8px', borderRadius: 3,
-                        background: 'var(--tag-bg)', color: 'var(--text2)',
-                        border: '1px solid var(--border)',
-                      }}>{tag}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {Object.entries(record.toolCategories || {}).filter(([, items]) => items.length > 0).map(([category, items]) => (
+                      <div key={category}>
+                        <div className="mono" style={{ fontSize: 8, color: 'var(--text3)', textTransform: 'uppercase' }}>{category}</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>
+                          {items.map(tag => <span key={`${category}-${tag}`} className="mono" style={{ fontSize: 11, padding: '3px 8px', borderRadius: 3, background: 'var(--tag-bg)', color: 'var(--text2)', border: '1px solid var(--border)' }}>{tag}</span>)}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 </div>

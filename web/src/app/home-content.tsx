@@ -428,7 +428,7 @@ export function HomeContent() {
   );
 
   const tagOptions = useMemo(
-    () => (portfolio ? buildTagOptions(portfolio) : { mindset: [], tool: [], activity: [] }),
+    () => (portfolio ? buildTagOptions(portfolio) : { mindset: [], tool: [], toolCategory: [], activity: [] }),
     [portfolio]
   );
 

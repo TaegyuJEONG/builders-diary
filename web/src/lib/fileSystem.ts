@@ -2,7 +2,7 @@
 
 import {
   Portfolio, Project, Goal, Record, NarrativeSection, ImportRun,
-  DEFAULT_STAGES, EntryType, normalizeStage,
+  DEFAULT_STAGES, EntryType, normalizeStage, TOOL_CATEGORIES, ToolCategory, ToolCategories,
 } from './types';
 
 // Legacy v2 category → v4 stage. Used only when a record has no explicit
@@ -178,7 +178,7 @@ export async function saveRecordToFile(
   record: {
     file_path: string; title: string; summary?: string; content?: string; result?: string;
     status?: string; updated_at?: string; tags?: string[]; section?: string;
-    purpose?: string | null; tools?: string[]; mindset?: string[]; activities?: string[]; order?: number;
+    purpose?: string | null; tools?: string[]; toolCategories?: Partial<ToolCategories>; mindset?: string[]; activities?: string[]; order?: number;
   },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -236,6 +236,7 @@ export async function saveRecordToFile(
               ...(record.section !== undefined ? { section: record.section } : {}),
               ...(record.purpose !== undefined ? { purpose: record.purpose } : {}),
               ...(record.tools !== undefined ? { tools: record.tools } : {}),
+              ...(record.toolCategories !== undefined ? { tool_categories: record.toolCategories } : {}),
               ...(record.mindset !== undefined ? { mindset: record.mindset } : {}),
               ...(record.activities !== undefined ? { activities: record.activities } : {}),
               ...(record.order !== undefined ? { order: record.order } : {}),
@@ -618,6 +619,7 @@ export interface TaskProposal {
   activities: string[];
   task_aim: string;
   tools: string[];
+  tool_categories: Partial<ToolCategories>;
   mindset: string[];
   body: string;
   highlight: TaskApproval['highlight'];
@@ -645,6 +647,7 @@ function normalizeTaskProposal(raw: any, fallbackId: string): TaskProposal | nul
     activities: strings(raw.activities || raw.activity),
     task_aim: String(raw.task_aim || raw.aim || raw.purpose_text || '').trim(),
     tools: strings(raw.tools),
+    tool_categories: normalizeToolCategories(raw.tool_categories || raw.toolCategories),
     mindset: strings(raw.mindset),
     body: String(raw.body || raw.summary || '').trim(),
     highlight: raw.highlight && (typeof raw.highlight === 'string' || typeof raw.highlight === 'object') ? raw.highlight : null,
@@ -654,6 +657,15 @@ function normalizeTaskProposal(raw: any, fallbackId: string): TaskProposal | nul
       : [],
     status: raw.status === 'approved' || raw.status === 'dropped' ? raw.status : 'pending',
   };
+}
+
+function normalizeToolCategories(raw: any): Partial<ToolCategories> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const result: Partial<ToolCategories> = {};
+  for (const category of TOOL_CATEGORIES) {
+    if (Array.isArray(raw[category])) result[category] = raw[category].filter((item: any) => typeof item === 'string').map((item: string) => item.trim()).filter(Boolean);
+  }
+  return result;
 }
 
 /** Read only normalized, agent-written Task proposal files from the latest import run. */
@@ -864,6 +876,7 @@ export interface TaskApproval {
   activity: string[];
   purpose: string;
   tools: string[];
+  tool_categories?: Partial<ToolCategories>;
   mindset: string[];
   body: string;
   evidence: Array<{ candidate_id?: string; type?: string; kind?: string; label?: string; url?: string; meta?: string; detail?: string; quote?: string; visibility?: string; verified?: boolean }>;
@@ -880,7 +893,7 @@ export async function writeTaskApproveAction(handle: FileSystemDirectoryHandle, 
   const allowedTask = {
     ...(task.proposal_id ? { proposal_id: task.proposal_id } : {}),
     project: task.project, goal: task.goal, stage: task.stage, title: task.title, date: task.date,
-    activity: task.activity, purpose: task.purpose, tools: task.tools, mindset: task.mindset,
+    activity: task.activity, purpose: task.purpose, tools: task.tools, tool_categories: task.tool_categories || {}, mindset: task.mindset,
     body: task.body, evidence: task.evidence, highlight: task.highlight,
   };
   await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'task.approve', run_id: runId, created_at: new Date().toISOString(), payload: { task: allowedTask } }, null, 2) + '\n');
@@ -1212,6 +1225,7 @@ async function scanRecordFolder(
     purpose: meta.purpose || meta.sub_purpose || null,
     subPurpose: meta.purpose || meta.sub_purpose || null,
     tools,
+    toolCategories: normalizeToolCategories(meta.tool_categories || meta.toolCategories),
     toolTags: tools,
     mindset,
     mindsetTags: mindset,

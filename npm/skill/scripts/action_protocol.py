@@ -14,7 +14,7 @@ ALLOWED_ACTIONS = {"project.confirm", "project.enrich", "project.merge", "projec
 RESULT_STATUSES = {"applied", "rejected", "error", "timeout"}
 _ENVELOPE_KEYS = {"schema_version", "action_id", "action", "run_id", "created_at", "payload"}
 _RESULT_KEYS = {"schema_version", "action_id", "status", "applied_at", "result", "error"}
-TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "mindset", "evidence", "source_refs"}
+TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "tool_categories", "mindset", "evidence", "source_refs"}
 
 
 def _timestamp(value: Any, field: str) -> str:

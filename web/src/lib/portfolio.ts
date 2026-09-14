@@ -1,4 +1,4 @@
-import { Portfolio, Record, Project, ToolCategory, ToolboxGroup } from './types';
+import { Portfolio, Record, Project, ToolCategory, ToolboxGroup, TOOL_CATEGORIES } from './types';
 import { mockPortfolioV2 } from './mockData';
 import { SelectOption } from '@/components/SearchableSelect';
 
@@ -8,25 +8,13 @@ const MOCK_CATEGORY_TO_SECTION: { [k: string]: string } = {
   Design: 'Build', Engineering: 'Build', Growth: 'Growth',
 };
 
-const TOOL_CATEGORY_ORDER: ToolCategory[] = [
-  'Coding agent',
-  'Programming language',
-  'Framework / library',
-  'Data / backend',
-  'Deployment / infrastructure',
-  'Research / validation',
-  'Other',
-];
+const TOOL_CATEGORY_ORDER: ToolCategory[] = TOOL_CATEGORIES;
 
-/** Categorize display names without changing stored task-level tool strings. */
-export function classifyTool(tool: string): ToolCategory {
-  const t = tool.trim().toLowerCase();
-  if (/claude|cursor|windsurf|codex|antigravity|cline|chatgpt/.test(t)) return 'Coding agent';
-  if (/react|next|vite|fastapi|flask|django|node|express|web worker|tailwind|pandas/.test(t)) return 'Framework / library';
-  if (/python|typescript|javascript|js|ts|rust|golang|go|java|kotlin|swift|sql/.test(t)) return 'Programming language';
-  if (/supabase|postgres|postgresql|mysql|sqlite|redis|mongodb|database|prisma/.test(t)) return 'Data / backend';
-  if (/vercel|railway|docker|github actions|cloud run|aws|gcp|google cloud|kubernetes|netlify/.test(t)) return 'Deployment / infrastructure';
-  if (/lighthouse|chrome devtools|browser|web search|figma|playwright|testing|benchmark/.test(t)) return 'Research / validation';
+/** Read the category assigned by the source; never infer one from a name/topic. */
+export function classifyTool(tool: string, categories?: { [category in ToolCategory]?: string[] }): ToolCategory {
+  if (categories) {
+    for (const category of TOOL_CATEGORIES) if ((categories[category] || []).includes(tool)) return category;
+  }
   return 'Other';
 }
 
@@ -38,7 +26,7 @@ export function buildProjectToolbox(project: Project): ToolboxGroup[] {
       for (const tool of record.tools || record.toolTags || []) {
         const name = tool.trim();
         if (!name) continue;
-        const category = classifyTool(name);
+        const category = classifyTool(name, record.toolCategories);
         if (!byCategory.has(category)) byCategory.set(category, new Set());
         byCategory.get(category)!.add(name);
       }
@@ -105,11 +93,13 @@ export function convertMockToPortfolio(): Portfolio {
 export function buildTagOptions(portfolio: Portfolio): {
   mindset: SelectOption[];
   tool: SelectOption[];
+  toolCategory: SelectOption[];
   activity: SelectOption[];
 } {
   const mindsetCounts = new Map<string, number>();
   const toolCounts = new Map<string, number>();
   const activityCounts = new Map<string, number>();
+  const toolCategoryCounts = new Map<string, number>();
   for (const p of portfolio.projects) {
     for (const g of p.goals) {
       for (const r of g.records) {
@@ -120,6 +110,9 @@ export function buildTagOptions(portfolio: Portfolio): {
         for (const t of r.tools || r.toolTags || []) {
           const name = t.trim();
           if (name) toolCounts.set(name, (toolCounts.get(name) || 0) + 1);
+        }
+        for (const category of Object.keys(r.toolCategories || {})) {
+          toolCategoryCounts.set(category, (toolCategoryCounts.get(category) || 0) + 1);
         }
         for (const activity of r.activities || []) {
           const name = activity.trim();
@@ -133,13 +126,15 @@ export function buildTagOptions(portfolio: Portfolio): {
     .map(([value, count]) => ({ value, label: value, count }));
   const mindset = toOptions(mindsetCounts);
   const tool = toOptions(toolCounts);
+  const toolCategory = toOptions(toolCategoryCounts);
   const activity = toOptions(activityCounts);
-  return { mindset, tool, activity };
+  return { mindset, tool, toolCategory, activity };
 }
 
 export interface FilterState {
   mindset: string[];
   tools: string[];
+  toolCategories?: string[];
   keyword: string;
   stage?: string | null;
   activity?: string | null;
@@ -155,6 +150,10 @@ export function recordPasses(r: Record, f: FilterState): boolean {
   if (f.tools.length > 0) {
     const rt = r.tools || r.toolTags || [];
     if (!f.tools.some(t => rt.includes(t))) return false;
+  }
+  if ((f.toolCategories || []).length > 0) {
+    const categories = Object.keys(r.toolCategories || {});
+    if (!(f.toolCategories || []).some(category => categories.includes(category))) return false;
   }
   if (f.keyword.trim()) {
     const k = f.keyword.trim().toLowerCase();

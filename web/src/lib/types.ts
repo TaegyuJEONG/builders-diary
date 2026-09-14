@@ -93,13 +93,20 @@ export interface Evidence {
 }
 
 export type ToolCategory =
-  | 'Coding agent'
-  | 'Programming language'
-  | 'Framework / library'
-  | 'Data / backend'
-  | 'Deployment / infrastructure'
-  | 'Research / validation'
+  | 'Programming languages'
+  | 'MCP servers'
+  | 'Skills'
+  | 'Coding agents'
+  | 'AI models'
+  | 'AI frameworks'
+  | 'Apps/platforms'
   | 'Other';
+
+export type ToolCategories = { [category in ToolCategory]: string[] };
+export const TOOL_CATEGORIES: ToolCategory[] = [
+  'Programming languages', 'MCP servers', 'Skills', 'Coding agents',
+  'AI models', 'AI frameworks', 'Apps/platforms', 'Other',
+];
 
 export interface ToolboxGroup {
   category: ToolCategory;
@@ -137,6 +144,7 @@ export interface Record {
   purpose?: string | null;       // the specific aim of this task
   subPurpose?: string | null;    // legacy alias; read-only compatibility
   tools?: string[];          // AI tools/stacks used
+  toolCategories?: Partial<ToolCategories>; // observed source metadata by category
   mindset?: string[];        // mindset tags (v3 explicit field)
   progress?: Progress | null;    // legacy records only; never shown or edited
   highlight?: Highlight | null;  // v3 name for judgment

@@ -69,6 +69,35 @@ LEGACY_STAGE_ALIASES = {
 # skill acquisition that does not belong to any one product's storyline.
 ENTRY_TYPES = ["project", "learning"]
 
+# Task tooling taxonomy. These labels are intentionally a closed vocabulary;
+# callers must provide observed source metadata rather than infer a category
+# from a project's title or topic.
+TOOL_CATEGORIES = [
+    "Programming languages", "MCP servers", "Skills", "Coding agents",
+    "AI models", "AI frameworks", "Apps/platforms", "Other",
+]
+
+
+def normalize_tooling_metadata(value) -> dict:
+    """Validate category metadata and derive the legacy flattened ``tools`` list."""
+    if value is None:
+        value = {}
+    if not isinstance(value, dict):
+        raise ValueError("tool categories must be an object")
+    unknown = [str(key) for key in value if key not in TOOL_CATEGORIES]
+    if unknown:
+        raise ValueError(f"unknown tool category: {unknown[0]}")
+    categories = {}
+    tools = []
+    for category in TOOL_CATEGORIES:
+        raw = value.get(category, [])
+        if not isinstance(raw, list) or not all(isinstance(item, str) and item.strip() for item in raw):
+            raise ValueError(f"tool category {category} must be a list of non-empty strings")
+        items = list(dict.fromkeys(item.strip() for item in raw))
+        categories[category] = items
+        tools.extend(items)
+    return {"tool_categories": categories, "tools": list(dict.fromkeys(tools))}
+
 
 def _stage_names(value) -> list[str]:
     """Normalize a stage config into ordered, case-insensitive unique names."""
@@ -478,6 +507,7 @@ def main() -> int:
     ap.add_argument("--sub-purpose", default="", help="Legacy alias for --purpose")
     ap.add_argument("--tags", default="", help="Comma-separated tags")
     ap.add_argument("--tools", default="", help="Comma-separated AI tools/stacks used")
+    ap.add_argument("--tool-categories", default="", help="JSON object of observed tooling metadata by canonical category")
     ap.add_argument("--mindset", default="", help="Comma-separated mindset tags (skeptical, cost-aware…)")
     ap.add_argument("--body-file", help="Path to markdown body file (else read stdin)")
 
@@ -530,6 +560,15 @@ def main() -> int:
 
     tags = [t.strip() for t in args.tags.split(",") if t.strip()]
     tools = [t.strip() for t in args.tools.split(",") if t.strip()]
+    if args.tool_categories:
+        try:
+            tooling = normalize_tooling_metadata(json.loads(args.tool_categories))
+        except (json.JSONDecodeError, ValueError) as error:
+            ap.error(f"--tool-categories: {error}")
+        tools = tooling["tools"]
+    else:
+        tooling = normalize_tooling_metadata({})
+        tooling["tools"] = tools
     mindset = [m.strip() for m in args.mindset.split(",") if m.strip()]
     activities = [a.strip() for a in args.activity.split(",") if a.strip()]
 
@@ -592,6 +631,7 @@ def main() -> int:
             "purpose": args.purpose or args.sub_purpose or None,
             "tags": tags,
             "tools": tools,
+            "tool_categories": tooling["tool_categories"],
             "mindset": mindset,
             # v3 narrative field + legacy `body` dual-write (one release) so old web builds keep working
             "body_md": body,

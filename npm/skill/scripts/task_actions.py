@@ -171,7 +171,7 @@ def split_task(data_root: str | Path, *, source_id: str, children: list[dict[str
             record.update({"id": child_id, "title": title, "body": body, "body_md": body,
                            "folder": destination.parent.name, "created_at": draft.get("created_at", source.get("created_at")),
                            "updated_at": draft.get("updated_at", source.get("updated_at"))})
-            for key in ("project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "mindset", "evidence", "source_refs"):
+            for key in ("project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "tool_categories", "mindset", "evidence", "source_refs"):
                 if key in draft:
                     record[key] = copy.deepcopy(draft[key])
             destination.parent.mkdir(parents=True, exist_ok=False)

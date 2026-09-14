@@ -46,6 +46,10 @@ except ImportError:  # direct execution from the installed skill directory
             raise RuntimeError("action_protocol.py is required to apply web actions; reinstall the skill")
 
 SCHEMA_VERSION = 1
+TOOL_CATEGORIES = [
+    "Programming languages", "MCP servers", "Skills", "Coding agents",
+    "AI models", "AI frameworks", "Apps/platforms", "Other",
+]
 EXPORT_CATEGORIES = {"conversations", "projects", "memories", "light_metadata"}
 VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
 WEB_ACTIONS = {
@@ -60,11 +64,18 @@ WEB_ACTIONS = {
 }
 TASK_ACTION_FIELDS = {
     "project", "goal", "stage", "title", "date", "activity", "purpose",
-    "tools", "mindset", "body", "evidence", "highlight", "proposal_id",
+    "tools", "tool_categories", "mindset", "body", "evidence", "highlight", "proposal_id",
 }
 TASK_EVIDENCE_FIELDS = {"candidate_id", "kind", "type", "label", "url", "meta", "detail", "quote", "visibility", "verified"}
 TASK_HIGHLIGHT_FIELDS = {"ai", "builder", "why"}
-TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "mindset", "evidence", "source_refs"}
+TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "tool_categories", "mindset", "evidence", "source_refs"}
+
+
+def tooling_from_source_metadata(source: dict[str, Any]) -> dict[str, Any]:
+    """Read observed tooling metadata only; never infer tools from topic text."""
+    save_record = _import_save_record()
+    raw = source.get("tooling_metadata", {}) if isinstance(source, dict) else {}
+    return save_record.normalize_tooling_metadata(raw)
 
 
 def _json_from_zip(archive: zipfile.ZipFile, name: str) -> Any:
@@ -1206,6 +1217,15 @@ def _validate_task_approve_action(action: Any, run_id: str) -> dict[str, Any]:
         value = task.get(field, [])
         if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
             raise ValueError(f"task.approve {field} must be a list of strings")
+    categories = task.get("tool_categories", {})
+    try:
+        tooling = _import_save_record().normalize_tooling_metadata(categories)
+    except ValueError as error:
+        raise ValueError(str(error)) from error
+    if categories:
+        if "tools" in task and task["tools"] and task["tools"] != tooling["tools"]:
+            raise ValueError("task.approve tools must match tool_categories")
+        task["tools"] = tooling["tools"]
     evidence = task.get("evidence", [])
     if not isinstance(evidence, list):
         raise ValueError("task.approve evidence must be a list")
@@ -1233,7 +1253,7 @@ def _validate_task_approve_action(action: Any, run_id: str) -> dict[str, Any]:
         else:
             raise ValueError("task.approve highlight must be text or an ai/builder/why object")
     return {
-        field: task.get(field, [] if field in {"activity", "tools", "mindset", "evidence"} else "")
+        field: task.get(field, [] if field in {"activity", "tools", "mindset", "evidence"} else ({} if field == "tool_categories" else ""))
         for field in TASK_ACTION_FIELDS
     }
 
@@ -1288,6 +1308,8 @@ def _apply_task_approve(*, data_root: str | Path, run_dir: Path, action: Any, ru
             "--tools", ",".join(task["tools"]), "--mindset", ",".join(task["mindset"]),
             "--body-file", str(body_path), "--evidence-file", str(evidence_path),
         ]
+        if task["tool_categories"]:
+            command.extend(["--tool-categories", json.dumps(task["tool_categories"], ensure_ascii=False)])
         if isinstance(task["highlight"], str) and task["highlight"]:
             command.extend(["--judgment", task["highlight"]])
         elif isinstance(task["highlight"], dict):
@@ -1338,6 +1360,11 @@ def _validate_task_split_action(action: Any, run_id: str) -> dict[str, Any]:
         for key in ("activities", "activity", "tools", "mindset", "source_refs"):
             if key in draft and (not isinstance(draft[key], list) or not all(isinstance(item, str) for item in draft[key])):
                 raise ValueError(f"task.split {key} must be a list of strings")
+        if "tool_categories" in draft:
+            try:
+                _import_save_record().normalize_tooling_metadata(draft["tool_categories"])
+            except ValueError as error:
+                raise ValueError(str(error)) from error
         if "evidence" in draft and not isinstance(draft["evidence"], list):
             raise ValueError("task.split evidence must be a list")
     return canonical
