@@ -16,7 +16,9 @@ import hashlib
 import html
 import json
 import re
+import subprocess
 import sys
+import tempfile
 import time
 import uuid
 import zipfile
@@ -28,6 +30,16 @@ from urllib.parse import urlparse
 SCHEMA_VERSION = 1
 EXPORT_CATEGORIES = {"conversations", "projects", "memories", "light_metadata"}
 VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
+WEB_ACTIONS = {
+    "project-confirm": "project.confirm",
+    "task-approve": "task.approve",
+}
+TASK_ACTION_FIELDS = {
+    "project", "goal", "stage", "title", "date", "activity", "purpose",
+    "tools", "mindset", "body", "evidence", "highlight",
+}
+TASK_EVIDENCE_FIELDS = {"type", "label", "url", "meta", "detail", "quote", "visibility"}
+TASK_HIGHLIGHT_FIELDS = {"ai", "builder", "why"}
 
 
 def _json_from_zip(archive: zipfile.ZipFile, name: str) -> Any:
@@ -1131,31 +1143,135 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
     return {"confirmed": confirmed, "dropped": dropped, "merged": merged, "without_sources": without_sources}
 
 
+def _validate_task_approve_action(action: Any, run_id: str) -> dict[str, Any]:
+    """Validate a task approval before it reaches the record writer.
+
+    This deliberately accepts declarative task content only. In particular,
+    evidence cannot carry source/artifact paths and an action cannot select an
+    executable command or a destination path.
+    """
+    if not isinstance(action, dict) or set(action) != {"action", "run_id", "task"}:
+        raise ValueError("Invalid task.approve action payload")
+    if action.get("action") != "task.approve" or action.get("run_id") != run_id:
+        raise ValueError("Invalid task.approve action payload")
+    task = action.get("task")
+    if not isinstance(task, dict) or not set(task).issubset(TASK_ACTION_FIELDS):
+        raise ValueError("Invalid task.approve task payload")
+    required_text = ("project", "goal", "stage", "title", "date", "body")
+    for field in required_text:
+        if not isinstance(task.get(field), str) or not task[field].strip():
+            raise ValueError(f"task.approve requires a non-empty {field}")
+    try:
+        dt.date.fromisoformat(task["date"])
+    except ValueError as error:
+        raise ValueError("task.approve date must use YYYY-MM-DD") from error
+    for field in ("purpose",):
+        if field in task and not isinstance(task[field], str):
+            raise ValueError(f"task.approve {field} must be a string")
+    for field in ("activity", "tools", "mindset"):
+        value = task.get(field, [])
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            raise ValueError(f"task.approve {field} must be a list of strings")
+    evidence = task.get("evidence", [])
+    if not isinstance(evidence, list):
+        raise ValueError("task.approve evidence must be a list")
+    for item in evidence:
+        if not isinstance(item, dict) or not set(item).issubset(TASK_EVIDENCE_FIELDS):
+            raise ValueError("task.approve evidence contains unsupported fields")
+        if not all(isinstance(value, str) for value in item.values()):
+            raise ValueError("task.approve evidence values must be strings")
+    highlight = task.get("highlight")
+    if highlight is not None:
+        if isinstance(highlight, str):
+            pass
+        elif isinstance(highlight, dict) and set(highlight).issubset(TASK_HIGHLIGHT_FIELDS) and all(
+            isinstance(value, str) for value in highlight.values()
+        ):
+            pass
+        else:
+            raise ValueError("task.approve highlight must be text or an ai/builder/why object")
+    return {
+        field: task.get(field, [] if field in {"activity", "tools", "mindset", "evidence"} else "")
+        for field in TASK_ACTION_FIELDS
+    }
+
+
+def _apply_task_approve(*, data_root: str | Path, run_dir: Path, action: Any, run_id: str) -> dict[str, Any]:
+    task = _validate_task_approve_action(action, run_id)
+    save_record = _import_save_record()
+    script = Path(getattr(save_record, "__file__", ""))
+    if not script.is_file():
+        raise RuntimeError("save_record.py is unavailable")
+    with tempfile.TemporaryDirectory(prefix="task-approve-", dir=run_dir) as temp_dir:
+        temporary = Path(temp_dir)
+        body_path = temporary / "body.md"
+        evidence_path = temporary / "evidence.json"
+        body_path.write_text(task["body"], encoding="utf-8")
+        evidence_path.write_text(json.dumps(task["evidence"], ensure_ascii=False), encoding="utf-8")
+        command = [
+            sys.executable, str(script), "--root", str(Path(data_root).expanduser()),
+            "--project", task["project"], "--goal", task["goal"], "--stage", task["stage"],
+            "--title", task["title"], "--date", task["date"],
+            "--activity", ",".join(task["activity"]), "--purpose", task["purpose"],
+            "--tools", ",".join(task["tools"]), "--mindset", ",".join(task["mindset"]),
+            "--body-file", str(body_path), "--evidence-file", str(evidence_path),
+        ]
+        if isinstance(task["highlight"], str) and task["highlight"]:
+            command.extend(["--judgment", task["highlight"]])
+        elif isinstance(task["highlight"], dict):
+            for field in ("ai", "builder", "why"):
+                if task["highlight"].get(field):
+                    command.extend([f"--highlight-{field}", task["highlight"][field]])
+        completed = subprocess.run(command, check=False, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise RuntimeError(f"save_record.py failed: {completed.stderr.strip() or completed.stdout.strip()}")
+    try:
+        saved = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("save_record.py returned invalid JSON") from error
+    if not isinstance(saved, dict) or saved.get("ok") is not True or not isinstance(saved.get("record_id"), str):
+        raise RuntimeError("save_record.py did not confirm a saved record")
+    return saved
+
+
 def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) -> dict[str, Any]:
     """Apply one allowlisted, run-scoped web action through the helper only."""
-    if action_name != "project-confirm":
+    if action_name not in WEB_ACTIONS:
         raise ValueError("Unsupported web action")
     run_dir, _ = _load_run_manifest(data_root, run_id)
     path = run_dir / "actions" / f"{action_name}.json"
+    result_path = run_dir / "results" / f"{action_name}.json"
+    try:
+        previous = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        previous = None
+    if isinstance(previous, dict) and previous.get("status") == "applied":
+        return previous
     try:
         action = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise FileNotFoundError(f"Web action not ready: {action_name}") from error
-    if not isinstance(action, dict) or action.get("action") != "project.confirm" or action.get("run_id") != run_id:
-        raise ValueError("Invalid project.confirm action payload")
-    projects = action.get("projects")
-    if not isinstance(projects, list) or not all(isinstance(project, dict) for project in projects):
-        raise ValueError("Invalid project.confirm projects payload")
-    selections = {
-        "run_id": run_id,
-        "order": [str(project.get("proposal_id") or "") for project in projects],
-        "projects": projects,
-    }
-    _write_json(run_dir / "selections.json", selections)
-    applied = apply_selections(data_root=data_root, run_id=run_id)
-    result = {"status": "applied", **applied}
-    _write_json(run_dir / "results" / f"{action_name}.json", result)
-    _append_run_event(run_dir, "web_action_applied", action="project.confirm", confirmed=len(applied["confirmed"]))
+    if action_name == "project-confirm":
+        if not isinstance(action, dict) or action.get("action") != "project.confirm" or action.get("run_id") != run_id:
+            raise ValueError("Invalid project.confirm action payload")
+        projects = action.get("projects")
+        if not isinstance(projects, list) or not all(isinstance(project, dict) for project in projects):
+            raise ValueError("Invalid project.confirm projects payload")
+        selections = {
+            "run_id": run_id,
+            "order": [str(project.get("proposal_id") or "") for project in projects],
+            "projects": projects,
+        }
+        _write_json(run_dir / "selections.json", selections)
+        applied = apply_selections(data_root=data_root, run_id=run_id)
+        result = {"status": "applied", **applied}
+        event_details = {"action": "project.confirm", "confirmed": len(applied["confirmed"])}
+    else:
+        saved = _apply_task_approve(data_root=data_root, run_dir=run_dir, action=action, run_id=run_id)
+        result = {"status": "applied", **saved}
+        event_details = {"action": "task.approve", "record_id": saved["record_id"]}
+    _write_json(result_path, result)
+    _append_run_event(run_dir, "web_action_applied", **event_details)
     return result
 
 
@@ -1270,12 +1386,12 @@ def main() -> int:
     apply_web_action_cmd = sub.add_parser("apply-web-action", help="Apply one validated action written by the connected web view")
     apply_web_action_cmd.add_argument("--data-root", required=True)
     apply_web_action_cmd.add_argument("--run-id", required=True)
-    apply_web_action_cmd.add_argument("--action", required=True, choices=["project-confirm"])
+    apply_web_action_cmd.add_argument("--action", required=True, choices=sorted(WEB_ACTIONS))
 
     wait_action_cmd = sub.add_parser("wait-for-action", help="Wait a bounded time for one web action and apply it")
     wait_action_cmd.add_argument("--data-root", required=True)
     wait_action_cmd.add_argument("--run-id", required=True)
-    wait_action_cmd.add_argument("--action", required=True, choices=["project-confirm"])
+    wait_action_cmd.add_argument("--action", required=True, choices=sorted(WEB_ACTIONS))
     wait_action_cmd.add_argument("--timeout", type=int, default=900)
 
     apply_selections_cmd = sub.add_parser("apply-selections", help="Materialize project selections written by the web view")

@@ -757,6 +757,69 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertEqual(result["confirmed"], ["project"])
         self.assertTrue((self.run_dir / "results" / "project-confirm.json").is_file())
 
+    def test_task_approve_action_saves_allowlisted_task_and_writes_result_event(self) -> None:
+        from skill.scripts.claude_import import apply_web_action
+
+        run_id = self._prepare()
+        action_dir = self.run_dir / "actions"
+        action_dir.mkdir()
+        (action_dir / "task-approve.json").write_text(json.dumps({
+            "action": "task.approve",
+            "run_id": run_id,
+            "task": {
+                "project": "Product Builder Jobs",
+                "goal": "Curation taxonomy",
+                "stage": "Discovery",
+                "title": "Approved taxonomy proposal",
+                "date": "2026-02-01",
+                "activity": ["Research", "Synthesis"],
+                "purpose": "Define the reusable classification rule.",
+                "tools": ["Claude Code"],
+                "mindset": ["Skeptical"],
+                "body": "## Result\nA reusable rule.",
+                "evidence": [{"type": "quote", "label": "Decision", "quote": "Keep the rule simple."}],
+                "highlight": {"ai": "Use broad categories", "builder": "Keep three", "why": "Readable"},
+            },
+        }), encoding="utf-8")
+
+        result = apply_web_action(data_root=self.data_root, run_id=run_id, action_name="task-approve")
+
+        self.assertEqual(result["status"], "applied")
+        self.assertTrue(result["record_id"].startswith("r-"))
+        self.assertTrue((self.run_dir / "results" / "task-approve.json").is_file())
+        record_path = Path(result["path"])
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(record["title"], "Approved taxonomy proposal")
+        self.assertEqual(record["activities"], ["Research", "Synthesis"])
+        self.assertEqual(record["evidence"][0]["quote"], "Keep the rule simple.")
+        events = [json.loads(line) for line in (self.run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(events[-1]["event"], "web_action_applied")
+        self.assertEqual(events[-1]["action"], "task.approve")
+        repeated = apply_web_action(data_root=self.data_root, run_id=run_id, action_name="task-approve")
+        self.assertEqual(repeated["record_id"], result["record_id"])
+        self.assertEqual(len(list(self.data_root.glob("*/*/*/record.json"))), 1)
+
+    def test_task_approve_action_rejects_undeclared_fields_without_writing_a_record(self) -> None:
+        from skill.scripts.claude_import import apply_web_action
+
+        run_id = self._prepare()
+        action_dir = self.run_dir / "actions"
+        action_dir.mkdir()
+        (action_dir / "task-approve.json").write_text(json.dumps({
+            "action": "task.approve", "run_id": run_id,
+            "task": {
+                "project": "Project", "goal": "Purpose", "stage": "Build", "title": "Task", "date": "2026-02-01",
+                "activity": [], "purpose": "", "tools": [], "mindset": [], "body": "Body", "evidence": [], "highlight": None,
+                "command": "touch should-not-run",
+            },
+        }), encoding="utf-8")
+
+        with self.assertRaisesRegex(ValueError, "Invalid task.approve task payload"):
+            apply_web_action(data_root=self.data_root, run_id=run_id, action_name="task-approve")
+        self.assertEqual(list(self.data_root.glob("*/*/*/record.json")), [])
+        with self.assertRaisesRegex(ValueError, "Unsupported web action"):
+            apply_web_action(data_root=self.data_root, run_id=run_id, action_name="../../task-approve")
+
     def test_apply_selections_accepts_proposal_ids_and_merges_their_sources(self) -> None:
         from skill.scripts.claude_import import apply_selections, propose_project
 

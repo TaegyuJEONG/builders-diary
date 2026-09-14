@@ -253,7 +253,15 @@ For each selected project:
    - a match to an existing Purpose and its existing section chip; or
    - a new Purpose plus exactly one lifecycle section chip.
 6. Ask the user to **approve**, edit, or drop that Task card. Include a free-text **Other** path for changes. Do not save before approval.
-7. After approval, save the Task with the source's original calendar date using `--date YYYY-MM-DD`. Saving may reuse or create the proposed Purpose; the web view must then show the Project, Purpose/section chip, and Task before moving on.
+7. After approval, have the web write the run-scoped `task.approve` action with the source's original calendar date (`--date YYYY-MM-DD`) using only `project`, `goal`, `stage`, `title`, `date`, `activity`, `purpose`, `tools`, `mindset`, `body`, `evidence`, and `highlight`; never place a command, file path, or any other field in it. Wait for the active helper to validate it and atomically invoke `save_record.py`:
+
+   ```bash
+   python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" wait-for-action \
+     --data-root "$DATA_ROOT" --run-id "<run-id>" \
+     --action task-approve --timeout 900
+   ```
+
+   The result is `imports/<run-id>/results/task-approve.json`. Only after it reports `status: applied` may the source outcome include its `record_id`. Saving may reuse or create the proposed Purpose; the web view must then show the Project, Purpose/section chip, and Task before moving on.
 8. Record the source outcome as `saved`, `dropped`, or `postponed`. For a source split into multiple Tasks, do this only after every Task from that source is resolved. When saved Tasks exist, pass every saved Task's ID using `--record-id`; this is the idempotency and provenance checkpoint.
 
    ```bash
@@ -286,25 +294,7 @@ Every retained Task card must use the daily Builder's Diary evidence rules:
 
 ## Saving and web updates
 
-Use the daily `builders-diary` helper to save a final approved Task with a Purpose and lifecycle stage:
-
-```bash
-python3 "$HOME/.claude/skills/builders-diary/scripts/save_record.py" \
-  --project "Product Builder Jobs" \
-  --goal "Curation Taxonomy" \
-  --stage "Discovery" \
-  --date "2026-03-15" \
-  --title "Define a Product Builder curation boundary" \
-  --purpose "Separate hands-on builders from AI-adjacent and conventional roles." \
-  --activity "Research,Taxonomy design" \
-  --tools "Claude Chat,Claude Code,Git" \
-  --mindset "skeptical,source-first" \
-  --progress "ongoing" \
-  --evidence-file /tmp/bd_evidence.json \
-  --body-file /tmp/bd_body.md
-```
-
-The connected web viewer polls the local portfolio folder and displays stage → Purpose → Task as each card is saved.
+The import helper is the sole portfolio writer. It validates a web `task.approve` action, calls the existing daily `save_record.py` with a fixed argument list and helper-owned temporary body/evidence files, then atomically writes `results/task-approve.json`. The connected web viewer polls the local portfolio folder and displays stage → Purpose → Task as each card is saved.
 
 ## Completion
 

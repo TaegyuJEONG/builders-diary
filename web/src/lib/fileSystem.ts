@@ -687,6 +687,39 @@ export async function writeProjectConfirmAction(handle: FileSystemDirectoryHandl
   await writable.close();
 }
 
+/** Declarative Task fields the web may send to the active import helper.
+ * The helper validates this again; the browser never chooses a command or path. */
+export interface TaskApproval {
+  project: string;
+  goal: string;
+  stage: string;
+  title: string;
+  date: string;
+  activity: string[];
+  purpose: string;
+  tools: string[];
+  mindset: string[];
+  body: string;
+  evidence: Array<{ type?: string; label?: string; url?: string; meta?: string; detail?: string; quote?: string; visibility?: string }>;
+  highlight: string | { ai?: string; builder?: string; why?: string } | null;
+}
+
+/** Write a run-scoped approval request. The Python helper is the sole portfolio writer. */
+export async function writeTaskApproveAction(handle: FileSystemDirectoryHandle, runId: string, task: TaskApproval): Promise<void> {
+  const imports = await handle.getDirectoryHandle('imports');
+  const runDir = await imports.getDirectoryHandle(runId);
+  const actions = await runDir.getDirectoryHandle('actions', { create: true });
+  const file = await actions.getFileHandle('task-approve.json', { create: true });
+  const writable = await (file as any).createWritable();
+  const allowedTask = {
+    project: task.project, goal: task.goal, stage: task.stage, title: task.title, date: task.date,
+    activity: task.activity, purpose: task.purpose, tools: task.tools, mindset: task.mindset,
+    body: task.body, evidence: task.evidence, highlight: task.highlight,
+  };
+  await writable.write(JSON.stringify({ action: 'task.approve', run_id: runId, task: allowedTask }, null, 2) + '\n');
+  await writable.close();
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');
