@@ -8,7 +8,7 @@ const source = relativePath => readFile(
   'utf8',
 );
 
-test('a fresh browser starts with installer guidance and keeps folder choice behind acknowledgement', async () => {
+test('a fresh browser requires a source choice before it shows installer guidance', async () => {
   const [onboarding, npmPackage] = await Promise.all([
     source('src/components/OnboardingScreen.tsx'),
     source('../npm/package.json'),
@@ -16,12 +16,20 @@ test('a fresh browser starts with installer guidance and keeps folder choice beh
   const { version } = JSON.parse(npmPackage);
 
   assert.equal(typeof version, 'string');
-  assert.match(onboarding, /title="Install Builder&apos;s Diary"/);
+  assert.match(onboarding, /Where should we bring in past work from\?/);
+  assert.match(onboarding, /Claude/);
+  assert.match(onboarding, /Cursor/);
+  assert.match(onboarding, /Codex CLI/);
+  assert.match(onboarding, /Hermes/);
+  assert.doesNotMatch(onboarding, /ChatGPT|Gemini|Grok|Antigravity/);
   assert.ok(onboarding.includes("import installerPackage from '../../../npm/package.json';"));
-  assert.ok(onboarding.includes('const INSTALL_COMMAND = `npx --yes builders-diary@${installerPackage.version} install --tools claude`;'));
-  assert.match(onboarding, /adds the skills needed for Claude Code/);
+  assert.match(onboarding, /function installCommand\(sources: SourceId\[\]\)/);
+  assert.match(onboarding, /tools\.push\('cursor'\)/);
+  assert.match(onboarding, /tools\.push\('codex'\)/);
+  assert.match(onboarding, /selectedSources\.length > 0 && <StepCard n=\{2\}/);
+  assert.match(onboarding, /review runs in Claude Code/);
   assert.match(onboarding, />\s*Installed — continue\s*</);
-  assert.ok(onboarding.includes("(installAcknowledged && markerStatus !== 'ok') && <StepCard n={2}"));
+  assert.ok(onboarding.includes("(selectedSources.length > 0 && installAcknowledged && markerStatus !== 'ok') && <StepCard n={3}"));
   assert.ok(onboarding.includes("done={installAcknowledged || markerStatus === 'ok'}"));
   assert.ok(onboarding.includes("markerStatus === 'ok' || installAcknowledged ?"));
   assert.doesNotMatch(onboarding, /Works with/);
@@ -37,24 +45,24 @@ test('the first add-work screen exposes exactly the two route choices', async ()
   assert.match(onboarding, /type CaptureRoute = 'choose' \| 'bulk' \| 'individual'/);
 });
 
-test('bulk route lists every supported local-history tool and keeps Claude export guidance there', async () => {
+test('bulk route directs every selected source to Claude Code without web export or path pickers', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
-  assert.match(onboarding, /Chat exports/);
-  assert.match(onboarding, /Claude Settings &gt; Privacy/);
+  assert.match(onboarding, /Open a new Claude Code chat and use the import skill\./);
   assert.match(onboarding, /Copy \/builders-diary-import/);
-  assert.match(onboarding, /From a folder/);
+
   assert.match(onboarding, /Cursor/);
   assert.match(onboarding, /Codex CLI/);
   assert.match(onboarding, /Hermes/);
-  assert.match(onboarding, /<ClaudeExportDownload \/>/);
-  assert.doesNotMatch(onboarding, /ChatGPT/);
+  assert.doesNotMatch(onboarding, /ClaudeExportDownload/);
+  assert.doesNotMatch(onboarding, /ClientRootsSettings/);
+  assert.doesNotMatch(onboarding, /manifest|download links|Local history folder/i);
 });
 
 test('individual route uses the regular skill, not export or import flow', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
-  assert.match(onboarding, /Open a new Claude Code or Desktop Code chat/);
+  assert.match(onboarding, /Open a new Claude Code chat/);
   assert.match(onboarding, /Copy \/builders-diary/);
   assert.match(onboarding, /captureRoute === 'individual'/);
 });
@@ -66,14 +74,8 @@ test('onboarding cannot enter the portfolio before an import proposal is confirm
   assert.match(onboarding, /<ImportSelectionTable onSaved={onComplete}/);
 });
 
-test('the folder picker surface uses natural language and preserves explicit opt-in safety', async () => {
+test('onboarding has no manual local-history folder input', async () => {
   const settings = await source('src/components/ClientRootsSettings.tsx');
 
-  assert.doesNotMatch(settings, /Client history connections/);
-  assert.doesNotMatch(settings, /Absolute source root/);
-  assert.doesNotMatch(settings, />Adapter</);
-  assert.doesNotMatch(settings, /coming soon/i);
-  assert.match(settings, /Choose the folder containing its local history/);
-  assert.match(settings, /selectFolder/);
-  assert.match(settings, /writeImportConfig/);
+  assert.doesNotMatch(settings, /Local history folder|Paste the folder path|selectFolder|writeImportConfig/);
 });

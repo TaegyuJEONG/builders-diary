@@ -8,19 +8,15 @@ const source = relativePath => readFile(
   'utf8',
 );
 
-test('folder import connection requires an explicit user choice and never scans home directories', async () => {
+test('browser onboarding has no local-history path control or home scan', async () => {
   const [settings, fileSystem] = await Promise.all([
     source('src/components/ClientRootsSettings.tsx'),
     source('src/lib/fileSystem.ts'),
   ]);
 
-  assert.match(settings, /Choose the folder containing its local history/);
-  assert.match(settings, /Choose this folder/);
-  assert.match(settings, /Cursor/);
-  assert.match(settings, /Codex CLI/);
-  assert.match(settings, /Hermes/);
+  assert.match(settings, /known local location in Claude Code/);
+  assert.doesNotMatch(settings, /input|folder path|selectFolder|writeImportConfig/i);
   assert.doesNotMatch(settings, /scanHome|readdir\(.*home|recursive.*home/i);
-  assert.match(settings, /selectFolder/);
   assert.match(fileSystem, /readImportConfig/);
   assert.match(fileSystem, /writeImportConfig/);
 });

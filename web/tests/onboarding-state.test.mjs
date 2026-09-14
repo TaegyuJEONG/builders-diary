@@ -34,12 +34,12 @@ test('an arbitrary connected folder without a marker offers another folder choic
   assert.match(onboarding, /Choose another folder/);
 });
 
-test('step three first asks bulk import versus individual capture without a deep link', async () => {
+test('route choices are neutral until the user explicitly clicks one', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
-  assert.match(onboarding, />\s*Bulk import\s*</);
+  assert.match(onboarding, /routeButton\(false\)/);
   assert.match(onboarding, />\s*Add one conversation\s*</);
-  assert.match(onboarding, /Open a new Claude Code or Desktop Code chat/);
+  assert.match(onboarding, /Open a new Claude Code chat and use the import skill/);
   assert.doesNotMatch(onboarding, /claude:\/\//);
   assert.doesNotMatch(onboarding, /Enter portfolio/);
 });
