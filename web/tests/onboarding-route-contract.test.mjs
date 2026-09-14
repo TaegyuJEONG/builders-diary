@@ -8,14 +8,23 @@ const source = relativePath => readFile(
   'utf8',
 );
 
-test('onboarding starts with a folder step rather than an internal tool chooser', async () => {
-  const onboarding = await source('src/components/OnboardingScreen.tsx');
+test('a fresh browser starts with installer guidance and keeps folder choice behind acknowledgement', async () => {
+  const [onboarding, npmPackage] = await Promise.all([
+    source('src/components/OnboardingScreen.tsx'),
+    source('../npm/package.json'),
+  ]);
+  const { version } = JSON.parse(npmPackage);
 
-  assert.match(onboarding, /title="Import your portfolio"/);
+  assert.equal(typeof version, 'string');
+  assert.match(onboarding, /title="Install Builder&apos;s Diary"/);
+  assert.ok(onboarding.includes("import installerPackage from '../../../npm/package.json';"));
+  assert.ok(onboarding.includes('const INSTALL_COMMAND = `npx --yes builders-diary@${installerPackage.version} install --tools claude`;'));
+  assert.match(onboarding, /adds the skills needed for Claude Code/);
+  assert.match(onboarding, />\s*Installed — continue\s*</);
+  assert.ok(onboarding.includes("(installAcknowledged && markerStatus !== 'ok') && <StepCard n={2}"));
   assert.doesNotMatch(onboarding, /Works with/);
-  assert.doesNotMatch(onboarding, /phase === 'choose'/);
   assert.doesNotMatch(onboarding, /Install the skill/);
-  assert.doesNotMatch(onboarding, /npx --yes builders-diary/);
+  assert.doesNotMatch(onboarding, /adapter|absolute source root|client history connections|enabled|coming soon/i);
 });
 
 test('the first add-work screen exposes exactly the two route choices', async () => {

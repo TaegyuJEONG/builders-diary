@@ -7,6 +7,7 @@ import { ImportProgress } from '@/components/ImportProgress';
 import { ImportSelectionTable } from '@/components/ImportSelectionTable';
 import { ClaudeExportDownload } from '@/components/ClaudeExportDownload';
 import { ClientRootsSettings } from '@/components/ClientRootsSettings';
+import installerPackage from '../../../npm/package.json';
 
 interface OnboardingScreenProps {
   onSelectFolder: () => void;
@@ -24,6 +25,7 @@ interface OnboardingScreenProps {
 
 const IMPORT_PROMPT = '/builders-diary-import';
 const RECORD_PROMPT = '/builders-diary';
+const INSTALL_COMMAND = `npx --yes builders-diary@${installerPackage.version} install --tools claude`;
 const FOLDER_TOOLS = [
   { id: 'cursor', label: 'Cursor', instruction: 'Choose the folder containing your Cursor conversation history.' },
   { id: 'codex', label: 'Codex CLI', instruction: 'Choose the folder containing your Codex CLI session history.' },
@@ -39,6 +41,7 @@ export function OnboardingScreen({
   selectedClients, setSelectedClients, onComplete, importRuns = [], importRefreshKey = 0,
 }: OnboardingScreenProps) {
   const [markerStatus, setMarkerStatus] = useState<MarkerStatus>('unchecked');
+  const [installAcknowledged, setInstallAcknowledged] = useState(false);
   const [captureRoute, setCaptureRoute] = useState<CaptureRoute>('choose');
   const [bulkTool, setBulkTool] = useState<BulkTool>(null);
   const [individualTool, setIndividualTool] = useState<string | null>(null);
@@ -93,21 +96,34 @@ export function OnboardingScreen({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <StepCard n={1} active={markerStatus !== 'ok'} done={markerStatus === 'ok'} title="Import your portfolio">
+          <StepCard n={1} active={markerStatus !== 'ok'} done={markerStatus === 'ok'} title="Install Builder&apos;s Diary">
+            {markerStatus === 'ok' ? <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Installed</div> : <>
+              <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 12px' }}>
+                Run this once. It adds the skills needed for Claude Code.
+              </p>
+              <code className="mono" style={{ display: 'block', padding: '10px 12px', marginBottom: 14, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 11.5, overflowX: 'auto' }}>{INSTALL_COMMAND}</code>
+              <button onClick={() => setInstallAcknowledged(true)} className="mono" style={primaryButton(false)}>Installed — continue</button>
+            </>}
+          </StepCard>
+
+          {(installAcknowledged && markerStatus !== 'ok') && <StepCard n={2} active done={false} title="Connect your folder">
             <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
-              Choose your Builder&apos;s Diary folder to keep your portfolio private and on this computer.
+              The installer created <code className="mono">Documents/builders-diary</code>. Choose that folder to keep your portfolio private and on this computer.
             </p>
-            {markerStatus !== 'ok' && <button onClick={onSelectFolder} disabled={isLoading || markerStatus === 'checking'} className="mono" style={primaryButton(isLoading || markerStatus === 'checking')}>
+            <button onClick={onSelectFolder} disabled={isLoading || markerStatus === 'checking'} className="mono" style={primaryButton(isLoading || markerStatus === 'checking')}>
               {isLoading ? 'Connecting…' : markerStatus === 'checking' ? 'Checking…' : markerStatus === 'missing' ? 'Choose another folder' : 'Choose folder'}
-            </button>}
+            </button>
             {error && <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>}
-            {markerStatus === 'ok' && <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Folder connected</div>}
             {markerStatus === 'missing' && <p className="mono" style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.6, margin: '12px 0 0' }}>
               This folder is not a Builder&apos;s Diary portfolio{folderPath ? ` (you picked “${folderPath}”)` : ''}. Choose the folder where you already set up Builder&apos;s Diary.
             </p>}
-          </StepCard>
+          </StepCard>}
 
-          {markerStatus === 'ok' && <StepCard n={3} active done={false} title="Add your work">
+          {markerStatus === 'ok' && <StepCard n={2} active={false} done title="Connect your folder">
+            <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Folder connected</div>
+          </StepCard>}
+
+          {markerStatus === 'ok' && <StepCard n={3} active done={false} title="Import your portfolio">
             {needsReview ? (
               <>
                 <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 14px' }}>Your import is ready. Confirm the projects you want in your portfolio.</p>
