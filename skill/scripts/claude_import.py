@@ -51,6 +51,7 @@ VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
 WEB_ACTIONS = {
     "project-confirm": "project.confirm",
     "task-approve": "task.approve",
+    "task-drop": "task.drop",
 }
 TASK_ACTION_FIELDS = {
     "project", "goal", "stage", "title", "date", "activity", "purpose",
@@ -1249,6 +1250,23 @@ def _apply_task_approve(*, data_root: str | Path, run_dir: Path, action: Any, ru
     return saved
 
 
+def _apply_task_drop(*, action: Any, run_id: str) -> dict[str, Any]:
+    canonical = read_action_from_payload(action, run_id=run_id, action_name="task.drop")
+    proposal_id = canonical["payload"].get("proposal_id")
+    if not isinstance(proposal_id, str) or not proposal_id.strip():
+        raise ValueError("task.drop requires a non-empty proposal_id")
+    return {"status": "applied", "dropped": proposal_id}
+
+
+def read_action_from_payload(action: Any, *, run_id: str, action_name: str) -> dict[str, Any]:
+    """Validate an in-memory action using the shared versioned protocol."""
+    try:
+        from .action_protocol import validate_action
+    except ImportError:
+        from action_protocol import validate_action
+    return validate_action(action, run_id=run_id, action_name=action_name, allow_legacy=True)
+
+
 def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) -> dict[str, Any]:
     """Apply one allowlisted, run-scoped web action through the helper only."""
     if action_name not in WEB_ACTIONS:
@@ -1279,7 +1297,7 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
         applied = apply_selections(data_root=data_root, run_id=run_id)
         result = {"status": "applied", **applied}
         event_details = {"action": "project.confirm", "confirmed": len(applied["confirmed"])}
-    else:
+    elif action_name == "task-approve":
         saved = _apply_task_approve(
             data_root=data_root,
             run_dir=run_dir,
@@ -1288,6 +1306,9 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
         )
         result = {"status": "applied", **saved}
         event_details = {"action": "task.approve", "record_id": saved["record_id"]}
+    else:
+        result = _apply_task_drop(action=action, run_id=run_id)
+        event_details = {"action": "task.drop", "proposal_id": result["dropped"]}
     envelope = create_result(action["action_id"], "applied", result)
     # Keep legacy flattened fields for callers while publishing the shared envelope.
     stored_result = {**envelope, **result}

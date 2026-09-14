@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
-ALLOWED_ACTIONS = {"project.confirm", "task.approve"}
+ALLOWED_ACTIONS = {"project.confirm", "task.approve", "task.drop"}
 RESULT_STATUSES = {"applied", "rejected", "error", "timeout"}
 _ENVELOPE_KEYS = {"schema_version", "action_id", "action", "run_id", "created_at", "payload"}
 _RESULT_KEYS = {"schema_version", "action_id", "status", "applied_at", "result", "error"}
@@ -36,10 +36,10 @@ def _check_action_name(action: Any) -> None:
 def _validate_payload(action: Any, payload: Any) -> None:
     if not isinstance(payload, dict):
         raise ValueError("payload must be an object")
-    expected = {"projects"} if action == "project.confirm" else {"task"}
+    expected = {"projects"} if action == "project.confirm" else ({"task"} if action == "task.approve" else {"proposal_id"})
     if set(payload) != expected:
         raise ValueError(f"{action} payload has invalid fields")
-    if not isinstance(payload[next(iter(expected))], (list if action == "project.confirm" else dict)):
+    if not isinstance(payload[next(iter(expected))], (list if action == "project.confirm" else dict if action == "task.approve" else str)):
         raise ValueError(f"{action} payload has invalid fields")
 
 

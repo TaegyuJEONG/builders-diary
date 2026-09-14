@@ -81,6 +81,11 @@ class ActionProtocolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unsupported web action"):
                 read_action(path, run_id="run-1", action_name="../../x")
 
+    def test_task_drop_is_an_allowlisted_versioned_action(self):
+        action = create_action("task.drop", "run-1", {"proposal_id": "proposal-1"})
+        self.assertEqual(action["action"], "task.drop")
+        self.assertEqual(validate_action(action, run_id="run-1")["payload"], {"proposal_id": "proposal-1"})
+
 
 if __name__ == "__main__":
     unittest.main()

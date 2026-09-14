@@ -820,6 +820,24 @@ class ClaudeImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported web action"):
             apply_web_action(data_root=self.data_root, run_id=run_id, action_name="../../task-approve")
 
+    def test_task_drop_action_writes_applied_result_without_a_portfolio_record(self) -> None:
+        from skill.scripts.claude_import import apply_web_action
+        from skill.scripts.action_protocol import create_action
+
+        run_id = self._prepare()
+        action_dir = self.run_dir / "actions"
+        action_dir.mkdir()
+        (action_dir / "task-drop.json").write_text(json.dumps(
+            create_action("task.drop", run_id, {"proposal_id": "proposal-1"}),
+        ), encoding="utf-8")
+
+        result = apply_web_action(data_root=self.data_root, run_id=run_id, action_name="task-drop")
+
+        self.assertEqual(result["status"], "applied")
+        self.assertEqual(result["dropped"], "proposal-1")
+        self.assertTrue((self.run_dir / "results" / "task-drop.json").is_file())
+        self.assertEqual(list(self.data_root.glob("*/*/*/record.json")), [])
+
     def test_apply_selections_accepts_proposal_ids_and_merges_their_sources(self) -> None:
         from skill.scripts.claude_import import apply_selections, propose_project
 

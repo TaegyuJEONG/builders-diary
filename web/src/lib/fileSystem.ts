@@ -594,6 +594,80 @@ export interface ImportProposalProject {
   claude_code: ImportSourcePreview[];
 }
 
+export interface TaskProposal {
+  id: string;
+  source_ref: string;
+  project: string;
+  purpose: string;
+  stage: string;
+  title: string;
+  date: string;
+  activities: string[];
+  task_aim: string;
+  tools: string[];
+  mindset: string[];
+  body: string;
+  highlight: TaskApproval['highlight'];
+  evidence_candidates: TaskApproval['evidence'];
+  status: 'pending' | 'approved' | 'dropped';
+}
+
+function strings(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(item => typeof item === 'string').map(String) : [];
+}
+
+function normalizeTaskProposal(raw: any, fallbackId: string): TaskProposal | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const id = String(raw.id || raw.proposal_id || fallbackId).trim();
+  const title = String(raw.title || '').trim();
+  if (!id || !title) return null;
+  return {
+    id,
+    source_ref: String(raw.source_ref || raw.source || '').trim(),
+    project: String(raw.project || raw.project_name || '').trim(),
+    purpose: String(raw.purpose || raw.goal || '').trim(),
+    stage: String(raw.stage || '').trim(),
+    title,
+    date: String(raw.date || raw.source_date || '').trim(),
+    activities: strings(raw.activities || raw.activity),
+    task_aim: String(raw.task_aim || raw.aim || raw.purpose_text || '').trim(),
+    tools: strings(raw.tools),
+    mindset: strings(raw.mindset),
+    body: String(raw.body || raw.summary || '').trim(),
+    highlight: raw.highlight && (typeof raw.highlight === 'string' || typeof raw.highlight === 'object') ? raw.highlight : null,
+    evidence_candidates: Array.isArray(raw.evidence_candidates)
+      ? raw.evidence_candidates.filter((item: any) => item && typeof item === 'object' && Object.values(item).every(value => typeof value === 'string'))
+      : [],
+    status: raw.status === 'approved' || raw.status === 'dropped' ? raw.status : 'pending',
+  };
+}
+
+/** Read only normalized, agent-written Task proposal files from the latest import run. */
+export async function readTaskProposals(handle: FileSystemDirectoryHandle): Promise<{ runId: string; proposals: TaskProposal[] } | null> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runs: string[] = [];
+    for await (const [name, entry] of imports.entries()) {
+      if (entry.kind === 'directory' && !name.startsWith('.')) runs.push(name);
+    }
+    runs.sort().reverse();
+    for (const runId of runs) {
+      const runDir = await imports.getDirectoryHandle(runId);
+      const proposalsDir = await runDir.getDirectoryHandle('task-proposals');
+      const proposals: TaskProposal[] = [];
+      for await (const [name, entry] of proposalsDir.entries()) {
+        if (entry.kind !== 'file' || !name.endsWith('.json') || name.startsWith('.')) continue;
+        const proposal = normalizeTaskProposal(await readJson(proposalsDir, name), name.slice(0, -5));
+        if (proposal) proposals.push(proposal);
+      }
+      return { runId, proposals: proposals.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title)) };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /** Read only the agent-classified project proposal. Raw discovery is deliberately not UI input. */
 export async function readProjectProposal(handle: FileSystemDirectoryHandle): Promise<{ runId: string; status: 'draft' | 'finalized'; projects: ImportProposalProject[] } | null> {
   try {
@@ -716,8 +790,34 @@ export async function writeTaskApproveAction(handle: FileSystemDirectoryHandle, 
     activity: task.activity, purpose: task.purpose, tools: task.tools, mindset: task.mindset,
     body: task.body, evidence: task.evidence, highlight: task.highlight,
   };
-  await writable.write(JSON.stringify({ action: 'task.approve', run_id: runId, task: allowedTask }, null, 2) + '\n');
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'task.approve', run_id: runId, created_at: new Date().toISOString(), payload: { task: allowedTask } }, null, 2) + '\n');
   await writable.close();
+}
+
+export async function writeTaskDropAction(handle: FileSystemDirectoryHandle, runId: string, proposalId: string): Promise<void> {
+  if (!proposalId.trim() || proposalId.includes('/') || proposalId.includes('\\')) throw new Error('Invalid task proposal id');
+  const imports = await handle.getDirectoryHandle('imports');
+  const runDir = await imports.getDirectoryHandle(runId);
+  const actions = await runDir.getDirectoryHandle('actions', { create: true });
+  const file = await actions.getFileHandle('task-drop.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'task.drop', run_id: runId, created_at: new Date().toISOString(), payload: { proposal_id: proposalId } }, null, 2) + '\n');
+  await writable.close();
+}
+
+export async function waitForTaskActionResult(handle: FileSystemDirectoryHandle, runId: string, action: 'approve' | 'drop', timeoutMs = 900000): Promise<{ status: string; result?: { [key: string]: unknown }; error?: string } | null> {
+  const started = Date.now();
+  const resultName = action === 'approve' ? 'task-approve.json' : 'task-drop.json';
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const imports = await handle.getDirectoryHandle('imports');
+      const runDir = await imports.getDirectoryHandle(runId);
+      const result = await readJson(await runDir.getDirectoryHandle('results'), resultName);
+      if (result) return result;
+    } catch { /* helper may not have created the result directory yet */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'Claude Code did not apply the Task decision in time.' };
 }
 
 export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; confirmed?: string[]; error?: string } | null> {

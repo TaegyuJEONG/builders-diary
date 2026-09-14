@@ -253,6 +253,9 @@ For each selected project:
    - a match to an existing Purpose and its existing section chip; or
    - a new Purpose plus exactly one lifecycle section chip.
 6. Ask the user to **approve**, edit, or drop that Task card. Include a free-text **Other** path for changes. Do not save before approval.
+
+   Before asking, write each declarative proposal under `imports/<run-id>/task-proposals/<proposal-id>.json`. Each file must contain `id`, `source_ref`, `project`, `purpose`, `stage`, `title`, `date`, `activities`, `task_aim`, `tools`, `mindset`, `body`, `highlight`, `evidence_candidates`, and `status: "pending"`. The web reads only these files; never expose raw transcripts, commands, or source paths.
+
 7. After approval, have the web write the run-scoped `task.approve` action with the source's original calendar date (`--date YYYY-MM-DD`) using only `project`, `goal`, `stage`, `title`, `date`, `activity`, `purpose`, `tools`, `mindset`, `body`, `evidence`, and `highlight`; never place a command, file path, or any other field in it. Wait for the active helper to validate it and atomically invoke `save_record.py`:
 
    ```bash
@@ -262,6 +265,8 @@ For each selected project:
    ```
 
    The result is `imports/<run-id>/results/task-approve.json`. Only after it reports `status: applied` may the source outcome include its `record_id`. Saving may reuse or create the proposed Purpose; the web view must then show the Project, Purpose/section chip, and Task before moving on.
+
+   For **Drop**, the web writes a versioned `task.drop` action to `actions/task-drop.json` with only the proposal ID. Wait with `--action task-drop`; only `results/task-drop.json` with `status: applied` removes the card from the queue. A dropped proposal never writes the portfolio.
 8. Record the source outcome as `saved`, `dropped`, or `postponed`. For a source split into multiple Tasks, do this only after every Task from that source is resolved. When saved Tasks exist, pass every saved Task's ID using `--record-id`; this is the idempotency and provenance checkpoint.
 
    ```bash

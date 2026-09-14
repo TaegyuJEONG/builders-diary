@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { ImportSelectionTable } from '@/components/ImportSelectionTable';
+import { TaskProposalQueue } from '@/components/TaskProposalQueue';
 
 interface ImportReviewProps {
   onClose: () => void;
@@ -39,6 +40,9 @@ export function ImportReview({ onClose, onSaved, refreshKey = 0 }: ImportReviewP
             another, then save. Claude Code picks up your choices and writes the projects.
           </p>
           <ImportSelectionTable onSaved={onSaved} refreshKey={refreshKey} />
+          <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
+            <TaskProposalQueue onSaved={onSaved} refreshKey={refreshKey} />
+          </div>
         </div>
       </aside>
     </div>

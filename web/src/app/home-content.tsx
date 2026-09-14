@@ -8,6 +8,7 @@ import { OnboardingScreen } from '@/components/OnboardingScreen';
 import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { ManagePanel, ManageMode } from '@/components/ManagePanel';
 import { ImportReview } from '@/components/ImportReview';
+import { TaskProposalQueue } from '@/components/TaskProposalQueue';
 import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -540,6 +541,8 @@ export function HomeContent() {
       {totalRecordCount === 0 && (
         <FirstRecordBanner toolId={selectedClients[0]} />
       )}
+
+      <TaskProposalQueue onSaved={refreshPortfolio} refreshKey={importTick} />
 
       {error && (
         <div className="mono" style={{
