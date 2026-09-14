@@ -1,0 +1,25 @@
+{
+  "sources": [
+    {
+      "client": "claude",
+      "source_id": "chat-1",
+      "source_ref": "fixture:chat-1",
+      "title": "Build release gate",
+      "content": "run tests and deploy web"
+    },
+    {
+      "client": "cursor",
+      "source_id": "chat-2",
+      "source_ref": "fixture:chat-2",
+      "title": "Build release gate",
+      "content": "run tests and deploy web"
+    },
+    {
+      "client": "codex",
+      "source_id": "chat-3",
+      "source_ref": "fixture:chat-3",
+      "title": "Build release",
+      "content": "run tests deploy web application"
+    }
+  ]
+}

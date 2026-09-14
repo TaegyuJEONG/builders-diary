@@ -1,0 +1,8 @@
+{
+  "claude": [
+    {
+      "adapter_id": "claude_chat_export",
+      "path": "/tmp/fixture-root"
+    }
+  ]
+}

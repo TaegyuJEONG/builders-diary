@@ -1,6 +1,6 @@
 {
   "name": "builders-diary",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Record what you actually judged in a work session \u2014 a local, judgment-first portfolio for AI-native builders. Installs a skill into Claude Code, Cursor, Windsurf, Codex, or Antigravity.",
   "bin": {
     "builders-diary": "bin/cli.js"
@@ -11,6 +11,10 @@
     "skill/scripts/save_record.py",
     "skill/scripts/action_protocol.py",
     "skill/scripts/project_actions.py",
+    "skill/scripts/task_actions.py",
+    "skill/scripts/client_roots.py",
+    "skill/scripts/source_dedup.py",
+    "skill/scripts/adapters",
     "skill/scripts/claude_import.py",
     "import-skill/SKILL.md"
   ],

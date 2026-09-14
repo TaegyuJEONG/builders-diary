@@ -1,0 +1,23 @@
+{
+  "project": {
+    "id": "fixture-project",
+    "slug": "fixture-project",
+    "title": "Synthetic Release Project"
+  },
+  "tasks": [
+    {
+      "id": "fixture-task-1",
+      "title": "Project action",
+      "source_refs": [
+        "fixture:task-1"
+      ]
+    },
+    {
+      "id": "fixture-task-2",
+      "title": "Task action",
+      "source_refs": [
+        "fixture:task-2"
+      ]
+    }
+  ]
+}
