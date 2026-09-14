@@ -24,6 +24,7 @@ test('a connected valid installation keeps the capture choice visible until expl
   assert.match(onboarding, /phase === 'choose'/);
   assert.match(home, /installMarker/);
   assert.match(home, /A connected folder alone does not complete onboarding/);
+  assert.match(home, /setOnboardingDone\(\(data\.projects \|\| \[\]\)\.length > 0\)/);
 });
 
 test('an arbitrary connected folder without a marker offers initialization, not an error', async () => {

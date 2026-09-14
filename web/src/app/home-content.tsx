@@ -150,7 +150,7 @@ export function HomeContent() {
               // 실제 데이터가 있으면 그걸 쓰고, 빈 폴더면 빈 portfolio 그대로 표시
               setPortfolio(data);
               setConnected(true);
-              setOnboardingDone(true);
+              setOnboardingDone((data.projects || []).length > 0);
               initSelection(data);
               setHydrated(true);
               return;
