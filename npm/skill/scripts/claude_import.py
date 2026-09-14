@@ -16,6 +16,7 @@ import hashlib
 import html
 import json
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -496,12 +497,35 @@ def prepare_import_run(
     data_root: str | Path,
     export_dir: str | Path,
     claude_config_dir: str | Path,
+    selected_clients: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Build a private, resumable import index below data_root/imports only."""
     root = Path(data_root).expanduser()
     chat_index = scan_export_directory(export_dir)
     code_index = scan_claude_code_sessions(claude_config_dir)
-    source_index = {"chat": chat_index, "code": code_index}
+    selected_clients = selected_clients or {}
+    client_index: dict[str, dict[str, Any]] = {}
+    adapter_classes: dict[str, Any] = {}
+    if selected_clients:
+        try:
+            from .adapters.cursor import CursorAdapter
+            from .adapters.codex import CodexAdapter
+            from .adapters.hermes import HermesAdapter
+        except ImportError:
+            from adapters.cursor import CursorAdapter
+            from adapters.codex import CodexAdapter
+            from adapters.hermes import HermesAdapter
+        adapter_classes = {"cursor": CursorAdapter, "codex": CodexAdapter, "hermes": HermesAdapter}
+    for client_id, client_root in selected_clients.items():
+        adapter_class = adapter_classes.get(client_id)
+        if adapter_class is None:
+            client_index[client_id] = {"status": "blocked", "sources": [], "reason": "This source is not supported."}
+            continue
+        try:
+            client_index[client_id] = {"status": "found", "sources": [source.to_dict() for source in adapter_class(client_root).discover()]}
+        except (OSError, ValueError, sqlite3.Error) as error:
+            client_index[client_id] = {"status": "not_found", "sources": [], "reason": str(error)}
+    source_index = {"chat": chat_index, "code": code_index, "clients": client_index}
     catalog = _source_catalog(source_index)
     classifications, _ = _classify_sources(root, catalog)
     dedup_report = deduplicate_sources(list(catalog.values()))
@@ -620,6 +644,12 @@ def _source_catalog(source_index: dict[str, Any]) -> dict[str, dict[str, Any]]:
             continue
         source_ref = f"code:{source_id}"
         catalog.setdefault(source_ref, {**session, "source_ref": source_ref, "kind": "code", "client": "code"})
+    for client_id, entry in source_index.get("clients", {}).items():
+        for source in entry.get("sources", []):
+            source_id = source.get("source_id")
+            source_ref = source.get("source_ref") or (f"{client_id}:{source_id}" if source_id else "")
+            if source_ref:
+                catalog.setdefault(source_ref, {**source, "source_ref": source_ref, "client": client_id})
     return catalog
 
 
@@ -1622,6 +1652,7 @@ def main() -> int:
     prepare.add_argument("--data-root", required=True)
     prepare.add_argument("--export-dir", required=True)
     prepare.add_argument("--claude-config-dir", default="~/.claude")
+    prepare.add_argument("--sources", default="", help="Comma-separated selected local sources: cursor,codex,hermes")
 
     list_runs_cmd = sub.add_parser("list-runs", help="List resumable import runs without source content")
     list_runs_cmd.add_argument("--data-root", required=True)
@@ -1718,7 +1749,19 @@ def main() -> int:
     elif args.command == "scan-code":
         print(json.dumps(scan_claude_code_sessions(args.claude_config_dir), ensure_ascii=False, indent=2))
     elif args.command == "prepare":
-        print(json.dumps(prepare_import_run(data_root=args.data_root, export_dir=args.export_dir, claude_config_dir=args.claude_config_dir), ensure_ascii=False, indent=2))
+        selected = [item.strip() for item in args.sources.split(",") if item.strip()]
+        if selected:
+            try:
+                from .client_roots import discover_default_roots
+            except ImportError:
+                from client_roots import discover_default_roots
+            discovery = discover_default_roots(selected)
+            roots = {client_id: item["path"] for client_id, item in discovery.items() if item.get("status") == "found"}
+        else:
+            discovery, roots = {}, {}
+        result = prepare_import_run(data_root=args.data_root, export_dir=args.export_dir, claude_config_dir=args.claude_config_dir, selected_clients=roots)
+        result["selected_source_discovery"] = discovery
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.command == "list-runs":
         print(json.dumps(list_import_runs(data_root=args.data_root), ensure_ascii=False, indent=2))
     elif args.command == "confirm-project":

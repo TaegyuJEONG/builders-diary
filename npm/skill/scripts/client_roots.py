@@ -1,8 +1,4 @@
-"""Validation and persistence model for explicitly approved client history roots.
-
-This module intentionally contains no discovery code. A root is usable only after
-an application or user supplies its absolute path and it is validated here.
-"""
+"""Safe, selected-only discovery of verified local client locations."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,6 +14,35 @@ CLIENT_ADAPTER_IDS: dict[str, tuple[str, ...]] = {
     "antigravity": (),
     "hermes": ("hermes",),
 }
+
+
+def discover_default_roots(selected_clients: list[str], *, home: str | Path | None = None, hermes_profile: str | None = None) -> dict[str, dict[str, str]]:
+    """Check only known paths for the explicitly selected clients.
+
+    This performs existence/readability checks only; adapters do not read source
+    content until the caller starts an import.
+    """
+    base = Path(home).expanduser() if home is not None else Path.home()
+    result: dict[str, dict[str, str]] = {}
+    for client_id in selected_clients:
+        if client_id == "cursor":
+            root = base / "Library/Application Support/Cursor/User/globalStorage"
+            found = (root / "conversation-search.db").is_file() and root.is_dir() and root.stat()
+            result[client_id] = {"status": "found" if found else "not_found", "path": str(root)}
+        elif client_id == "codex":
+            root = base / ".codex"
+            found = (root / "sessions").is_dir() and root.stat()
+            result[client_id] = {"status": "found" if found else "not_found", "path": str(root)}
+        elif client_id == "hermes":
+            profiles = base / ".hermes" / "profiles"
+            candidates = [profiles / hermes_profile / "state.db"] if hermes_profile else sorted(profiles.glob("*/state.db"))
+            database = next((path for path in candidates if path.is_file()), None)
+            result[client_id] = {"status": "found" if database else "not_found", "path": str(database or (profiles / (hermes_profile or "<profile>") / "state.db"))}
+        elif client_id == "claude":
+            result[client_id] = {"status": "found", "path": str(base / ".claude")}
+        else:
+            result[client_id] = {"status": "blocked", "reason": "This source is not supported."}
+    return result
 
 
 def validate_source_root(value: str | Path) -> Path:
