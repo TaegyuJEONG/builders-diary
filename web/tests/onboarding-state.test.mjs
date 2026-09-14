@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+
+const source = async relativePath => readFile(
+  fileURLToPath(new URL(`../${relativePath}`, import.meta.url)),
+  'utf8',
+);
+
+test('onboarding derives its step from the folder handle and install marker', async () => {
+  const onboarding = await source('src/components/OnboardingScreen.tsx');
+  const fileSystem = await source('src/lib/fileSystem.ts');
+
+  assert.match(fileSystem, /readInstallMarker/);
+  assert.match(onboarding, /markerStatus === 'ok'/);
+  assert.match(onboarding, /CaptureMode|captureMode|Choose how to add work/);
+});
+
+test('a connected valid installation never shows the tool selection step again', async () => {
+  const onboarding = await source('src/components/OnboardingScreen.tsx');
+  const home = await source('src/app/home-content.tsx');
+
+  // The choose step must be conditional, not the unconditional first render.
+  assert.match(onboarding, /phase === 'choose'/);
+  // The home gate must allow an already-installed connected user past setup.
+  assert.match(home, /installMarker/);
+});
+
+test('an arbitrary connected folder without a marker offers initialization, not an error', async () => {
+  const onboarding = await source('src/components/OnboardingScreen.tsx');
+
+  assert.doesNotMatch(onboarding, /wasn&apos;t set up by the installer/);
+  assert.match(onboarding, /initialize|Initialize/);
+});

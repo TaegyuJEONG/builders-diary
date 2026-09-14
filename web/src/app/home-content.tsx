@@ -232,6 +232,15 @@ export function HomeContent() {
     completeOnboarding();
   }, [onboardingDone, connected, portfolio, completeOnboarding]);
 
+  // A connected folder with a valid install marker is an installed user: never
+  // make them re-run tool selection or the install step on a fresh browser
+  // session. The marker is the durable proof, not localStorage.
+  useEffect(() => {
+    if (onboardingDone || !connected) return;
+    if (!installMarker?.version) return;
+    completeOnboarding();
+  }, [onboardingDone, connected, installMarker, completeOnboarding]);
+
   const doConnect = useCallback(async (data: Portfolio) => {
     setPortfolio(data);
     setConnected(true);

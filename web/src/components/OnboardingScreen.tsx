@@ -44,14 +44,14 @@ const CLIENTS = [
   { id: 'codex',    label: 'Codex CLI',     desc: 'OpenAI',            available: false },
 ];
 
-type Phase = 'select' | 'steps';
+type Phase = 'choose' | 'steps';
 type MarkerStatus = 'unchecked' | 'checking' | 'ok' | 'missing';
 
 export function OnboardingScreen({
   onSelectFolder, isLoading, error, folderConnected, connectNonce = 0, folderPath,
   selectedClients, setSelectedClients, onComplete, importRuns = [], importRefreshKey = 0,
 }: OnboardingScreenProps) {
-  const [phase, setPhase] = useState<Phase>('select');
+  const [phase, setPhase] = useState<Phase>('choose');
   const [copied, setCopied] = useState<string | null>(null);
   const [markerStatus, setMarkerStatus] = useState<MarkerStatus>('unchecked');
   const [installConfirmed, setInstallConfirmed] = useState(false);
@@ -102,7 +102,7 @@ export function OnboardingScreen({
   }
 
   function goBackToSelect() {
-    setPhase('select');
+    setPhase('choose');
     setMarkerStatus('unchecked');
     setInstallConfirmed(false);
   }
@@ -142,8 +142,8 @@ export function OnboardingScreen({
           Only the records you choose to share are ever sent to us.
         </div>
 
-        {/* ════ PHASE: SELECT ════ */}
-        {phase === 'select' && (
+        {/* ════ PHASE: CHOOSE (tool selection before install) ════ */}
+        {phase === 'choose' && (
           <>
             <p className="mono" style={{
               fontSize: 10, color: 'var(--text3)',
@@ -344,36 +344,25 @@ export function OnboardingScreen({
                     <div style={{
                       marginTop: 14,
                       background: 'var(--surface)',
-                      border: '1px solid var(--danger)',
+                      border: '1px solid var(--border)',
                       borderRadius: 6, padding: '12px 14px',
                     }}>
-                      <div className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginBottom: 6 }}>
-                        That folder wasn&apos;t set up by the installer{folderPath ? ` (you picked “${folderPath}”)` : ''}.
+                      <div className="mono" style={{ fontSize: 11, color: 'var(--text2)', marginBottom: 6 }}>
+                        This folder is not initialized as a Builder&apos;s Diary portfolio{folderPath ? ` (you picked “${folderPath}”)` : ''}.
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.7 }}>
-                        Make sure the command in step 1 ran without errors, then pick the{' '}
-                        <code className="mono" style={{ fontSize: 11.5, color: 'var(--text)' }}>builders-diary</code>{' '}
-                        folder in your Documents.
+                        Run the install command above with{' '}
+                        <code className="mono" style={{ fontSize: 11.5, color: 'var(--text)' }}>--data-root</code>{' '}
+                        pointing at this folder to initialize it, then reconnect. Your existing files are never touched.
                       </div>
-                      <button
-                        onClick={onComplete}
-                        className="mono"
-                        style={{
-                          marginTop: 10, background: 'none', border: 'none',
-                          color: 'var(--text3)', fontSize: 10.5, cursor: 'pointer',
-                          padding: 0, textDecoration: 'underline',
-                        }}
-                      >
-                        I know what I&apos;m doing — use this folder anyway
-                      </button>
                     </div>
                   )}
                 </StepCard>
               )}
 
-              {/* ── STEP 3: Start importing (revealed after folder connects) ── */}
+              {/* ── STEP 3: Choose how to add work (revealed after folder connects) ── */}
               {markerStatus === 'ok' && (
-                <StepCard n={3} active done={false} title="Bring in your past work">
+                <StepCard n={3} active done={false} title="Choose how to add work">
                   {latestRun && (
                     <div style={{ marginBottom: 14 }}>
                       <ImportProgress runs={importRuns} toolId={selectedClients[0] || 'claude'} />
