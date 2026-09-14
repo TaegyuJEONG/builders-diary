@@ -3,13 +3,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 
-const root = path.resolve('web');
+const repo = path.resolve('..');
+const root = path.join(repo, 'web');
 const source = file => fs.readFile(path.join(root, file), 'utf8');
 
 test('new task and edit writers never write PM progress', async () => {
   const [fsSource, saver, detail] = await Promise.all([
     source('src/lib/fileSystem.ts'),
-    fs.readFile(path.resolve('skill/scripts/save_record.py'), 'utf8'),
+    fs.readFile(path.join(repo, 'skill/scripts/save_record.py'), 'utf8'),
     source('src/components/DetailPanel.tsx'),
   ]);
   assert.doesNotMatch(saver, /["']progress["']\s*:/);
