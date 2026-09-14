@@ -14,7 +14,7 @@ from skill.scripts.adapters.cursor import CursorAdapter
 from skill.scripts.adapters.codex import CodexAdapter
 from skill.scripts.adapters.hermes import HermesAdapter
 from skill.scripts.adapters.unsupported import UnsupportedClientAdapter
-from skill.scripts.claude_import import scan_claude_code_sessions, scan_export_directory
+from skill.scripts.claude_import import scan_claude_code_sessions, scan_export_directory, prepare_import_run
 
 
 class SourceAdapterTests(unittest.TestCase):
@@ -123,6 +123,18 @@ class SourceAdapterTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertIn("fixture", result["reason"].lower())
         self.assertEqual(UnsupportedClientAdapter("antigravity").discover(), [])
+
+    def test_selected_cursor_adapter_reaches_normalized_prepare_source_index(self) -> None:
+        cursor = self.root / "cursor"; cursor.mkdir()
+        conn = sqlite3.connect(cursor / "conversation-search.db")
+        conn.execute("CREATE TABLE conversations (fts_rowid INTEGER PRIMARY KEY, source TEXT, scope TEXT, id TEXT, title TEXT, branches TEXT, updated_at INTEGER, is_archived INTEGER, root_fingerprint TEXT, cache_fingerprint TEXT)")
+        conn.execute("INSERT INTO conversations VALUES (1,'local','','cursor-indexed','Indexed work','',1700000000000,0,NULL,NULL)")
+        conn.commit(); conn.close()
+        data = self.root / "data"; data.mkdir()
+        result = prepare_import_run(data_root=data, export_dir=self.export, claude_config_dir=self.config, selected_clients={"cursor": str(cursor)})
+        index = json.loads((Path(result["run_dir"]) / "source-index.json").read_text())
+        self.assertEqual(index["clients"]["cursor"]["sources"][0]["source_id"], "cursor-indexed")
+        self.assertNotIn("content", json.dumps(index["clients"]["cursor"]["sources"]))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from skill.scripts.client_roots import (
     build_import_config,
     validate_client_roots,
     validate_source_root,
+    discover_default_roots,
 )
 
 
@@ -56,6 +57,23 @@ class ClientRootValidationTests(unittest.TestCase):
             encoded = json.loads(json.dumps(config))
             self.assertEqual(encoded["source_roots"][0]["path"], str(Path(tmp).resolve()))
             self.assertNotIn("home", json.dumps(encoded).lower())
+
+    def test_default_discovery_checks_only_selected_verified_candidate_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cursor = home / "Library/Application Support/Cursor/User/globalStorage"
+            cursor.mkdir(parents=True)
+            (cursor / "conversation-search.db").touch()
+            codex = home / ".codex" / "sessions"; codex.mkdir(parents=True)
+            result = discover_default_roots(["cursor", "codex", "hermes"], home=home)
+            self.assertEqual(result["cursor"]["status"], "found")
+            self.assertEqual(result["cursor"]["path"], str(cursor))
+            self.assertEqual(result["codex"]["path"], str(home / ".codex"))
+            self.assertEqual(result["hermes"]["status"], "not_found")
+            self.assertNotIn("content", json.dumps(result))
+
+    def test_default_discovery_blocks_unsupported_clients(self) -> None:
+        self.assertEqual(discover_default_roots(["chatgpt"], home=Path("/tmp"))["chatgpt"]["status"], "blocked")
 
 
 if __name__ == "__main__":
