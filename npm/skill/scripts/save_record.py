@@ -120,9 +120,6 @@ def normalize_stage(root: "str | Path", stage: str, configured: "list | None" = 
         return mapped
     return name
 
-# Task progress (v3) — builder-facing, not PM done/blocked status.
-PROGRESS = ["done", "ongoing", "dropped", "undecided"]
-
 # Map legacy category → nearest lifecycle section (best-effort back-compat).
 CATEGORY_TO_SECTION = {
     "Planning": "Plan",
@@ -425,8 +422,6 @@ def main() -> int:
     ap.add_argument("--tags", default="", help="Comma-separated tags")
     ap.add_argument("--tools", default="", help="Comma-separated AI tools/stacks used")
     ap.add_argument("--mindset", default="", help="Comma-separated mindset tags (skeptical, cost-aware…)")
-    ap.add_argument("--progress", default="", choices=["", *PROGRESS],
-                    help=f"Task progress: {', '.join(PROGRESS)}")
     ap.add_argument("--body-file", help="Path to markdown body file (else read stdin)")
 
     # Legacy category (v2) — maps to a section when --section is absent.
@@ -541,7 +536,6 @@ def main() -> int:
             "tags": tags,
             "tools": tools,
             "mindset": mindset,
-            "progress": args.progress or None,
             # v3 narrative field + legacy `body` dual-write (one release) so old web builds keep working
             "body_md": body,
             "body": body,
@@ -582,7 +576,6 @@ def main() -> int:
         "project": project.get("title") or project.get("name"),
         "section": stage,
         "title": record["title"],
-        "progress": record["progress"],
         "tools": tools,
         "has_highlight": bool(highlight),
         "evidence_count": len(evidence),

@@ -68,7 +68,7 @@ Three levels:
 ```
 Project   — the venture/effort (sector, one-liner) — mirrors a portfolio header
   └ Purpose — a reusable workstream such as Venture Design, Curation Taxonomy, or Market Validation
-       └ Task — one unit of work (stage, activity, task aim, tools, mindset, progress, highlight, evidence, body)
+       └ Task — one unit of work (stage, activity, task aim, tools, mindset, highlight, evidence, body)
 ```
 
 A Purpose is a reusable workstream. It carries **no** lifecycle stage: one workstream can span Discovery through Growth.
@@ -83,7 +83,6 @@ A **Task** carries:
 | purpose | the task's specific aim, one line |
 | tools | tools actually used in this task; always include the active AI client (e.g. Antigravity) |
 | mindset | 1–3 discovery tags (skeptical, first-principles, cost-aware…) |
-| progress | done / ongoing / dropped / undecided |
 | highlight | the AI-vs-builder decisive moment {ai, builder, why} — optional, the differentiator |
 | evidence | traces that prove it (see Step 5) |
 | body_md | flexible markdown narrative; its H2 sections fit the work type |
@@ -224,8 +223,6 @@ Then follow the answer exactly:
 - **Stop this dry run** → report that no candidates were confirmed and stop.
 - **User Skipped** → do not infer a choice. Re-ask this curation question or stop.
 
-Suggest progress per task, but never finalize `done` without confirmation.
-
 **STOP and wait.** This gate is what prevents dumping a pile of half-relevant cards.
 The builder curates the LIST before any body is written.
 
@@ -241,7 +238,7 @@ Use the client's structured question tool to confirm the Purpose and its lifecyc
 
 ### B. Draft a complete, third-party-readable card
 
-**Fixed fields** — section, purpose, tools, mindset, progress.
+**Fixed fields** — section, purpose, tools, mindset, activities.
 
 **Highlight** (if present) — the three-part contrast, near-verbatim from the chat.
 
@@ -330,7 +327,6 @@ python3 "{{BUILDERS_DIARY_SCRIPT}}" \
   --purpose     "Verify GStack/Hermes claims against primary sources" \
   --tools       "Hermes,GStack,Web search" \
   --mindset     "skeptical,source-first" \
-  --progress    "done" \
   --highlight-ai      "GStack only covers engineering (citing gstacks.org)" \
   --highlight-builder "Read the official repo directly and confirm" \
   --highlight-why     "the AI's pre-training data may be stale" \
@@ -353,7 +349,7 @@ Storage root is `$BUILDERS_DIARY_PATH`, else `~/Documents/builders-diary` (falls
 
 ## Step 7 — Confirm to the builder
 
-For a normal run, report each saved task's script output (record_id, section, progress, highlight
+For a normal run, report each saved task's script output (record_id, section, highlight
 captured?, evidence count, path) and the section rollup:
 
 ```
@@ -391,5 +387,5 @@ Start a normal Builder's Diary run when you are ready to save these approved car
   context, not just the chat text.
 - **Always use save_record.py** — never hand-write JSON. The script owns id/slug/sequence rules.
 - **One task per intent** — split multi-intent sessions; don't force one card.
-- **Not a PM tool.** `progress` is builder-facing (done/ongoing/dropped/undecided), not
-  done/blocked status theater. Section shows the lifecycle; the Result line shows outcome.
+- **Not a PM tool.** Section shows the lifecycle; the Result line shows outcome. Activities
+  describe the methods used and remain distinct from lifecycle stages.

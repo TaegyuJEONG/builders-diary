@@ -69,7 +69,7 @@ export function resolveRecordStage(
   return normalizeStage(record.section || goalStage || 'Build', configured);
 }
 
-/** Task progress — builder-facing, not PM status. */
+/** Legacy compatibility type. New records no longer write or surface progress. */
 export type Progress = 'done' | 'ongoing' | 'dropped' | 'undecided';
 
 /** A project has a third-party-readable story; a learning entry is skill
@@ -142,7 +142,7 @@ export interface Record {
   subPurpose?: string | null;    // legacy alias; read-only compatibility
   tools?: string[];          // AI tools/stacks used
   mindset?: string[];        // mindset tags (v3 explicit field)
-  progress?: Progress | null;    // done | ongoing | dropped | undecided
+  progress?: Progress | null;    // legacy records only; never shown or edited
   highlight?: Highlight | null;  // v3 name for judgment
   narrative?: NarrativeSection[];// parsed body_md/body into named blocks
 

@@ -209,6 +209,30 @@ class ActivityTests(unittest.TestCase):
             self.assertEqual(record["activities"], [])
 
 
+class ProgressCompatibilityTests(unittest.TestCase):
+    def test_new_records_do_not_write_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            summary = save(root, project="P", goal="Purpose", stage="Build", title="A task")
+            record = json.loads(next(root.glob("p/*/*/record.json")).read_text(encoding="utf-8"))
+            self.assertNotIn("progress", record)
+            self.assertNotIn("progress", summary)
+
+    def test_legacy_progress_is_not_reintroduced_when_record_is_read(self) -> None:
+        # The compatibility reader may retain legacy JSON, but new writes must
+        # not manufacture a PM-style field from it.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            save(root, project="P", goal="Purpose", stage="Build", title="A task")
+            record_path = next(root.glob("p/*/*/record.json"))
+            record = json.loads(record_path.read_text(encoding="utf-8"))
+            record["progress"] = "ongoing"
+            record_path.write_text(json.dumps(record), encoding="utf-8")
+            save(root, project="P", goal="Purpose", stage="Build", title="Another task")
+            new_record = sorted(root.glob("p/*/*/record.json"))[-1]
+            self.assertNotIn("progress", json.loads(new_record.read_text(encoding="utf-8")))
+
+
 class OrderingTests(unittest.TestCase):
     def test_explicit_task_order_is_persisted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -8,7 +8,7 @@ import { FilterState, recordPasses, buildProjectToolbox } from '@/lib/portfolio'
 // 3-level view: Project cards (row) → Section boards → Task cards.
 // The project row is the recruiter's first impression (sector / one-liner);
 // selecting a project reveals its lifecycle sections, each holding its task cards
-// with a progress rollup. Task click opens the right detail panel (handled by parent).
+// with stage grouping. Task click opens the right detail panel (handled by parent).
 // ────────────────────────────────────────────────────────────────────────────
 
 function initials(name: string): string {
@@ -164,16 +164,25 @@ function TaskCard({
         display: 'flex', flexDirection: 'column',
         transition: 'border-color 0.15s, box-shadow 0.15s',
         boxShadow: selected ? '0 0 0 1px var(--accent)' : 'none',
+        position: 'relative',
       }}
       onMouseEnter={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border2)'; }}
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; }}
     >
-      {/* Date only. Progress is deliberately absent: this is a record, not PM software. */}
+      {/* Lifecycle stage is the board grouping; activities describe the method. */}
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
         <span className="mono" style={{ fontSize: 9, color: 'var(--text3)' }}>
           {record.date || record.created_at?.slice(0, 10)}
         </span>
       </div>
+
+      {(record.activities || []).length > 0 && (
+        <div className="mono" aria-label="Activities" style={{ position: 'absolute', top: 9, right: 10, maxWidth: '58%', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 3 }}>
+          {(record.activities || []).map(activity => (
+            <span key={activity} style={{ fontSize: 8.5, padding: '2px 6px', borderRadius: 999, background: 'var(--tag-active-bg)', color: 'var(--accent)', border: '1px solid var(--accent-dim)', whiteSpace: 'nowrap' }}>{activity}</span>
+          ))}
+        </div>
+      )}
 
       {/* source project — especially useful in Section/Tool cross-project views */}
       {record.projectTitle && (
@@ -191,25 +200,6 @@ function TaskCard({
       {(record.purpose || record.subPurpose) && (
         <div style={{ fontSize: 10.5, color: 'var(--text2)', lineHeight: 1.5, marginTop: 5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' as any, overflow: 'hidden' }}>
           {record.purpose || record.subPurpose}
-        </div>
-      )}
-
-      {(record.activities || []).length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
-          {(record.activities || []).map(activity => {
-            const active = filterState.activity === activity;
-            return (
-              <span key={activity} className="mono" style={{
-                fontSize: 8.5, padding: '1px 5px', borderRadius: 3,
-                background: active ? 'var(--tag-active-bg)' : 'transparent',
-                color: active ? 'var(--accent)' : 'var(--text3)',
-                border: `1px solid ${active ? 'var(--accent-dim)' : 'var(--border)'}`,
-                whiteSpace: 'nowrap',
-              }}>
-                {activity}
-              </span>
-            );
-          })}
         </div>
       )}
 

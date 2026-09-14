@@ -83,7 +83,6 @@ export function convertMockToPortfolio(): Portfolio {
             created_at: card.created_at,
             date: card.created_at,
             status: card.status,
-            progress: card.status === 'in_progress' ? 'ongoing' : (card.status === 'blocked' ? 'undecided' : 'done'),
             category: card.category ?? null,
             section,
             judgment: card.judgment ?? null,

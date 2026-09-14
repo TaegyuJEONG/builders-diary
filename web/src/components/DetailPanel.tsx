@@ -271,9 +271,15 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
               {record.title}
             </h2>
           )}
-        </div>
 
-        {/* Action buttons */}
+          {(record.activities || []).length > 0 && (
+            <div aria-label="Activities" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 9 }}>
+              {(record.activities || []).map(activity => (
+                <span key={activity} className="mono" style={{ fontSize: 9, padding: '3px 7px', borderRadius: 999, background: 'var(--tag-active-bg)', color: 'var(--accent)', border: '1px solid var(--accent-dim)' }}>{activity}</span>
+              ))}
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           {editMode ? (
             <>

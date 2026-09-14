@@ -476,7 +476,7 @@ export async function createTaskInFolder(input: {
   await writeJsonFile(recordFolder, 'record.json', {
     id: `r-${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`,
     folder: recordFolderName, title, date, section: input.stage,
-    purpose: purposeName, activities: input.activities || [], tags: [], tools: [], mindset: [], progress: null,
+    purpose: purposeName, activities: input.activities || [], tags: [], tools: [], mindset: [],
     body_md: '', body: '', highlight: null, judgment: null, evidence: [],
     project_id: input.project.id, project_slug: input.project.slug,
     project_title: input.project.title, goal_id: goal?.id || undefined,

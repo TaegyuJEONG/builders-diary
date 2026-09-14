@@ -9,11 +9,6 @@ interface CardScrollableProps {
   onSelectRecord: (recordId: string) => void;
 }
 
-const STATUS_META: { [k: string]: { label: string; color: string } } = {
-  completed: { label: '완료', color: 'var(--status-completed)' },
-  in_progress: { label: '진행', color: 'var(--status-progress)' },
-  blocked: { label: '막힘', color: 'var(--status-blocked)' },
-};
 
 export function CardScrollable({
   records,
@@ -59,7 +54,6 @@ export function CardScrollable({
     >
       {records.map(record => {
         const selected = record.id === selectedRecordId;
-        const status = record.status ? STATUS_META[record.status] : null;
         return (
           <div
             key={record.id}
@@ -86,7 +80,7 @@ export function CardScrollable({
             onMouseEnter={e => { if (!selected) e.currentTarget.style.borderColor = 'var(--border2)'; }}
             onMouseLeave={e => { if (!selected) e.currentTarget.style.borderColor = 'var(--border)'; }}
           >
-            {/* Top row: date + status */}
+            {/* Top row: date */}
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '12px 14px 0',
@@ -94,15 +88,7 @@ export function CardScrollable({
               <span className="mono" style={{ fontSize: 10, color: 'var(--text3)', fontVariantNumeric: 'tabular-nums' }}>
                 {record.created_at}
               </span>
-              {status && (
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                  fontSize: 10, color: status.color,
-                }} className="mono">
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: status.color, display: 'inline-block' }} />
-                  {status.label}
-                </span>
-              )}
+
             </div>
 
             {/* Title (main) */}

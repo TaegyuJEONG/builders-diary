@@ -285,7 +285,7 @@ Every retained Task card must use the daily Builder's Diary evidence rules:
 - 1–3 activities (Research, User Interview, Prototype, Development, Evaluation, Outreach, etc.);
 - tools actually used;
 - 1–3 mindset tags;
-- progress;
+- activities;
 - optional AI-vs-builder highlight;
 - private source traces separated from user-approved evidence;
 - a third-party-readable markdown body.
