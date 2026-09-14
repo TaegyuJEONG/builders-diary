@@ -190,7 +190,7 @@ class ActivityTests(unittest.TestCase):
     def test_activities_are_saved_as_explicit_task_methods(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "portfolio"
-            save(
+            summary = save(
                 root,
                 project="P",
                 goal="Validate demand",
@@ -201,6 +201,9 @@ class ActivityTests(unittest.TestCase):
             record = json.loads(next(root.glob("p/*/*/record.json")).read_text(encoding="utf-8"))
             self.assertEqual(record["activities"], ["Research", "User Interview"])
 
+            # The command summary is the chat-facing receipt for the new record.
+            self.assertEqual(summary["activities"], ["Research", "User Interview"])
+
     def test_activities_default_to_empty_list(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "portfolio"
@@ -210,6 +213,18 @@ class ActivityTests(unittest.TestCase):
 
 
 class ProgressCompatibilityTests(unittest.TestCase):
+    def test_progress_flag_is_not_part_of_new_record_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "portfolio"
+            result = subprocess.run(
+                ["python3", str(SCRIPT), "--root", str(root), "--project", "P",
+                 "--goal", "Purpose", "--stage", "Build", "--title", "A task",
+                 "--progress", "done"],
+                capture_output=True, text=True,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unrecognized arguments: --progress", result.stderr)
+
     def test_new_records_do_not_write_progress(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "portfolio"

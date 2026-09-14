@@ -87,6 +87,11 @@ A **Task** carries:
 | evidence | traces that prove it (see Step 5) |
 | body_md | flexible markdown narrative; its H2 sections fit the work type |
 
+`activities` describe the methods used (for example Research or User Interview)
+and are separate from the Task's lifecycle `stage`. Legacy `progress` values may
+still be read from old records for compatibility, but new records never write
+them and the diary UI never displays, filters, or edits them.
+
 The **Project Toolbox** is derived from the union of confirmed task-level tools.
 Do not ask for a separate project tool list. The UI groups the derived toolbox into
 collapsible categories: Coding agent, Programming language, Framework / library,

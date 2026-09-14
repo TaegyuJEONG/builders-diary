@@ -27,7 +27,10 @@ test('legacy progress stays in the type/read path only and activities are promin
   ]);
   assert.match(types, /progress\?:/);
   assert.match(reader, /progress/);
+  assert.doesNotMatch(types, /PROGRESS_META/);
+  assert.doesNotMatch(card, /record\.progress|PROGRESS_META/);
   assert.match(card, /Activities/);
+  assert.match(card, /activity-badges/);
   assert.match(card, /position:\s*'absolute'/);
   assert.match(detail, /Activities/);
 });

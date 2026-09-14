@@ -576,6 +576,7 @@ def main() -> int:
         "project": project.get("title") or project.get("name"),
         "section": stage,
         "title": record["title"],
+        "activities": activities,
         "tools": tools,
         "has_highlight": bool(highlight),
         "evidence_count": len(evidence),

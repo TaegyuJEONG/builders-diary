@@ -76,12 +76,6 @@ export type Progress = 'done' | 'ongoing' | 'dropped' | 'undecided';
  *  acquisition that belongs to no single product storyline. */
 export type EntryType = 'project' | 'learning';
 export const ENTRY_TYPES: EntryType[] = ['project', 'learning'];
-export const PROGRESS_META: { [k in Progress]: { label: string; color: string } } = {
-  done:      { label: 'Done',      color: 'var(--cat-growth)' },
-  ongoing:   { label: 'Ongoing',   color: 'var(--cat-planning)' },
-  dropped:   { label: 'Dropped',   color: 'var(--muted-foreground)' },
-  undecided: { label: 'Undecided', color: 'var(--cat-research)' },
-};
 
 export interface Evidence {
   label: string;

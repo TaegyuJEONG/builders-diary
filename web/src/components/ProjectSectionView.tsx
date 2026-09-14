@@ -177,7 +177,7 @@ function TaskCard({
       </div>
 
       {(record.activities || []).length > 0 && (
-        <div className="mono" aria-label="Activities" style={{ position: 'absolute', top: 9, right: 10, maxWidth: '58%', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 3 }}>
+        <div className="mono activity-badges" aria-label="Activities" style={{ position: 'absolute', top: 9, right: 10, maxWidth: '58%', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 3 }}>
           {(record.activities || []).map(activity => (
             <span key={activity} style={{ fontSize: 8.5, padding: '2px 6px', borderRadius: 999, background: 'var(--tag-active-bg)', color: 'var(--accent)', border: '1px solid var(--accent-dim)', whiteSpace: 'nowrap' }}>{activity}</span>
           ))}

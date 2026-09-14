@@ -1122,6 +1122,8 @@ async function scanRecordFolder(
     toolTags: tools,
     mindset,
     mindsetTags: mindset,
+    // Legacy progress is intentionally retained for compatibility readers only.
+    // No writer or user-facing component should copy, edit, filter, or display it.
     progress: meta.progress || null,
     highlight,
     judgment: highlight,  // keep old field populated for any component still reading it
