@@ -188,6 +188,16 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" materialize-chat-views \
 
 The web keeps Save disabled while the proposal is `draft`. It enables Save only after `finalize-proposal` succeeds. `materialize-chat-views` writes only proposed Chat transcripts, split into page-sized files; missing or damaged sources are reported in `chat-view.json` without aborting the other projects.
 
+After writing the proposal, tell the user the short action-only message, then start a bounded wait. Keep the web page open while this command runs; it exits immediately after Confirm is clicked or safely times out.
+
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" wait-for-action \
+  --data-root "$DATA_ROOT" --run-id "<run-id>" \
+  --action project-confirm --timeout 900
+```
+
+The web writes only an allowlisted `project.confirm` action. The helper validates the run id and project proposal ids, creates the portfolio files, and writes a result under `results/project-confirm.json`. Do not ask the user to type `done` or manually run `apply-selections` when the bounded wait is active.
+
 ### User message: short and action-only
 
 After writing the proposal, say only:

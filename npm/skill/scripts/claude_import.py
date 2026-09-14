@@ -17,6 +17,7 @@ import html
 import json
 import re
 import sys
+import time
 import uuid
 import zipfile
 from collections import defaultdict
@@ -1130,6 +1131,47 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
     return {"confirmed": confirmed, "dropped": dropped, "merged": merged, "without_sources": without_sources}
 
 
+def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) -> dict[str, Any]:
+    """Apply one allowlisted, run-scoped web action through the helper only."""
+    if action_name != "project-confirm":
+        raise ValueError("Unsupported web action")
+    run_dir, _ = _load_run_manifest(data_root, run_id)
+    path = run_dir / "actions" / f"{action_name}.json"
+    try:
+        action = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise FileNotFoundError(f"Web action not ready: {action_name}") from error
+    if not isinstance(action, dict) or action.get("action") != "project.confirm" or action.get("run_id") != run_id:
+        raise ValueError("Invalid project.confirm action payload")
+    projects = action.get("projects")
+    if not isinstance(projects, list) or not all(isinstance(project, dict) for project in projects):
+        raise ValueError("Invalid project.confirm projects payload")
+    selections = {
+        "run_id": run_id,
+        "order": [str(project.get("proposal_id") or "") for project in projects],
+        "projects": projects,
+    }
+    _write_json(run_dir / "selections.json", selections)
+    applied = apply_selections(data_root=data_root, run_id=run_id)
+    result = {"status": "applied", **applied}
+    _write_json(run_dir / "results" / f"{action_name}.json", result)
+    _append_run_event(run_dir, "web_action_applied", action="project.confirm", confirmed=len(applied["confirmed"]))
+    return result
+
+
+def wait_for_web_action(*, data_root: str | Path, run_id: str, action_name: str, timeout_seconds: int = 900) -> dict[str, Any]:
+    """Bounded local wait for one allowlisted action from the connected web view."""
+    if not 1 <= timeout_seconds <= 3600:
+        raise ValueError("timeout_seconds must be between 1 and 3600")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            return apply_web_action(data_root=data_root, run_id=run_id, action_name=action_name)
+        except FileNotFoundError:
+            time.sleep(0.5)
+    return {"status": "timeout", "action": action_name}
+
+
 def create_download_page(manifest_path: str | Path, output_path: str | Path) -> Path:
     """Create a local clickable export-download page without handling the URLs in chat."""
     manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
@@ -1225,6 +1267,17 @@ def main() -> int:
     assign_sources_cmd.add_argument("--summary", default=None)
     assign_sources_cmd.add_argument("--source-ref", action="append", default=None)
 
+    apply_web_action_cmd = sub.add_parser("apply-web-action", help="Apply one validated action written by the connected web view")
+    apply_web_action_cmd.add_argument("--data-root", required=True)
+    apply_web_action_cmd.add_argument("--run-id", required=True)
+    apply_web_action_cmd.add_argument("--action", required=True, choices=["project-confirm"])
+
+    wait_action_cmd = sub.add_parser("wait-for-action", help="Wait a bounded time for one web action and apply it")
+    wait_action_cmd.add_argument("--data-root", required=True)
+    wait_action_cmd.add_argument("--run-id", required=True)
+    wait_action_cmd.add_argument("--action", required=True, choices=["project-confirm"])
+    wait_action_cmd.add_argument("--timeout", type=int, default=900)
+
     apply_selections_cmd = sub.add_parser("apply-selections", help="Materialize project selections written by the web view")
     apply_selections_cmd.add_argument("--data-root", required=True)
     apply_selections_cmd.add_argument("--run-id", required=True)
@@ -1273,6 +1326,10 @@ def main() -> int:
         print(json.dumps(materialize_proposal_chat_views(data_root=args.data_root, run_id=args.run_id, page_size=args.page_size), ensure_ascii=False, indent=2))
     elif args.command == "assign-sources":
         print(json.dumps(assign_sources(data_root=args.data_root, run_id=args.run_id, candidate_id=args.candidate_id, source_refs=args.source_ref, summary=args.summary), ensure_ascii=False, indent=2))
+    elif args.command == "apply-web-action":
+        print(json.dumps(apply_web_action(data_root=args.data_root, run_id=args.run_id, action_name=args.action), ensure_ascii=False, indent=2))
+    elif args.command == "wait-for-action":
+        print(json.dumps(wait_for_web_action(data_root=args.data_root, run_id=args.run_id, action_name=args.action, timeout_seconds=args.timeout), ensure_ascii=False, indent=2))
     elif args.command == "apply-selections":
         print(json.dumps(apply_selections(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "source-queue":

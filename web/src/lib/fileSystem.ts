@@ -677,6 +677,16 @@ export async function readChatPage(handle: FileSystemDirectoryHandle, runId: str
   }
 }
 
+export async function writeProjectConfirmAction(handle: FileSystemDirectoryHandle, runId: string, projects: unknown[]): Promise<void> {
+  const imports = await handle.getDirectoryHandle('imports');
+  const runDir = await imports.getDirectoryHandle(runId);
+  const actions = await runDir.getDirectoryHandle('actions', { create: true });
+  const file = await actions.getFileHandle('project-confirm.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ action: 'project.confirm', run_id: runId, projects }, null, 2) + '\n');
+  await writable.close();
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');

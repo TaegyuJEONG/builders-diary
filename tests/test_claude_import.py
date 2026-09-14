@@ -740,6 +740,23 @@ class ClaudeImportTests(unittest.TestCase):
         page = json.loads((self.run_dir / item["pages"][0]).read_text(encoding="utf-8"))
         self.assertEqual(page["messages"][0]["text"], "private raw content")
 
+    def test_project_confirm_action_is_validated_applied_and_result_is_written(self) -> None:
+        from skill.scripts.claude_import import apply_web_action, propose_project
+
+        run_id = self._prepare()
+        proposal = propose_project(data_root=self.data_root, run_id=run_id, name="Project", summary="A project.", source_refs=["chat:chat-1"])
+        action_dir = self.run_dir / "actions"
+        action_dir.mkdir()
+        (action_dir / "project-confirm.json").write_text(json.dumps({
+            "action": "project.confirm", "run_id": run_id,
+            "projects": [{"proposal_id": proposal["id"], "name": "Project", "action": "confirm", "order": 0, "merged_from": []}],
+        }), encoding="utf-8")
+
+        result = apply_web_action(data_root=self.data_root, run_id=run_id, action_name="project-confirm")
+        self.assertEqual(result["status"], "applied")
+        self.assertEqual(result["confirmed"], ["project"])
+        self.assertTrue((self.run_dir / "results" / "project-confirm.json").is_file())
+
     def test_apply_selections_accepts_proposal_ids_and_merges_their_sources(self) -> None:
         from skill.scripts.claude_import import apply_selections, propose_project
 
