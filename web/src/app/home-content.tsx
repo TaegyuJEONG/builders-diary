@@ -18,6 +18,7 @@ import {
   loadFolderHandleFromStorage, saveFolderHandleToStorage, saveRecordToFile, deleteRecordFromFile,
   readInstallMarker, scanImportRuns, updateProjectInFolder, updateProjectStagesInFolder, deleteProjectFromFolder,
   writeProjectMergeAction, waitForProjectMergeResult, writeProjectSplitAction, waitForProjectSplitResult,
+  writeTaskMergeAction, waitForTaskMergeResult, writeTaskSplitAction, waitForTaskSplitResult,
 } from '@/lib/fileSystem';
 import {
   convertMockToPortfolio, buildTagOptions,
@@ -395,6 +396,30 @@ export function HomeContent() {
     await refreshPortfolio();
   }, [importRuns, refreshPortfolio]);
 
+  const handleTaskMerge = useCallback(async (target: Record) => {
+    const sourceId = window.prompt('Source Task ID to merge into this target:');
+    if (!sourceId) return;
+    const handle = await loadFolderHandleFromStorage(); const runId = importRuns[0]?.id;
+    if (!handle || !runId) throw new Error('An active import run is required for Task actions.');
+    await writeTaskMergeAction(handle, runId, target.id, sourceId);
+    const result = await waitForTaskMergeResult(handle, runId);
+    if (!result || result.status !== 'applied') throw new Error(result?.error || 'Task merge was not applied.');
+    await refreshPortfolio();
+  }, [importRuns, refreshPortfolio]);
+
+  const handleTaskSplit = useCallback(async (source: Record) => {
+    const raw = window.prompt('Enter child drafts as JSON: [{"title":"...","body":"..."}, ...]');
+    if (!raw) return;
+    let children: Array<{ [key: string]: unknown }>;
+    try { children = JSON.parse(raw); } catch { throw new Error('Child drafts must be valid JSON.'); }
+    const handle = await loadFolderHandleFromStorage(); const runId = importRuns[0]?.id;
+    if (!handle || !runId) throw new Error('An active import run is required for Task actions.');
+    await writeTaskSplitAction(handle, runId, source.id, children);
+    const result = await waitForTaskSplitResult(handle, runId);
+    if (!result || result.status !== 'applied') throw new Error(result?.error || 'Task split was not applied.');
+    await refreshPortfolio();
+  }, [importRuns, refreshPortfolio]);
+
   // ── derived ────────────────────────────────────────────────
   const filterState: FilterState = useMemo(
     () => ({ mindset: selectedMindset, tools: selectedTools, keyword: '', stage: selectedStage, activity: selectedActivity }),
@@ -610,6 +635,8 @@ export function HomeContent() {
               onClose={() => setSelectedRecordId(null)}
               onSave={handleSaveRecord}
               onDelete={handleDeleteRecord}
+              onMerge={handleTaskMerge}
+              onSplit={handleTaskSplit}
             />
           </div>
         )}

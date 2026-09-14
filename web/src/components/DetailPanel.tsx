@@ -9,6 +9,8 @@ interface DetailPanelProps {
   onClose: () => void;
   onSave: (updated: Record) => Promise<void>;
   onDelete?: (record: Record) => Promise<void>;
+  onMerge?: (record: Record) => Promise<void>;
+  onSplit?: (record: Record) => Promise<void>;
 }
 
 const EVIDENCE_META: { [k: string]: { icon: string; label: string } } = {
@@ -130,7 +132,7 @@ function narrativeLabel(heading: string): string {
 }
 
 // ── Main panel ──
-export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onSave, onDelete }: DetailPanelProps) {
+export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onSave, onDelete, onMerge, onSplit }: DetailPanelProps) {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState({
@@ -305,6 +307,8 @@ export function DetailPanel({ record, stages = [...DEFAULT_STAGES], onClose, onS
             </>
           ) : (
             <>
+              {onMerge && <button onClick={() => onMerge(record)} disabled={saving} className="mono" style={{ height: 28, padding: '0 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', cursor: 'pointer', fontSize: 10 }}>Merge</button>}
+              {onSplit && <button onClick={() => onSplit(record)} disabled={saving} className="mono" style={{ height: 28, padding: '0 8px', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--text2)', cursor: 'pointer', fontSize: 10 }}>Split</button>}
               {onDelete && (
                 <button
                   onClick={async () => {

@@ -10,10 +10,11 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
-ALLOWED_ACTIONS = {"project.confirm", "project.merge", "project.split", "task.approve", "task.drop"}
+ALLOWED_ACTIONS = {"project.confirm", "project.merge", "project.split", "task.approve", "task.drop", "task.merge", "task.split"}
 RESULT_STATUSES = {"applied", "rejected", "error", "timeout"}
 _ENVELOPE_KEYS = {"schema_version", "action_id", "action", "run_id", "created_at", "payload"}
 _RESULT_KEYS = {"schema_version", "action_id", "status", "applied_at", "result", "error"}
+TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "mindset", "evidence", "source_refs"}
 
 
 def _timestamp(value: Any, field: str) -> str:
@@ -41,11 +42,14 @@ def _validate_payload(action: Any, payload: Any) -> None:
         else {"target_slug", "source_slug"} if action == "project.merge"
         else {"source_slug", "new_slug", "new_title", "task_ids", "source_refs"} if action == "project.split"
         else {"task"} if action == "task.approve"
-        else {"proposal_id"}
+        else {"proposal_id"} if action == "task.drop"
+        else {"target_id", "source_id"} if action == "task.merge"
+        else {"source_id", "children"} if action == "task.split"
+        else set()
     )
     if set(payload) != expected:
         raise ValueError(f"{action} payload has invalid fields")
-    if action == "project.merge":
+    if action == "project.merge" or action == "task.merge":
         if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
             raise ValueError(f"{action} payload has invalid fields")
     elif action == "project.split":
@@ -55,6 +59,9 @@ def _validate_payload(action: Any, payload: Any) -> None:
             raise ValueError(f"{action} payload has invalid fields")
         if not payload["task_ids"] and not payload["source_refs"]:
             raise ValueError(f"{action} requires an explicit selection")
+    elif action == "task.split":
+        if not isinstance(payload.get("source_id"), str) or not payload["source_id"].strip() or not isinstance(payload.get("children"), list) or len(payload["children"]) < 2 or not all(isinstance(item, dict) and not (set(item) - TASK_SPLIT_FIELDS) for item in payload["children"]):
+            raise ValueError("task.split requires a source_id and at least two child drafts")
     elif not isinstance(payload[next(iter(expected))], (list if action == "project.confirm" else dict if action == "task.approve" else str)):
         raise ValueError(f"{action} payload has invalid fields")
 

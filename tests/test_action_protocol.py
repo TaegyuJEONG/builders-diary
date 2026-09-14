@@ -81,7 +81,14 @@ class ActionProtocolTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Unsupported web action"):
                 read_action(path, run_id="run-1", action_name="../../x")
 
-    def test_task_drop_is_an_allowlisted_versioned_action(self):
+    def test_task_merge_and_split_are_allowlisted_and_declarative(self):
+        merge = create_action("task.merge", "run-1", {"target_id": "r-target", "source_id": "r-source"})
+        self.assertEqual(merge["action"], "task.merge")
+        split = create_action("task.split", "run-1", {"source_id": "r-source", "children": [{"title": "One", "body": "a"}, {"title": "Two", "body": "b"}]})
+        self.assertEqual(split["action"], "task.split")
+        with self.assertRaisesRegex(ValueError, "task.split"):
+            create_action("task.split", "run-1", {"source_id": "r-source", "children": [{"title": "One", "body": "a", "command": "rm -rf"}, {"title": "Two", "body": "b"}]})
+
         action = create_action("task.drop", "run-1", {"proposal_id": "proposal-1"})
         self.assertEqual(action["action"], "task.drop")
         self.assertEqual(validate_action(action, run_id="run-1")["payload"], {"proposal_id": "proposal-1"})

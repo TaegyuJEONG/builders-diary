@@ -54,6 +54,8 @@ WEB_ACTIONS = {
     "project-split": "project.split",
     "task-approve": "task.approve",
     "task-drop": "task.drop",
+    "task-merge": "task.merge",
+    "task-split": "task.split",
 }
 TASK_ACTION_FIELDS = {
     "project", "goal", "stage", "title", "date", "activity", "purpose",
@@ -61,6 +63,7 @@ TASK_ACTION_FIELDS = {
 }
 TASK_EVIDENCE_FIELDS = {"type", "label", "url", "meta", "detail", "quote", "visibility"}
 TASK_HIGHLIGHT_FIELDS = {"ai", "builder", "why"}
+TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "mindset", "evidence", "source_refs"}
 
 
 def _json_from_zip(archive: zipfile.ZipFile, name: str) -> Any:
@@ -1260,6 +1263,45 @@ def _apply_task_drop(*, action: Any, run_id: str) -> dict[str, Any]:
     return {"status": "applied", "dropped": proposal_id}
 
 
+def _apply_task_merge(*, data_root: str | Path, action: Any, run_id: str) -> dict[str, Any]:
+    canonical = read_action_from_payload(action, run_id=run_id, action_name="task.merge")
+    payload = canonical["payload"]
+    try:
+        from .task_actions import merge_tasks
+    except ImportError:
+        from task_actions import merge_tasks
+    return merge_tasks(data_root, target_id=payload["target_id"], source_id=payload["source_id"])
+
+
+def _validate_task_split_action(action: Any, run_id: str) -> dict[str, Any]:
+    canonical = read_action_from_payload(action, run_id=run_id, action_name="task.split")
+    payload = canonical["payload"]
+    for draft in payload["children"]:
+        if set(draft) - TASK_SPLIT_FIELDS:
+            raise ValueError("task.split child contains unsupported fields")
+        if not isinstance(draft.get("title"), str) or not draft["title"].strip():
+            raise ValueError("task.split child requires a non-empty title")
+        body = draft.get("body", draft.get("body_md"))
+        if not isinstance(body, str) or not body.strip():
+            raise ValueError("task.split child requires a non-empty body")
+        for key in ("activities", "activity", "tools", "mindset", "source_refs"):
+            if key in draft and (not isinstance(draft[key], list) or not all(isinstance(item, str) for item in draft[key])):
+                raise ValueError(f"task.split {key} must be a list of strings")
+        if "evidence" in draft and not isinstance(draft["evidence"], list):
+            raise ValueError("task.split evidence must be a list")
+    return canonical
+
+
+def _apply_task_split(*, data_root: str | Path, action: Any, run_id: str) -> dict[str, Any]:
+    canonical = _validate_task_split_action(action, run_id)
+    try:
+        from .task_actions import split_task
+    except ImportError:
+        from task_actions import split_task
+    payload = canonical["payload"]
+    return split_task(data_root, source_id=payload["source_id"], children=payload["children"])
+
+
 def read_action_from_payload(action: Any, *, run_id: str, action_name: str) -> dict[str, Any]:
     """Validate an in-memory action using the shared versioned protocol."""
     try:
@@ -1286,7 +1328,13 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
         return previous
     action = read_action(path, run_id=run_id, action_name=WEB_ACTIONS[action_name])
     payload = action["payload"]
-    if action_name == "project-merge":
+    if action_name == "task-merge":
+        result = {"status": "applied", **_apply_task_merge(data_root=data_root, action=action, run_id=run_id)}
+        event_details = {"action": "task.merge", "target_id": payload["target_id"], "source_id": payload["source_id"]}
+    elif action_name == "task-split":
+        result = {"status": "applied", **_apply_task_split(data_root=data_root, action=action, run_id=run_id)}
+        event_details = {"action": "task.split", "source_id": payload["source_id"], "child_count": len(payload["children"])}
+    elif action_name == "project-merge":
         try:
             from .project_actions import merge_projects
         except ImportError:

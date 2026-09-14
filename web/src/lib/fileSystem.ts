@@ -887,6 +887,42 @@ export async function waitForProjectSplitResult(handle: FileSystemDirectoryHandl
   return { status: 'timeout', error: 'The project split was not applied in time.' };
 }
 
+export async function writeTaskMergeAction(handle: FileSystemDirectoryHandle, runId: string, targetId: string, sourceId: string): Promise<void> {
+  if (!targetId.trim() || !sourceId.trim() || targetId === sourceId) throw new Error('Choose two different Tasks.');
+  const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId);
+  const file = await (await runDir.getDirectoryHandle('actions', { create: true })).getFileHandle('task-merge.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'task.merge', run_id: runId, created_at: new Date().toISOString(), payload: { target_id: targetId, source_id: sourceId } }, null, 2) + '\n');
+  await writable.close();
+}
+
+export async function waitForTaskMergeResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try { const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId); const result = await readJson(await runDir.getDirectoryHandle('results'), 'task-merge.json'); if (result) return result; } catch { /* helper may not have written it */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'The Task merge was not applied in time.' };
+}
+
+export async function writeTaskSplitAction(handle: FileSystemDirectoryHandle, runId: string, sourceId: string, children: Array<{ [key: string]: unknown }>): Promise<void> {
+  if (!sourceId.trim() || children.length < 2 || children.some(child => typeof child.title !== 'string' || typeof child.body !== 'string')) throw new Error('Provide a source Task and at least two child drafts.');
+  const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId);
+  const file = await (await runDir.getDirectoryHandle('actions', { create: true })).getFileHandle('task-split.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'task.split', run_id: runId, created_at: new Date().toISOString(), payload: { source_id: sourceId, children } }, null, 2) + '\n');
+  await writable.close();
+}
+
+export async function waitForTaskSplitResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; child_ids?: string[]; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try { const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId); const result = await readJson(await runDir.getDirectoryHandle('results'), 'task-split.json'); if (result) return result; } catch { /* helper may not have written it */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'The Task split was not applied in time.' };
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');
