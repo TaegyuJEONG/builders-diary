@@ -54,3 +54,4 @@ build/
 # npm pack artifacts
 *.tgz
 npm/skill/
+.vercel

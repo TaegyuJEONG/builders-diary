@@ -378,7 +378,7 @@ export function OnboardingScreen({
 
                   {needsReview ? (
                     <div style={{ marginBottom: 14 }}>
-                      <ImportSelectionTable refreshKey={importRefreshKey} />
+                      <ImportSelectionTable onSaved={onComplete} refreshKey={importRefreshKey} />
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>

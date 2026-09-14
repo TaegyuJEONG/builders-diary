@@ -720,6 +720,20 @@ export async function writeTaskApproveAction(handle: FileSystemDirectoryHandle, 
   await writable.close();
 }
 
+export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; confirmed?: string[]; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const imports = await handle.getDirectoryHandle('imports');
+      const runDir = await imports.getDirectoryHandle(runId);
+      const result = await readJson(runDir, 'results/project-confirm.json');
+      if (result) return result;
+    } catch { /* helper may not have created the result directory yet */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'Claude Code did not apply the project selection in time.' };
+}
+
 /** Write the user's project choices so the import skill can apply them. */
 export async function writeProjectSelections(handle: FileSystemDirectoryHandle, runId: string, selections: unknown): Promise<void> {
   const imports = await handle.getDirectoryHandle('imports');
