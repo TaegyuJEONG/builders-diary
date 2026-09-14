@@ -40,5 +40,9 @@ test('queue and card expose the complete review workflow in English', async () =
     }
   }
   assert.match(review, /TaskProposalQueue/);
+  assert.match(card, /Evidence candidates/);
+  assert.match(card, /Verified|Unverified/);
+  assert.match(card, /Public/);
+  assert.match(card, /Private/);
   assert.match(home, /TaskProposalQueue/);
 });

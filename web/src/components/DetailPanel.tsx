@@ -33,6 +33,7 @@ function EvidenceItem({ ev }: { ev: Evidence }) {
   const visibility = ev.visibility
     ? (ev.visibility === 'approved' || ev.artifact_path ? 'Approved artifact' : 'Private trace')
     : 'Evidence';
+  const verification = ev.verified === false ? 'Unverified' : ev.verified === true ? 'Verified' : '';
 
   const inner = (
     <div style={{
@@ -50,6 +51,7 @@ function EvidenceItem({ ev }: { ev: Evidence }) {
         {ev.meta && (
           <span className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginLeft: 'auto' }}>{ev.meta}</span>
         )}
+        {verification && <span className="mono" style={{ fontSize: 8, color: ev.verified ? 'var(--accent)' : 'var(--danger)' }}>{verification}</span>}
         <span className="mono" style={{ fontSize: 8, color: ev.visibility === 'approved' ? 'var(--accent)' : 'var(--text3)', marginLeft: ev.meta ? 0 : 'auto' }}>
           {visibility}
         </span>

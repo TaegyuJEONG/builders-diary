@@ -231,30 +231,87 @@ def restore_file(path: Path, snapshot: bytes | None) -> None:
     path.write_bytes(snapshot)
 
 
-def materialize_approved_evidence(record_dir: str, evidence: list[dict]) -> list[dict]:
-    """Copy only builder-approved evidence into the record's public bundle.
+def _evidence_kind(item: dict) -> str:
+    """Classify a candidate without retaining private source details."""
+    value = str(item.get("kind") or item.get("type") or "artifact").lower()
+    label = str(item.get("label") or "").lower()
+    url = str(item.get("url") or "")
+    source = str(item.get("source_path") or label).lower()
+    if value == "quote" or item.get("quote"):
+        return "quote"
+    if "commit" in value or "/commit/" in url or re.search(r"\b[0-9a-f]{7,40}\b", label):
+        return "commit"
+    if "deploy" in value or any(token in label for token in ("deploy", "production", "staging")):
+        return "deployment"
+    if url:
+        return "url"
+    if source.endswith((".xlsx", ".xls", ".csv", ".tsv")):
+        return "spreadsheet"
+    if source.endswith((".doc", ".docx", ".pdf", ".odt", ".rtf", ".txt", ".md")):
+        return "document"
+    if source.endswith((".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg")):
+        return "image"
+    return "file"
 
-    Private traces remain metadata-only. artifact_path is always relative to
-    record_dir, preventing an evidence item from escaping the record folder.
+
+def extract_evidence_candidates(items: list[dict] | None) -> list[dict]:
+    """Return recruiter-safe evidence metadata for a Task proposal.
+
+    The agent may attach local paths while working, but proposal metadata never
+    exposes them. Missing or unverified candidates are retained as review notes.
     """
-    for item in evidence:
-        if item.get("visibility") != "approved":
+    candidates = []
+    for index, raw in enumerate(items or [], 1):
+        if not isinstance(raw, dict):
             continue
-        source = item.get("source_path")
-        if not source:
+        kind = _evidence_kind(raw)
+        candidate = {
+            "id": str(raw.get("id") or f"evidence-{index}"),
+            "kind": kind,
+            "label": str(raw.get("label") or kind.title()).strip(),
+            "verified": bool(raw.get("verified", False)),
+            "visibility_options": ["private", "public"],
+            "visibility": "private",
+        }
+        for key in ("url", "meta", "detail", "quote"):
+            if isinstance(raw.get(key), str) and raw[key].strip():
+                candidate[key] = raw[key].strip()
+        candidates.append(candidate)
+    return candidates
+
+
+def materialize_approved_evidence(record_dir: str, evidence: list[dict], *, allowed_source_root: str | Path | None = None) -> list[dict]:
+    """Copy only approved, path-safe evidence into the record's public bundle.
+
+    Private/unverified traces remain metadata-only, and all local source paths
+    are removed before record JSON is written. ``allowed_source_root`` is an
+    optional additional containment check for helper-owned local sources.
+    """
+    safe_root = Path(allowed_source_root).expanduser().resolve() if allowed_source_root else None
+    cleaned = []
+    for original in evidence:
+        if not isinstance(original, dict):
             continue
-        rel = item.get("artifact_path") or os.path.basename(source)
-        rel_path = Path(rel)
-        if rel_path.is_absolute() or ".." in rel_path.parts:
-            raise ValueError(f"artifact_path must stay inside record/evidence: {rel}")
-        destination = Path(record_dir) / "evidence" / rel_path
-        source_path = Path(os.path.expanduser(str(source)))
-        if not source_path.is_file():
-            raise FileNotFoundError(f"approved evidence source not found: {source}")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, destination)
-        item["artifact_path"] = str(Path("evidence") / rel_path)
-    return evidence
+        item = {key: value for key, value in original.items() if key != "source_path"}
+        if item.get("visibility") == "approved" and original.get("source_path"):
+            source_path = Path(os.path.expanduser(str(original["source_path"]))).resolve()
+            if safe_root:
+                try:
+                    source_path.relative_to(safe_root)
+                except ValueError as error:
+                    raise ValueError("approved evidence source must stay inside the allowed source root") from error
+            if not source_path.is_file():
+                raise FileNotFoundError(f"approved evidence source not found: {source_path}")
+            rel = original.get("artifact_path") or source_path.name
+            rel_path = Path(str(rel))
+            if rel_path.is_absolute() or ".." in rel_path.parts:
+                raise ValueError(f"artifact_path must stay inside record/evidence: {rel}")
+            destination = Path(record_dir) / "evidence" / rel_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, destination)
+            item["artifact_path"] = str(Path("evidence") / rel_path)
+        cleaned.append(item)
+    return cleaned
 
 
 def ensure_project(root: str, title: str, extra: "dict | None" = None) -> dict:

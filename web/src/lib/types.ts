@@ -81,6 +81,8 @@ export interface Evidence {
   label: string;
   url?: string;
   type?: 'input' | 'judgment' | 'quote' | 'artifact' | 'github' | 'doc' | 'figma' | 'loom' | 'other';
+  kind?: string;
+  verified?: boolean;
   meta?: string;    // e.g. "+412 −80, 7 files" or "6 respondents, 12k words"
   detail?: string;  // for judgment: why it was rejected/changed
   quote?: string;   // verbatim line from source or output

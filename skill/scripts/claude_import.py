@@ -60,9 +60,9 @@ WEB_ACTIONS = {
 }
 TASK_ACTION_FIELDS = {
     "project", "goal", "stage", "title", "date", "activity", "purpose",
-    "tools", "mindset", "body", "evidence", "highlight",
+    "tools", "mindset", "body", "evidence", "highlight", "proposal_id",
 }
-TASK_EVIDENCE_FIELDS = {"type", "label", "url", "meta", "detail", "quote", "visibility"}
+TASK_EVIDENCE_FIELDS = {"candidate_id", "kind", "type", "label", "url", "meta", "detail", "quote", "visibility", "verified"}
 TASK_HIGHLIGHT_FIELDS = {"ai", "builder", "why"}
 TASK_SPLIT_FIELDS = {"title", "body", "body_md", "project", "project_slug", "project_id", "goal", "goal_slug", "goal_id", "section", "date", "purpose", "activities", "activity", "tools", "mindset", "evidence", "source_refs"}
 
@@ -1212,8 +1212,16 @@ def _validate_task_approve_action(action: Any, run_id: str) -> dict[str, Any]:
     for item in evidence:
         if not isinstance(item, dict) or not set(item).issubset(TASK_EVIDENCE_FIELDS):
             raise ValueError("task.approve evidence contains unsupported fields")
-        if not all(isinstance(value, str) for value in item.values()):
-            raise ValueError("task.approve evidence values must be strings")
+        if not all(isinstance(value, (str, bool)) for value in item.values()):
+            raise ValueError("task.approve evidence values must be strings or booleans")
+        if "visibility" in item and item["visibility"] not in {"private", "public", "approved", "unverified"}:
+            raise ValueError("task.approve evidence visibility must be private or public")
+        if item.get("visibility") == "public" and item.get("verified") is not True:
+            raise ValueError("task.approve public evidence must be verified")
+        if "url" in item and (urlparse(item["url"]).scheme not in {"http", "https"} or not urlparse(item["url"]).netloc):
+            raise ValueError("task.approve evidence URL must be http(s)")
+        if "verified" in item and not isinstance(item["verified"], bool):
+            raise ValueError("task.approve evidence verified must be boolean")
     highlight = task.get("highlight")
     if highlight is not None:
         if isinstance(highlight, str):
@@ -1230,8 +1238,38 @@ def _validate_task_approve_action(action: Any, run_id: str) -> dict[str, Any]:
     }
 
 
+def _resolve_approved_evidence(*, run_dir: Path, task: dict[str, Any]) -> list[dict[str, Any]]:
+    """Resolve candidate IDs server-side; the web never supplies local paths."""
+    candidates: dict[str, dict[str, Any]] = {}
+    proposal_id = task.get("proposal_id")
+    if isinstance(proposal_id, str) and proposal_id:
+        try:
+            proposal = json.loads((run_dir / "task-proposals" / f"{proposal_id}.json").read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            proposal = {}
+        for item in proposal.get("evidence_candidates", []) if isinstance(proposal, dict) else []:
+            if isinstance(item, dict) and item.get("id"):
+                candidates[str(item["id"])] = item
+    resolved = []
+    for item in task["evidence"]:
+        row = dict(item)
+        candidate = candidates.get(str(row.get("candidate_id")))
+        if candidate:
+            for key in ("source_path", "artifact_path"):
+                if key in candidate:
+                    row[key] = candidate[key]
+            for key in ("kind", "type", "label", "url", "meta", "detail", "quote"):
+                if key not in row and isinstance(candidate.get(key), str):
+                    row[key] = candidate[key]
+        if row.get("visibility") == "public":
+            row["visibility"] = "approved"
+        resolved.append(row)
+    return resolved
+
+
 def _apply_task_approve(*, data_root: str | Path, run_dir: Path, action: Any, run_id: str) -> dict[str, Any]:
     task = _validate_task_approve_action(action, run_id)
+    task["evidence"] = _resolve_approved_evidence(run_dir=run_dir, task=task)
     save_record = _import_save_record()
     script = Path(getattr(save_record, "__file__", ""))
     if not script.is_file():

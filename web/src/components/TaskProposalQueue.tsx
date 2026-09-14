@@ -39,11 +39,12 @@ export function TaskProposalQueue({ refreshKey = 0, onSaved }: Props) {
       const handle = await loadFolderHandleFromStorage();
       if (!handle) throw new Error('Folder is not connected');
       const task: TaskApproval = {
+        proposal_id: proposal.id,
         project: proposal.project, goal: proposal.purpose, stage: proposal.stage,
         title: String(edited.title || proposal.title), date: proposal.date,
         activity: proposal.activities, purpose: String(edited.task_aim || proposal.task_aim),
         tools: proposal.tools, mindset: proposal.mindset, body: String(edited.body || proposal.body),
-        evidence: proposal.evidence_candidates, highlight: proposal.highlight,
+        evidence: (edited.evidence_candidates || proposal.evidence_candidates).map(item => ({ candidate_id: item.id, kind: item.kind, type: item.kind, label: item.label, url: item.url, meta: item.meta, detail: item.detail, quote: item.quote, visibility: item.visibility === 'public' ? 'public' : 'private', verified: item.verified })), highlight: proposal.highlight,
       };
       await writeTaskApproveAction(handle, runId, task);
       const result = await waitForTaskActionResult(handle, runId, 'approve');

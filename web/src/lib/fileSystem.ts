@@ -594,6 +594,19 @@ export interface ImportProposalProject {
   claude_code: ImportSourcePreview[];
 }
 
+export interface EvidenceCandidate {
+  id: string;
+  kind: string;
+  label: string;
+  url?: string;
+  meta?: string;
+  detail?: string;
+  quote?: string;
+  verified: boolean;
+  visibility?: 'private' | 'public' | 'approved' | 'unverified';
+  visibility_options?: string[];
+}
+
 export interface TaskProposal {
   id: string;
   source_ref: string;
@@ -608,7 +621,7 @@ export interface TaskProposal {
   mindset: string[];
   body: string;
   highlight: TaskApproval['highlight'];
-  evidence_candidates: TaskApproval['evidence'];
+  evidence_candidates: EvidenceCandidate[];
   status: 'pending' | 'approved' | 'dropped';
 }
 
@@ -636,7 +649,8 @@ function normalizeTaskProposal(raw: any, fallbackId: string): TaskProposal | nul
     body: String(raw.body || raw.summary || '').trim(),
     highlight: raw.highlight && (typeof raw.highlight === 'string' || typeof raw.highlight === 'object') ? raw.highlight : null,
     evidence_candidates: Array.isArray(raw.evidence_candidates)
-      ? raw.evidence_candidates.filter((item: any) => item && typeof item === 'object' && Object.values(item).every(value => typeof value === 'string'))
+      ? raw.evidence_candidates.filter((item: any) => item && typeof item === 'object' && typeof item.label === 'string' && Object.entries(item).every(([key, value]) => ['id', 'kind', 'label', 'url', 'meta', 'detail', 'quote', 'visibility', 'visibility_options', 'verified'].includes(key) && (typeof value === 'string' || typeof value === 'boolean' || Array.isArray(value))))
+          .map((item: any, index: number) => ({ id: String(item.id || `evidence-${index + 1}`), kind: String(item.kind || item.type || 'file'), label: String(item.label), ...(typeof item.url === 'string' ? { url: item.url } : {}), ...(typeof item.meta === 'string' ? { meta: item.meta } : {}), ...(typeof item.detail === 'string' ? { detail: item.detail } : {}), ...(typeof item.quote === 'string' ? { quote: item.quote } : {}), verified: item.verified === true, visibility: ['private', 'public', 'approved', 'unverified'].includes(item.visibility) ? item.visibility : 'private', visibility_options: Array.isArray(item.visibility_options) ? item.visibility_options.filter((value: any) => typeof value === 'string') : ['private', 'public'] }))
       : [],
     status: raw.status === 'approved' || raw.status === 'dropped' ? raw.status : 'pending',
   };
@@ -841,6 +855,7 @@ export async function writeProjectConfirmAction(handle: FileSystemDirectoryHandl
 /** Declarative Task fields the web may send to the active import helper.
  * The helper validates this again; the browser never chooses a command or path. */
 export interface TaskApproval {
+  proposal_id?: string;
   project: string;
   goal: string;
   stage: string;
@@ -851,7 +866,7 @@ export interface TaskApproval {
   tools: string[];
   mindset: string[];
   body: string;
-  evidence: Array<{ type?: string; label?: string; url?: string; meta?: string; detail?: string; quote?: string; visibility?: string }>;
+  evidence: Array<{ candidate_id?: string; type?: string; kind?: string; label?: string; url?: string; meta?: string; detail?: string; quote?: string; visibility?: string; verified?: boolean }>;
   highlight: string | { ai?: string; builder?: string; why?: string } | null;
 }
 
@@ -863,6 +878,7 @@ export async function writeTaskApproveAction(handle: FileSystemDirectoryHandle, 
   const file = await actions.getFileHandle('task-approve.json', { create: true });
   const writable = await (file as any).createWritable();
   const allowedTask = {
+    ...(task.proposal_id ? { proposal_id: task.proposal_id } : {}),
     project: task.project, goal: task.goal, stage: task.stage, title: task.title, date: task.date,
     activity: task.activity, purpose: task.purpose, tools: task.tools, mindset: task.mindset,
     body: task.body, evidence: task.evidence, highlight: task.highlight,
