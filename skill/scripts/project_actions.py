@@ -1,6 +1,7 @@
 """Safe, provenance-preserving actions on Builder's Diary Projects."""
 from __future__ import annotations
 
+import datetime as dt
 import json
 import shutil
 import tempfile
@@ -69,6 +70,29 @@ def _rewrite_goal(path: Path, target: dict[str, Any], goal: dict[str, Any]) -> d
     goal["project_slug"] = target["slug"]
     write_json_atomic(path, goal)
     return goal
+
+
+def enrich_project(data_root: str | Path, *, project_id: str, sector: str, one_liner: str) -> dict[str, Any]:
+    """Atomically apply the approved, allowlisted Project story fields."""
+    if not all(isinstance(value, str) and value.strip() for value in (project_id, sector, one_liner)):
+        raise ValueError("Project enrichment requires a project_id, sector, and one_liner")
+    root = Path(data_root).expanduser().resolve()
+    matches: list[Path] = []
+    for project_json in root.glob("*/project.json"):
+        try:
+            metadata = _read(project_json)
+        except ValueError:
+            continue
+        if metadata.get("id") == project_id or metadata.get("slug") == project_id:
+            matches.append(project_json)
+    if len(matches) != 1:
+        raise ValueError("Project identifier must match exactly one project")
+    path = matches[0]
+    metadata = _read(path)
+    metadata.update({"sector": sector.strip(), "one_liner": one_liner.strip()})
+    metadata["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    write_json_atomic(path, metadata)
+    return {"status": "applied", "project_id": metadata.get("id"), "project_slug": metadata.get("slug"), "sector": metadata["sector"], "one_liner": metadata["one_liner"]}
 
 
 def merge_projects(data_root: str | Path, *, target_slug: str, source_slug: str) -> dict[str, Any]:

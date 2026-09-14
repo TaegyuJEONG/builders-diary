@@ -714,6 +714,55 @@ export async function readProjectProposal(handle: FileSystemDirectoryHandle): Pr
   }
 }
 
+export interface ProjectEnrichmentProposal {
+  project_id: string;
+  project_slug: string;
+  name: string;
+  sector: string;
+  one_liner: string;
+  status: 'pending' | 'approved';
+}
+
+export async function readProjectEnrichmentProposals(handle: FileSystemDirectoryHandle): Promise<{ runId: string; proposals: ProjectEnrichmentProposal[] } | null> {
+  try {
+    const imports = await handle.getDirectoryHandle('imports');
+    const runs: string[] = [];
+    for await (const [name, entry] of imports.entries()) if (entry.kind === 'directory' && !name.startsWith('.')) runs.push(name);
+    runs.sort().reverse();
+    for (const runId of runs) {
+      const runDir = await imports.getDirectoryHandle(runId);
+      const data = await readJson(runDir, 'project-enrichment-proposals.json');
+      if (!data) continue;
+      return { runId, proposals: Array.isArray(data.proposals) ? data.proposals.filter((item: any) => item?.project_id && item.status !== 'approved').map((item: any) => ({
+        project_id: String(item.project_id), project_slug: String(item.project_slug || ''), name: String(item.name || ''), sector: String(item.sector || ''), one_liner: String(item.one_liner || ''), status: 'pending' as const,
+      })) : [] };
+    }
+    return null;
+  } catch { return null; }
+}
+
+export async function writeProjectEnrichAction(handle: FileSystemDirectoryHandle, runId: string, projectId: string, sector: string, oneLiner: string): Promise<void> {
+  if (!projectId.trim() || !sector.trim() || !oneLiner.trim()) throw new Error('Project identifier, sector, and one-line story are required.');
+  const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId);
+  const file = await (await runDir.getDirectoryHandle('actions', { create: true })).getFileHandle('project-enrich.json', { create: true });
+  const writable = await (file as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'project.enrich', run_id: runId, created_at: new Date().toISOString(), payload: { project_id: projectId.trim(), sector: sector.trim(), one_liner: oneLiner.trim() } }, null, 2) + '\n');
+  await writable.close();
+}
+
+export async function waitForProjectEnrichResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; project_id?: string; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId);
+      const result = await readJson(await runDir.getDirectoryHandle('results'), 'project-enrich.json');
+      if (result) return result;
+    } catch { /* helper may not have written it */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'Project enrichment was not applied in time.' };
+}
+
 export interface ChatViewEntry {
   title: string;
   summary: string;

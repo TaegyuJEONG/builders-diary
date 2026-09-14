@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
-ALLOWED_ACTIONS = {"project.confirm", "project.merge", "project.split", "task.approve", "task.drop", "task.merge", "task.split"}
+ALLOWED_ACTIONS = {"project.confirm", "project.enrich", "project.merge", "project.split", "task.approve", "task.drop", "task.merge", "task.split"}
 RESULT_STATUSES = {"applied", "rejected", "error", "timeout"}
 _ENVELOPE_KEYS = {"schema_version", "action_id", "action", "run_id", "created_at", "payload"}
 _RESULT_KEYS = {"schema_version", "action_id", "status", "applied_at", "result", "error"}
@@ -39,6 +39,7 @@ def _validate_payload(action: Any, payload: Any) -> None:
         raise ValueError("payload must be an object")
     expected = (
         {"projects"} if action == "project.confirm"
+        else {"project_id", "sector", "one_liner"} if action == "project.enrich"
         else {"target_slug", "source_slug"} if action == "project.merge"
         else {"source_slug", "new_slug", "new_title", "task_ids", "source_refs"} if action == "project.split"
         else {"task"} if action == "task.approve"
@@ -49,7 +50,10 @@ def _validate_payload(action: Any, payload: Any) -> None:
     )
     if set(payload) != expected:
         raise ValueError(f"{action} payload has invalid fields")
-    if action == "project.merge" or action == "task.merge":
+    if action == "project.enrich":
+        if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
+            raise ValueError(f"{action} payload has invalid fields")
+    elif action == "project.merge" or action == "task.merge":
         if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
             raise ValueError(f"{action} payload has invalid fields")
     elif action == "project.split":

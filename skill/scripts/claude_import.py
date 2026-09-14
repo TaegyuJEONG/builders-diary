@@ -50,6 +50,7 @@ EXPORT_CATEGORIES = {"conversations", "projects", "memories", "light_metadata"}
 VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
 WEB_ACTIONS = {
     "project-confirm": "project.confirm",
+    "project-enrich": "project.enrich",
     "project-merge": "project.merge",
     "project-split": "project.split",
     "task-approve": "task.approve",
@@ -1161,7 +1162,19 @@ def apply_selections(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
         confirmed.append(project["slug"])
         if not source_refs:
             without_sources.append({"candidate_id": selected_id, "name": name})
-    return {"confirmed": confirmed, "dropped": dropped, "merged": merged, "without_sources": without_sources}
+    enrichment_proposals = []
+    for project_slug in confirmed:
+        project_path = Path(data_root).expanduser() / project_slug / "project.json"
+        metadata = json.loads(project_path.read_text(encoding="utf-8"))
+        if not metadata.get("sector") or not metadata.get("one_liner"):
+            enrichment_proposals.append({
+                "project_id": metadata.get("id"), "project_slug": project_slug,
+                "name": metadata.get("title") or metadata.get("name") or project_slug,
+                "sector": metadata.get("sector") or "", "one_liner": metadata.get("one_liner") or "",
+                "status": "pending",
+            })
+    _write_json(run_dir / "project-enrichment-proposals.json", {"schema_version": 1, "proposals": enrichment_proposals})
+    return {"confirmed": confirmed, "dropped": dropped, "merged": merged, "without_sources": without_sources, "enrichment_proposals": enrichment_proposals}
 
 
 def _validate_task_approve_action(action: Any, run_id: str) -> dict[str, Any]:
@@ -1311,6 +1324,31 @@ def read_action_from_payload(action: Any, *, run_id: str, action_name: str) -> d
     return validate_action(action, run_id=run_id, action_name=action_name, allow_legacy=True)
 
 
+def _apply_project_enrich(*, data_root: str | Path, action: Any, run_id: str) -> dict[str, Any]:
+    canonical = read_action_from_payload(action, run_id=run_id, action_name="project.enrich")
+    payload = canonical["payload"]
+    try:
+        from .project_actions import enrich_project
+    except ImportError:
+        from project_actions import enrich_project
+    enriched = enrich_project(
+        data_root,
+        project_id=payload["project_id"],
+        sector=payload["sector"],
+        one_liner=payload["one_liner"],
+    )
+    proposal_path = Path(data_root).expanduser() / "imports" / run_id / "project-enrichment-proposals.json"
+    try:
+        proposal = json.loads(proposal_path.read_text(encoding="utf-8"))
+        for item in proposal.get("proposals", []):
+            if isinstance(item, dict) and item.get("project_id") == enriched.get("project_id"):
+                item["status"] = "approved"
+        _write_json(proposal_path, proposal)
+    except (OSError, json.JSONDecodeError):
+        pass
+    return enriched
+
+
 def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) -> dict[str, Any]:
     """Apply one allowlisted, run-scoped web action through the helper only."""
     if action_name not in WEB_ACTIONS:
@@ -1370,6 +1408,10 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
         applied = apply_selections(data_root=data_root, run_id=run_id)
         result = {"status": "applied", **applied}
         event_details = {"action": "project.confirm", "confirmed": len(applied["confirmed"])}
+    elif action_name == "project-enrich":
+        enriched = _apply_project_enrich(data_root=data_root, action=action, run_id=run_id)
+        result = {"status": "applied", **enriched}
+        event_details = {"action": "project.enrich", "project_id": enriched["project_id"]}
     elif action_name == "task-approve":
         saved = _apply_task_approve(
             data_root=data_root,

@@ -9,6 +9,7 @@ import { FirstRecordBanner } from '@/components/FirstRecordBanner';
 import { ManagePanel, ManageMode } from '@/components/ManagePanel';
 import { ImportReview } from '@/components/ImportReview';
 import { TaskProposalQueue } from '@/components/TaskProposalQueue';
+import { ProjectEnrichmentQueue } from '@/components/ProjectEnrichmentQueue';
 import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -589,6 +590,7 @@ export function HomeContent() {
       )}
 
       <TaskProposalQueue onSaved={refreshPortfolio} refreshKey={importTick} />
+      <ProjectEnrichmentQueue onSaved={refreshPortfolio} refreshKey={importTick} />
 
       {error && (
         <div className="mono" style={{
