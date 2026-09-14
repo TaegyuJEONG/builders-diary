@@ -125,12 +125,13 @@ $DATA_ROOT/imports/
     events.jsonl              # append-only audit trail
     source-index.json
     source-classification.json
+    dedup-report.json
     project-candidates.json
 ```
 
 It does not create portfolio tasks yet.
 
-Read `project-candidates.json` and explain the source counts. Explicitly separate `new_sources`, `changed_sources`, `pending_sources`, and `unchanged_sources`; only unchanged sources with a completed Ledger outcome are skipped automatically. The web viewer refreshes this manifest automatically while it remains open.
+Read `project-candidates.json` and `dedup-report.json` and explain the source counts. Exact content duplicates are collapsed to the first stable source identity automatically. Semantic matches are review-only merge candidates and must never be silently merged. Explicitly separate `new_sources`, `changed_sources`, `pending_sources`, and `unchanged_sources`; only unchanged sources with a completed Ledger outcome are skipped automatically. The web viewer refreshes this manifest automatically while it remains open.
 
 ## Step 3 — Classify, propose, and let the user choose
 

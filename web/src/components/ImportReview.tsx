@@ -3,6 +3,8 @@
 import React from 'react';
 import { ImportSelectionTable } from '@/components/ImportSelectionTable';
 import { TaskProposalQueue } from '@/components/TaskProposalQueue';
+import { ImportDedupReport, loadFolderHandleFromStorage, readProjectProposal } from '@/lib/fileSystem';
+import { useEffect, useState } from 'react';
 
 interface ImportReviewProps {
   onClose: () => void;
@@ -17,6 +19,8 @@ interface ImportReviewProps {
  * same columns and write the same selections.json.
  */
 export function ImportReview({ onClose, onSaved, refreshKey = 0 }: ImportReviewProps) {
+  const [dedup, setDedup] = useState<ImportDedupReport | null>(null);
+  useEffect(() => { (async () => { const handle = await loadFolderHandleFromStorage(); if (handle) setDedup((await readProjectProposal(handle))?.dedupReport || null); })(); }, [refreshKey]);
   return (
     <div
       style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,0.62)', display: 'flex', justifyContent: 'flex-end' }}
@@ -40,6 +44,11 @@ export function ImportReview({ onClose, onSaved, refreshKey = 0 }: ImportReviewP
             another, then save. Claude Code picks up your choices and writes the projects.
           </p>
           <ImportSelectionTable onSaved={onSaved} refreshKey={refreshKey} />
+          {dedup && (dedup.exact_duplicates.length > 0 || dedup.merge_candidates.length > 0) && <div style={{ marginTop: 14, padding: 10, border: '1px solid var(--border)', borderRadius: 5 }}>
+            <strong style={{ fontSize: 12 }}>Deduplication review</strong>
+            {dedup.exact_duplicates.length > 0 && <p style={{ fontSize: 11, color: 'var(--text2)', margin: '8px 0 4px' }}>{dedup.exact_duplicates.length} exact duplicate group(s) collapsed automatically.</p>}
+            {dedup.merge_candidates.length > 0 && <p style={{ fontSize: 11, color: 'var(--text2)', margin: '4px 0 0' }}>{dedup.merge_candidates.length} semantic merge candidate(s) need review; semantic matches are never merged automatically.</p>}
+          </div>}
           <div style={{ marginTop: 24, borderTop: '1px solid var(--border)', paddingTop: 16 }}>
             <TaskProposalQueue onSaved={onSaved} refreshKey={refreshKey} />
           </div>

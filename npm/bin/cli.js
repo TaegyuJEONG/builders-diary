@@ -34,7 +34,7 @@ const SCRIPT_TOKEN = '{{BUILDERS_DIARY_SCRIPT}}';
 const IMPORT_SKILL_NAME = 'builders-diary-import';
 const IMPORT_PAYLOAD = ['SKILL.md'];
 const IMPORT_SCRIPT_TOKEN = '{{BUILDERS_DIARY_IMPORT_SCRIPT}}';
-const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py', 'adapters', 'client_roots.py'];
+const IMPORT_HELPER_SCRIPTS = ['action_protocol.py', 'project_actions.py', 'adapters', 'client_roots.py', 'source_dedup.py'];
 const DEFAULT_IMPORT_CLIENTS = ['claude'];
 const DEFAULT_CLAUDE_ADAPTER_IDS = ['claude_chat_export', 'claude_code'];
 

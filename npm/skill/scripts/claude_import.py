@@ -29,10 +29,23 @@ from urllib.parse import urlparse
 
 try:
     from .action_protocol import create_result, read_action, write_json_atomic
+    from .source_dedup import deduplicate_sources, normalize_source
 except ImportError:  # direct execution from the installed skill directory
     try:
         from action_protocol import create_result, read_action, write_json_atomic
+        from source_dedup import deduplicate_sources, normalize_source
     except ImportError:  # older installs lack the new shared module; non-action commands still work
+        def normalize_source(source: dict[str, Any]) -> dict[str, Any]:
+            """Compatibility fingerprint for an older install before helper sync."""
+            source_ref = str(source.get("source_ref") or f"{source.get('kind', 'source')}:{source.get('source_id', '')}")
+            safe = {key: source.get(key) for key in ("title", "summary", "first_prompt", "created_at", "updated_at", "message_count")}
+            content_hash = "sha256:" + hashlib.sha256(json.dumps(safe, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            return {"source_ref": source_ref, "content_hash": content_hash, "fingerprint": content_hash}
+
+        def deduplicate_sources(sources: list[dict[str, Any]]) -> dict[str, Any]:
+            refs = [str(source.get("source_ref") or f"{source.get('kind', 'source')}:{source.get('source_id', '')}") for source in sources]
+            return {"schema_version": 1, "unique_sources": refs, "canonical_by_ref": {ref: ref for ref in refs}, "exact_duplicates": [], "merge_candidates": []}
+
         def write_json_atomic(path: Path, value: Any) -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
@@ -153,12 +166,7 @@ def _utc_now() -> str:
 
 def _source_fingerprint(source: dict[str, Any]) -> str:
     """Stable local fingerprint of safe source metadata, never raw transcript text."""
-    safe = {
-        key: source.get(key)
-        for key in ("source_ref", "kind", "source_id", "title", "summary", "cwd", "created_at", "updated_at", "message_count")
-    }
-    encoded = json.dumps(safe, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    return f"sha256:{hashlib.sha256(encoded).hexdigest()}"
+    return normalize_source(source)["fingerprint"]
 
 
 def _load_source_ledger(root: Path) -> dict[str, Any]:
@@ -494,7 +502,10 @@ def prepare_import_run(
     chat_index = scan_export_directory(export_dir)
     code_index = scan_claude_code_sessions(claude_config_dir)
     source_index = {"chat": chat_index, "code": code_index}
-    classifications, _ = _classify_sources(root, _source_catalog(source_index))
+    catalog = _source_catalog(source_index)
+    classifications, _ = _classify_sources(root, catalog)
+    dedup_report = deduplicate_sources(list(catalog.values()))
+    canonical_refs = set(dedup_report["unique_sources"])
 
     # Resume support: surface projects already in the portfolio so the skill can
     # skip re-proposing them and continue where a previous run left off.
@@ -522,6 +533,8 @@ def prepare_import_run(
             "changed_sources": sum(1 for state in classifications.values() if state == "changed"),
             "unchanged_sources": sum(1 for state in classifications.values() if state == "unchanged"),
             "pending_sources": sum(1 for state in classifications.values() if state == "pending"),
+            "dedup_exact_duplicates": len(dedup_report["exact_duplicates"]),
+            "dedup_merge_candidates": len(dedup_report["merge_candidates"]),
         },
         "existing_projects": existing_projects,
         "warnings": [*chat_index["warnings"], *code_index["warnings"]],
@@ -529,10 +542,11 @@ def prepare_import_run(
     _write_json(run_dir / "manifest.json", manifest)
     _write_json(run_dir / "source-index.json", source_index)
     _write_json(run_dir / "source-classification.json", {"sources": classifications})
+    _write_json(run_dir / "dedup-report.json", dedup_report)
     _write_json(run_dir / "project-candidates.json", _project_candidates(
         chat_index,
         code_index,
-        {source_ref for source_ref, state in classifications.items() if state in {"new", "changed", "pending"}},
+        {source_ref for source_ref, state in classifications.items() if state in {"new", "changed", "pending"} and source_ref in canonical_refs},
     ))
     _append_run_event(run_dir, "run_prepared", counts=manifest["counts"])
     return {"run_id": run_id, "run_dir": str(run_dir), "manifest": manifest}
@@ -599,13 +613,13 @@ def _source_catalog(source_index: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if not source_id:
             continue
         source_ref = f"chat:{source_id}"
-        catalog.setdefault(source_ref, {**conversation, "source_ref": source_ref, "kind": "chat"})
+        catalog.setdefault(source_ref, {**conversation, "source_ref": source_ref, "kind": "chat", "client": "chat"})
     for session in source_index.get("code", {}).get("sessions", []):
         source_id = session.get("source_id")
         if not source_id:
             continue
         source_ref = f"code:{source_id}"
-        catalog.setdefault(source_ref, {**session, "source_ref": source_ref, "kind": "code"})
+        catalog.setdefault(source_ref, {**session, "source_ref": source_ref, "kind": "code", "client": "code"})
     return catalog
 
 
@@ -630,6 +644,14 @@ def _load_candidates(run_dir: Path) -> dict[str, Any]:
     if not isinstance(data, dict) or not isinstance(data.get("candidates"), list):
         raise ValueError("project-candidates.json is malformed")
     return data
+
+
+def _load_dedup_report(run_dir: Path) -> dict[str, Any]:
+    try:
+        value = json.loads((run_dir / "dedup-report.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"canonical_by_ref": {}}
+    return value if isinstance(value, dict) else {"canonical_by_ref": {}}
 
 
 def _load_project_proposal(run_dir: Path) -> dict[str, Any]:
@@ -718,15 +740,16 @@ def propose_project(
     run_dir, _ = _load_run_manifest(root, run_id)
     catalog = _source_catalog(_load_source_index(run_dir))
     candidates = _load_candidates(run_dir)["candidates"]
+    canonical_by_ref = _load_dedup_report(run_dir).get("canonical_by_ref") or {}
     by_id = {str(item.get("id")): item for item in candidates if isinstance(item, dict) and item.get("id")}
 
-    wanted = list(dict.fromkeys(source_refs or []))
+    wanted = list(dict.fromkeys(str(canonical_by_ref.get(ref, ref)) for ref in (source_refs or [])))
     selected_candidates = list(dict.fromkeys(candidate_ids or []))
     unknown_candidates = [candidate_id for candidate_id in selected_candidates if candidate_id not in by_id]
     if unknown_candidates:
         raise ValueError(f"Unknown candidate ids: {', '.join(unknown_candidates)}")
     for candidate_id in selected_candidates:
-        wanted.extend(by_id[candidate_id].get("source_refs") or [])
+        wanted.extend(str(canonical_by_ref.get(ref, ref)) for ref in (by_id[candidate_id].get("source_refs") or []))
     wanted = list(dict.fromkeys(wanted))
     unknown_refs = [source_ref for source_ref in wanted if source_ref not in catalog]
     if unknown_refs:

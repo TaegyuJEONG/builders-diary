@@ -621,6 +621,11 @@ export interface ImportProposalProject {
   claude_code: ImportSourcePreview[];
 }
 
+export interface ImportDedupReport {
+  exact_duplicates: { canonical_source_ref: string; duplicate_source_refs: string[] }[];
+  merge_candidates: { source_refs: string[]; score: number; status: 'candidate' }[];
+}
+
 export interface EvidenceCandidate {
   id: string;
   kind: string;
@@ -721,7 +726,7 @@ export async function readTaskProposals(handle: FileSystemDirectoryHandle): Prom
 }
 
 /** Read only the agent-classified project proposal. Raw discovery is deliberately not UI input. */
-export async function readProjectProposal(handle: FileSystemDirectoryHandle): Promise<{ runId: string; status: 'draft' | 'finalized'; projects: ImportProposalProject[] } | null> {
+export async function readProjectProposal(handle: FileSystemDirectoryHandle): Promise<{ runId: string; status: 'draft' | 'finalized'; projects: ImportProposalProject[]; dedupReport: ImportDedupReport } | null> {
   try {
     const imports = await handle.getDirectoryHandle('imports');
     const runs: string[] = [];
@@ -734,12 +739,18 @@ export async function readProjectProposal(handle: FileSystemDirectoryHandle): Pr
       const manifest = await readJson(runDir, 'manifest.json');
       if (!manifest || manifest.status === 'source_task_curation') continue;
       const proposal = await readJson(runDir, 'project-proposal.json');
-      if (!proposal) return { runId, status: 'draft', projects: [] };
+      const rawDedup = await readJson(runDir, 'dedup-report.json');
+      const dedupReport: ImportDedupReport = {
+        exact_duplicates: Array.isArray(rawDedup?.exact_duplicates) ? rawDedup.exact_duplicates : [],
+        merge_candidates: Array.isArray(rawDedup?.merge_candidates) ? rawDedup.merge_candidates : [],
+      };
+      if (!proposal) return { runId, status: 'draft', projects: [], dedupReport };
       const status = proposal.status === 'finalized' ? 'finalized' : 'draft';
       const projects = Array.isArray(proposal.projects) ? proposal.projects : [];
       return {
         runId,
         status,
+        dedupReport,
         projects: projects
           .filter((project: any) => project && project.classification === 'project')
           .map((project: any) => ({

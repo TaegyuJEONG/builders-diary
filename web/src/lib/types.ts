@@ -195,6 +195,8 @@ export interface ImportRun {
     changed_sources?: number;
     unchanged_sources?: number;
     pending_sources?: number;
+    dedup_exact_duplicates?: number;
+    dedup_merge_candidates?: number;
   };
   warnings?: string[];
 }
