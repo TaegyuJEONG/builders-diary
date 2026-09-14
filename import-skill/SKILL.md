@@ -70,17 +70,21 @@ If the latest run is unfinished, resume that exact `run-id` with `source-queue` 
 
 ## Step 1 — Get the Claude export (user action)
 
-Chat work reaches the portfolio only through the Claude export archives, so check for them before anything else:
+Chat work reaches the portfolio only through the Claude export archives. First run:
 
 ```bash
 python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" scan-export --export-dir "$HOME/Downloads"
 ```
 
-**If `archives` is empty, the user has not exported yet. Do not create an import run and do not continue to Step 2.** Walk them through the export instead:
+**If no Claude export or manifest is present, say exactly this and wait:**
 
-**A. A manifest JSON exists** (e.g. `~/Downloads/Claude-Export.json`) but the ZIPs do not:
+1. `Claude Settings > Privacy > Data Export`
+2. `You will receive an email. Download the export from its link.`
+3. `Reply “Done” here after the manifest is in Downloads.`
 
-1. Create a local download page. Do not expose the one-time URLs in the conversation:
+On `Done`, run `scan-export` again. Do not create an import run and do not continue to Step 2 until the required archives exist.
+
+**If only the manifest JSON exists** (for example `~/Downloads/Claude-Export.json`), create and open the local download page. Never print one-time export URLs in chat:
 
 ```bash
 python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" download-page \
@@ -89,16 +93,7 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" download-page \
 open "$HOME/Downloads/builders-diary-claude-download.html"
 ```
 
-2. Tell the user to open every link while signed in to Claude and save the ZIPs in the same folder. They do **not** unzip them.
-3. Required: Conversations and Projects. Memories are optional context. Light metadata is intentionally omitted.
-4. Wait for the user to say the downloads are complete.
-5. After the required ZIPs exist, ask before removing the generated local HTML page containing the one-time links. Never retain or print those URLs as import state.
-
-Do not attempt to use the export URLs yourself: they require the user's authenticated Claude session and can be one-time links.
-
-**B. There is no manifest either** — they have never exported:
-
-Tell them to request it in Claude: **Settings → Privacy → Export data**. Claude emails a manifest JSON with one-time links. When it arrives, continue with A.
+Tell the user: click the three links in that local page — **Conversation**, **Projects**, and **Memories** — while signed in to Claude, saving the archives in Downloads. Then wait for confirmation and run `scan-export` again. Conversations and Projects are required; Memories are optional context. Light metadata is intentionally omitted. Do not attempt the links yourself and never retain or print their URLs.
 
 Re-run `scan-export` before moving on: Step 2 must start with `conversations-*.zip` and `projects-*.zip` present.
 

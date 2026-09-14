@@ -937,7 +937,7 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertIn("scan-export", section)
         self.assertIn("archives", section)
         self.assertIn("download-page", section)
-        self.assertIn("Export data", section)  # the never-exported path
+        self.assertIn("Data Export", section)  # the never-exported path
         self.assertIn("do not continue to step 2", section.lower())
 
     def test_helper_runs_from_the_installed_skill_layout(self) -> None:
