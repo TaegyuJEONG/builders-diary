@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from skill.scripts.client_roots import (
+    CLIENT_ADAPTER_IDS,
     DEFAULT_CLAUDE_ADAPTER_IDS,
     build_import_config,
     validate_client_roots,
@@ -31,6 +32,17 @@ class ClientRootValidationTests(unittest.TestCase):
             self.assertEqual(validate_client_roots(valid)["claude"][0]["adapter_id"], "claude_code")
             with self.assertRaisesRegex(ValueError, "adapter"):
                 validate_client_roots({"claude": [{"adapter_id": "cursor", "path": str(root)}]})
+
+    def test_fixture_backed_clients_are_allowlisted_but_antigravity_is_blocked(self) -> None:
+        self.assertEqual(CLIENT_ADAPTER_IDS["cursor"], ("cursor",))
+        self.assertEqual(CLIENT_ADAPTER_IDS["codex"], ("codex",))
+        self.assertEqual(CLIENT_ADAPTER_IDS["hermes"], ("hermes",))
+        self.assertEqual(CLIENT_ADAPTER_IDS["antigravity"], ())
+
+    def test_non_claude_clients_have_no_implicit_roots(self) -> None:
+        config = build_import_config()
+        self.assertEqual(config["source_roots"], [])
+        self.assertTrue(all(not item["roots"] for name, item in config["clients"].items() if name != "claude"))
 
     def test_default_claude_config_is_enabled_but_has_no_implicit_roots(self) -> None:
         config = build_import_config()

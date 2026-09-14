@@ -4,11 +4,16 @@ import json
 import tempfile
 import unittest
 import zipfile
+import sqlite3
 from pathlib import Path
 
 from skill.scripts.adapters.base import SourceContent, SourceMetadata, SourceAdapter
 from skill.scripts.adapters.claude_chat_export import ClaudeChatExportAdapter
 from skill.scripts.adapters.claude_code import ClaudeCodeAdapter
+from skill.scripts.adapters.cursor import CursorAdapter
+from skill.scripts.adapters.codex import CodexAdapter
+from skill.scripts.adapters.hermes import HermesAdapter
+from skill.scripts.adapters.unsupported import UnsupportedClientAdapter
 from skill.scripts.claude_import import scan_claude_code_sessions, scan_export_directory
 
 
@@ -78,6 +83,46 @@ class SourceAdapterTests(unittest.TestCase):
         self.transcript.symlink_to(outside)
         with self.assertRaises(ValueError):
             ClaudeCodeAdapter(self.config).read("code-1")
+
+    def test_cursor_reads_confirmed_conversation_search_fixture(self) -> None:
+        db = self.root / "cursor"; db.mkdir()
+        conn = sqlite3.connect(db / "conversation-search.db")
+        conn.execute("CREATE TABLE conversations (fts_rowid INTEGER PRIMARY KEY, source TEXT, scope TEXT, id TEXT, title TEXT, branches TEXT, updated_at INTEGER, is_archived INTEGER, root_fingerprint TEXT, cache_fingerprint TEXT)")
+        conn.execute("INSERT INTO conversations VALUES (1,'local','','cursor-1','Fix auth','',1700000000000,0,NULL,NULL)")
+        conn.commit(); conn.close()
+        adapter = CursorAdapter(db)
+        self.assertEqual(adapter.discover()[0].source_ref, "cursor:cursor-1")
+        self.assertEqual(adapter.read("cursor-1").content["title"], "Fix auth")
+
+    def test_codex_reads_confirmed_session_jsonl_fixture(self) -> None:
+        root = self.root / "codex" / "sessions" / "2026" / "01" / "01"; root.mkdir(parents=True)
+        path = root / "rollout-abc.jsonl"
+        path.write_text("\n".join([
+            json.dumps({"timestamp":"2026-01-01T00:00:00Z","ordinal":0,"type":"session_meta","payload":{"id":"codex-1","cwd":"/Users/demo/Project","originator":"Codex CLI"}}),
+            json.dumps({"timestamp":"2026-01-01T00:01:00Z","ordinal":1,"type":"event_msg","payload":{"type":"task_started"}}),
+        ]) + "\n", encoding="utf-8")
+        adapter = CodexAdapter(self.root / "codex")
+        self.assertEqual(adapter.discover()[0].source_id, "codex-1")
+        self.assertEqual(adapter.discover()[0].workspace, "/Users/demo/Project")
+        self.assertEqual(len(adapter.read("codex-1").content), 2)
+
+    def test_hermes_reads_confirmed_state_db_fixture(self) -> None:
+        db = self.root / "state.db"
+        conn = sqlite3.connect(db)
+        conn.execute("CREATE TABLE sessions (id TEXT PRIMARY KEY, source TEXT, display_name TEXT, title TEXT, started_at REAL, ended_at REAL, message_count INTEGER, cwd TEXT, git_branch TEXT, archived INTEGER, hidden INTEGER)")
+        conn.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, timestamp REAL, tool_name TEXT)")
+        conn.execute("INSERT INTO sessions VALUES ('hermes-1','desktop','Diary','Build feature',1700000000,1700000010,1,'/Users/demo/Project','main',0,0)")
+        conn.execute("INSERT INTO messages VALUES (1,'hermes-1','user','Capture this',1700000001,NULL)")
+        conn.commit(); conn.close()
+        adapter = HermesAdapter(db)
+        self.assertEqual(adapter.discover()[0].source_ref, "hermes:hermes-1")
+        self.assertEqual(adapter.read("hermes-1").content[0]["content"], "Capture this")
+
+    def test_unsupported_client_never_scans_implicit_paths(self) -> None:
+        result = UnsupportedClientAdapter("antigravity").discover_result()
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("fixture", result["reason"].lower())
+        self.assertEqual(UnsupportedClientAdapter("antigravity").discover(), [])
 
 
 if __name__ == "__main__":

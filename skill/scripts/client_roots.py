@@ -12,12 +12,11 @@ SCHEMA_VERSION = 1
 DEFAULT_CLAUDE_ADAPTER_IDS = ["claude_chat_export", "claude_code"]
 CLIENT_ADAPTER_IDS: dict[str, tuple[str, ...]] = {
     "claude": tuple(DEFAULT_CLAUDE_ADAPTER_IDS),
-    # Reserved client labels are surfaced by the web UI, but adapters are not
-    # implemented until their source formats have been verified.
-    "cursor": (),
-    "codex": (),
+    # Only clients with inspected, fixture-backed formats are allowlisted.
+    "cursor": ("cursor",),
+    "codex": ("codex",),
     "antigravity": (),
-    "hermes": (),
+    "hermes": ("hermes",),
 }
 
 
