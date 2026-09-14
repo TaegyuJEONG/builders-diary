@@ -9,6 +9,7 @@ import { detectOS, terminalHint } from '@/lib/os';
 import { ImportRun } from '@/lib/types';
 import { ImportProgress } from '@/components/ImportProgress';
 import { ImportSelectionTable } from '@/components/ImportSelectionTable';
+import { ClaudeExportDownload } from '@/components/ClaudeExportDownload';
 
 interface OnboardingScreenProps {
   /** Opens the native folder picker; resolves when a folder is connected. */
@@ -381,6 +382,7 @@ export function OnboardingScreen({
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                      <ClaudeExportDownload />
                       <div style={{ border: '1px solid var(--accent)', borderRadius: 6, padding: 14, background: 'var(--tag-active-bg)' }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Import past work in bulk</div>
                         <div style={{ fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.6, margin: '5px 0 10px' }}>Start a new chat in Claude Code and run the import skill to review your existing work.</div>
