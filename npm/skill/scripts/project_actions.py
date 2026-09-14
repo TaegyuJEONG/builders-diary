@@ -1,6 +1,8 @@
 """Safe, provenance-preserving actions on Builder's Diary Projects."""
 from __future__ import annotations
 
+import base64
+import binascii
 import datetime as dt
 import json
 import shutil
@@ -71,6 +73,73 @@ def _rewrite_goal(path: Path, target: dict[str, Any], goal: dict[str, Any]) -> d
     write_json_atomic(path, goal)
     return goal
 
+
+def write_bytes_atomic(path: str | Path, data: bytes) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    try:
+        with open(fd, "wb", closefd=True) as stream:
+            stream.write(data)
+            stream.flush()
+            import os
+            os.fsync(stream.fileno())
+        import os
+        os.replace(name, path)
+    finally:
+        import os
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def validate_logo_bytes(data: bytes, mime: str) -> str:
+    if len(data) > 5 * 1024 * 1024:
+        raise ValueError("Logo must be 5 MB or smaller")
+    signatures = {
+        "image/png": (b"\x89PNG\r\n\x1a\n", "png"),
+        "image/jpeg": (b"\xff\xd8\xff", "jpg"),
+        "image/webp": (b"RIFF", "webp"),
+    }
+    if mime not in signatures:
+        raise ValueError("Logo MIME is not allowed")
+    signature, extension = signatures[mime]
+    if not data.startswith(signature) or (mime == "image/webp" and data[8:12] != b"WEBP"):
+        raise ValueError("Logo bytes do not match the declared MIME signature")
+    return extension
+
+
+def apply_logo_action(data_root: str | Path, *, action: dict[str, Any], run_id: str) -> dict[str, Any]:
+    """Apply the only browser logo write: validated bytes to a fixed relative path."""
+    try:
+        from .action_protocol import validate_action
+    except ImportError:
+        from action_protocol import validate_action
+    canonical = validate_action(action, run_id=run_id, action_name="project.logo")
+    payload = canonical["payload"]
+    try:
+        data = base64.b64decode(payload["data_base64"], validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("Logo data is not valid base64") from exc
+    extension = validate_logo_bytes(data, payload["mime"])
+    root = Path(data_root).expanduser().resolve()
+    matches = []
+    for project_json in root.glob("*/project.json"):
+        try:
+            metadata = _read(project_json)
+        except ValueError:
+            continue
+        if metadata.get("id") == payload["project_id"] or metadata.get("slug") == payload["project_id"]:
+            matches.append(project_json)
+    if len(matches) != 1:
+        raise ValueError("Project identifier must match exactly one project")
+    project_json = matches[0]
+    relative_logo = f"assets/logo.{extension}"
+    write_bytes_atomic(project_json.parent / relative_logo, data)
+    metadata = _read(project_json)
+    metadata["logo"] = relative_logo
+    metadata["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    write_json_atomic(project_json, metadata)
+    return {"status": "applied", "project_id": metadata.get("id"), "logo": relative_logo}
 
 def enrich_project(data_root: str | Path, *, project_id: str, sector: str, one_liner: str) -> dict[str, Any]:
     """Atomically apply the approved, allowlisted Project story fields."""

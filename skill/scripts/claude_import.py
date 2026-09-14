@@ -1477,6 +1477,34 @@ def create_download_page(manifest_path: str | Path, output_path: str | Path) -> 
     return output
 
 
+def apply_project_logo_action(*, data_root: str | Path) -> dict[str, Any]:
+    root = Path(data_root).expanduser().resolve()
+    action_path = root / "actions" / "project-logo.json"
+    result_path = root / "results" / "project-logo.json"
+    try:
+        previous = json.loads(result_path.read_text(encoding="utf-8"))
+        if previous.get("status") == "applied": return previous
+    except (OSError, json.JSONDecodeError):
+        pass
+    action = json.loads(action_path.read_text(encoding="utf-8"))
+    try:
+        from .project_actions import apply_logo_action
+    except ImportError:
+        from project_actions import apply_logo_action
+    result = apply_logo_action(root, action=action, run_id="logo")
+    envelope = create_result(action["action_id"], "applied", result)
+    write_json_atomic(result_path, envelope)
+    return {**envelope, **result}
+
+
+def wait_for_project_logo_action(*, data_root: str | Path, timeout_seconds: int = 900) -> dict[str, Any]:
+    if not 1 <= timeout_seconds <= 3600: raise ValueError("timeout_seconds must be between 1 and 3600")
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try: return apply_project_logo_action(data_root=data_root)
+        except FileNotFoundError: time.sleep(0.5)
+    return {"status": "timeout", "action": "project-logo"}
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Prepare a local Claude import for Builder's Diary")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1540,6 +1568,12 @@ def main() -> int:
     assign_sources_cmd.add_argument("--summary", default=None)
     assign_sources_cmd.add_argument("--source-ref", action="append", default=None)
 
+    logo_apply_cmd = sub.add_parser("apply-project-logo", help="Apply the validated local project logo action")
+    logo_apply_cmd.add_argument("--data-root", required=True)
+    logo_wait_cmd = sub.add_parser("wait-for-project-logo", help="Wait for and apply a local project logo action")
+    logo_wait_cmd.add_argument("--data-root", required=True)
+    logo_wait_cmd.add_argument("--timeout", type=int, default=900)
+
     apply_web_action_cmd = sub.add_parser("apply-web-action", help="Apply one validated action written by the connected web view")
     apply_web_action_cmd.add_argument("--data-root", required=True)
     apply_web_action_cmd.add_argument("--run-id", required=True)
@@ -1599,6 +1633,10 @@ def main() -> int:
         print(json.dumps(materialize_proposal_chat_views(data_root=args.data_root, run_id=args.run_id, page_size=args.page_size), ensure_ascii=False, indent=2))
     elif args.command == "assign-sources":
         print(json.dumps(assign_sources(data_root=args.data_root, run_id=args.run_id, candidate_id=args.candidate_id, source_refs=args.source_ref, summary=args.summary), ensure_ascii=False, indent=2))
+    elif args.command == "apply-project-logo":
+        print(json.dumps(apply_project_logo_action(data_root=args.data_root), ensure_ascii=False, indent=2))
+    elif args.command == "wait-for-project-logo":
+        print(json.dumps(wait_for_project_logo_action(data_root=args.data_root, timeout_seconds=args.timeout), ensure_ascii=False, indent=2))
     elif args.command == "apply-web-action":
         print(json.dumps(apply_web_action(data_root=args.data_root, run_id=args.run_id, action_name=args.action), ensure_ascii=False, indent=2))
     elif args.command == "wait-for-action":

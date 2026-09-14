@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Project } from '@/lib/types';
+import { loadFolderHandleFromStorage, writeProjectLogoAction, waitForProjectLogoResult } from '@/lib/fileSystem';
 
 interface ProjectDetailPanelProps {
   project: Project;
@@ -36,6 +37,34 @@ export function ProjectDetailPanel({ project, onClose, onSave, onDelete, project
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [selectedSourceRefs, setSelectedSourceRefs] = useState<string[]>([]);
   const [splitState, setSplitState] = useState('');
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoState, setLogoState] = useState('');
+
+  useEffect(() => {
+    if (!logoPreview) return;
+    return () => URL.revokeObjectURL(logoPreview);
+  }, [logoPreview]);
+
+  async function chooseLogo(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) { setLogoState('Logo must be 5 MB or smaller.'); return; }
+    const preview = URL.createObjectURL(file);
+    setLogoPreview(preview);
+    setLogoState('Waiting for helper result…');
+    try {
+      const handle = await loadFolderHandleFromStorage();
+      if (!handle) throw new Error('Builder’s Diary folder is not connected');
+      await writeProjectLogoAction(handle, project.id, file);
+      const result = await waitForProjectLogoResult(handle);
+      if (result?.status !== 'applied' || !result.logo) throw new Error(result?.error || 'The local logo was not applied.');
+      setDraft(d => ({ ...d, logo: result.logo || '' }));
+      setLogoState('Local logo applied.');
+    } catch (error) {
+      setLogoState(error instanceof Error ? error.message : 'Local logo upload failed.');
+    }
+  }
 
   useEffect(() => {
     setDraft({
@@ -90,6 +119,7 @@ export function ProjectDetailPanel({ project, onClose, onSave, onDelete, project
           {(!project.sector || !project.oneLiner) && <div className="mono" style={{ color: 'var(--accent)', fontSize: 10 }}>Pending enrichment — add a sector and one-line story.</div>}
           <div><label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 5 }}>One-line story</label><textarea style={field} rows={4} value={draft.oneLiner} onChange={e => setDraft(d => ({ ...d, oneLiner: e.target.value }))} /></div>
           <div><label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 5 }}>Logo URL</label><input style={field} value={draft.logo} onChange={e => setDraft(d => ({ ...d, logo: e.target.value }))} /></div>
+          <div><label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 5 }}>Local logo</label><input type="file" accept="image/png,image/jpeg,image/webp" onChange={chooseLogo} /><div className="mono" style={{ marginTop: 5, fontSize: 10, color: 'var(--text3)' }}>PNG, JPEG, or WebP · max 5 MB</div>{logoPreview && <img src={logoPreview} alt="Logo preview" style={{ marginTop: 8, width: 64, height: 64, objectFit: 'cover', borderRadius: 6 }} />}{logoState && <div className="mono" style={{ marginTop: 5, fontSize: 10, color: logoState === 'Local logo applied.' ? 'var(--accent)' : 'var(--text2)' }}>{logoState}</div>}</div>
           {onMerge && projects.length > 1 && <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
             <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', marginBottom: 8 }}>Merge projects</div>
             <label className="mono" style={{ display: 'block', fontSize: 9, color: 'var(--text3)', marginBottom: 4 }}>Target</label>

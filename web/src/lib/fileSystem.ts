@@ -741,6 +741,34 @@ export async function readProjectEnrichmentProposals(handle: FileSystemDirectory
   } catch { return null; }
 }
 
+export async function writeProjectLogoAction(handle: FileSystemDirectoryHandle, projectId: string, file: File): Promise<void> {
+  const allowed = new Set(['image/png', 'image/jpeg', 'image/webp']);
+  if (!allowed.has(file.type)) throw new Error('Choose a PNG, JPEG, or WebP image.');
+  if (file.size > 5 * 1024 * 1024) throw new Error('Logo must be 5 MB or smaller.');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  const dataBase64 = btoa(binary);
+  const actions = await handle.getDirectoryHandle('actions', { create: true });
+  const actionFile = await actions.getFileHandle('project-logo.json', { create: true });
+  const writable = await (actionFile as any).createWritable();
+  await writable.write(JSON.stringify({ schema_version: 1, action_id: crypto.randomUUID(), action: 'project.logo', run_id: 'logo', created_at: new Date().toISOString(), payload: { project_id: projectId.trim(), mime: file.type, filename: file.name.split(/[\\\\/]/).pop() || 'logo', data_base64: dataBase64 } }, null, 2) + '\\n');
+  await writable.close();
+}
+
+export async function waitForProjectLogoResult(handle: FileSystemDirectoryHandle, timeoutMs = 900000): Promise<{ status: string; project_id?: string; logo?: string; error?: string } | null> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const result = await readJson(await handle.getDirectoryHandle('results'), 'project-logo.json');
+      if (result) return result.result && typeof result.result === 'object' ? { ...result, ...result.result } : result;
+    } catch { /* helper may not have written it yet */ }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return { status: 'timeout', error: 'The local logo was not applied in time.' };
+}
+
+
 export async function writeProjectEnrichAction(handle: FileSystemDirectoryHandle, runId: string, projectId: string, sector: string, oneLiner: string): Promise<void> {
   if (!projectId.trim() || !sector.trim() || !oneLiner.trim()) throw new Error('Project identifier, sector, and one-line story are required.');
   const runDir = await (await handle.getDirectoryHandle('imports')).getDirectoryHandle(runId);

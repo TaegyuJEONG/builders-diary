@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
-ALLOWED_ACTIONS = {"project.confirm", "project.enrich", "project.merge", "project.split", "task.approve", "task.drop", "task.merge", "task.split"}
+ALLOWED_ACTIONS = {"project.confirm", "project.enrich", "project.merge", "project.split", "project.logo", "task.approve", "task.drop", "task.merge", "task.split"}
 RESULT_STATUSES = {"applied", "rejected", "error", "timeout"}
 _ENVELOPE_KEYS = {"schema_version", "action_id", "action", "run_id", "created_at", "payload"}
 _RESULT_KEYS = {"schema_version", "action_id", "status", "applied_at", "result", "error"}
@@ -40,6 +40,7 @@ def _validate_payload(action: Any, payload: Any) -> None:
     expected = (
         {"projects"} if action == "project.confirm"
         else {"project_id", "sector", "one_liner"} if action == "project.enrich"
+        else {"project_id", "mime", "filename", "data_base64"} if action == "project.logo"
         else {"target_slug", "source_slug"} if action == "project.merge"
         else {"source_slug", "new_slug", "new_title", "task_ids", "source_refs"} if action == "project.split"
         else {"task"} if action == "task.approve"
@@ -53,6 +54,15 @@ def _validate_payload(action: Any, payload: Any) -> None:
     if action == "project.enrich":
         if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
             raise ValueError(f"{action} payload has invalid fields")
+    elif action == "project.logo":
+        if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
+            raise ValueError(f"{action} payload has invalid fields")
+        if payload["mime"] not in {"image/png", "image/jpeg", "image/webp"}:
+            raise ValueError("project.logo MIME is not allowed")
+        if "/" in payload["filename"] or "\\" in payload["filename"]:
+            raise ValueError("project.logo filename must be a basename")
+        if len(payload["data_base64"]) > 7_000_000:
+            raise ValueError("project.logo payload is too large")
     elif action == "project.merge" or action == "task.merge":
         if not all(isinstance(payload.get(key), str) and payload[key].strip() for key in expected):
             raise ValueError(f"{action} payload has invalid fields")
