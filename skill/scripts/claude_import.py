@@ -27,6 +27,24 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+try:
+    from .action_protocol import create_result, read_action, write_json_atomic
+except ImportError:  # direct execution from the installed skill directory
+    try:
+        from action_protocol import create_result, read_action, write_json_atomic
+    except ImportError:  # older installs lack the new shared module; non-action commands still work
+        def write_json_atomic(path: Path, value: Any) -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+            temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(path)
+
+        def read_action(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("action_protocol.py is required to apply web actions; reinstall the skill")
+
+        def create_result(*args: Any, **kwargs: Any) -> Any:
+            raise RuntimeError("action_protocol.py is required to apply web actions; reinstall the skill")
+
 SCHEMA_VERSION = 1
 EXPORT_CATEGORIES = {"conversations", "projects", "memories", "light_metadata"}
 VISIBLE_DOWNLOAD_CATEGORIES = ("conversations", "projects", "memories")
@@ -108,10 +126,7 @@ def _safe_text(value: Any, limit: int = 500) -> str:
 
 def _write_json(path: Path, value: Any) -> None:
     """Atomically replace a private import state JSON file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    temporary.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    write_json_atomic(path, value)
 
 
 def _utc_now() -> str:
@@ -1246,15 +1261,13 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
     except (OSError, json.JSONDecodeError):
         previous = None
     if isinstance(previous, dict) and previous.get("status") == "applied":
+        if isinstance(previous.get("result"), dict):
+            return {**previous, **previous["result"]}
         return previous
-    try:
-        action = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise FileNotFoundError(f"Web action not ready: {action_name}") from error
+    action = read_action(path, run_id=run_id, action_name=WEB_ACTIONS[action_name])
+    payload = action["payload"]
     if action_name == "project-confirm":
-        if not isinstance(action, dict) or action.get("action") != "project.confirm" or action.get("run_id") != run_id:
-            raise ValueError("Invalid project.confirm action payload")
-        projects = action.get("projects")
+        projects = payload.get("projects")
         if not isinstance(projects, list) or not all(isinstance(project, dict) for project in projects):
             raise ValueError("Invalid project.confirm projects payload")
         selections = {
@@ -1267,12 +1280,20 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
         result = {"status": "applied", **applied}
         event_details = {"action": "project.confirm", "confirmed": len(applied["confirmed"])}
     else:
-        saved = _apply_task_approve(data_root=data_root, run_dir=run_dir, action=action, run_id=run_id)
+        saved = _apply_task_approve(
+            data_root=data_root,
+            run_dir=run_dir,
+            action={"action": action["action"], "run_id": run_id, "task": payload.get("task")},
+            run_id=run_id,
+        )
         result = {"status": "applied", **saved}
         event_details = {"action": "task.approve", "record_id": saved["record_id"]}
-    _write_json(result_path, result)
-    _append_run_event(run_dir, "web_action_applied", **event_details)
-    return result
+    envelope = create_result(action["action_id"], "applied", result)
+    # Keep legacy flattened fields for callers while publishing the shared envelope.
+    stored_result = {**envelope, **result}
+    _write_json(result_path, envelope)
+    _append_run_event(run_dir, "web_action_applied", action_id=action["action_id"], **event_details)
+    return stored_result
 
 
 def wait_for_web_action(*, data_root: str | Path, run_id: str, action_name: str, timeout_seconds: int = 900) -> dict[str, Any]:
