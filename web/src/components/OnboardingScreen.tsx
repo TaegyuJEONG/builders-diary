@@ -371,8 +371,8 @@ export function OnboardingScreen({
 
                   <p style={{ fontSize: 13, color: 'var(--text2)', lineHeight: 1.7, margin: '0 0 16px' }}>
                     {needsReview
-                      ? 'Your export is indexed. Tick the projects to bring in, rename or merge them, then save — or answer in the chat instead. Both write the same choice.'
-                      : 'Open Claude Code next to this page, then run the import skill. Confirmed projects, stages, and tasks will appear here live as you approve them.'}
+                      ? 'Your import is ready for review. Confirm projects below.'
+                      : 'Choose whether to import your past work or capture only this conversation.'}
                   </p>
 
                   {needsReview ? (
@@ -380,33 +380,18 @@ export function OnboardingScreen({
                       <ImportSelectionTable refreshKey={importRefreshKey} />
                     </div>
                   ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <a
-                      href="claude://"
-                      className="mono"
-                      style={{
-                        display: 'block', textAlign: 'center', textDecoration: 'none',
-                        padding: '11px', fontSize: 12, fontWeight: 600,
-                        background: 'var(--accent)', color: 'var(--bg)',
-                        border: 'none', borderRadius: 4,
-                      }}
-                    >
-                      Open Claude Code
-                    </a>
-                    <button
-                      onClick={() => copy(IMPORT_PROMPT, 'import')}
-                      className="mono"
-                      style={{
-                        padding: '11px', fontSize: 12, fontWeight: 600,
-                        background: copied === 'import' ? 'var(--tag-active-bg)' : 'transparent',
-                        color: copied === 'import' ? 'var(--accent)' : 'var(--text2)',
-                        border: '1px solid var(--border)', borderRadius: 4,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {copied === 'import' ? '✓ Copied' : `Copy ${IMPORT_PROMPT}`}
-                    </button>
-                  </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                      <div style={{ border: '1px solid var(--accent)', borderRadius: 6, padding: 14, background: 'var(--tag-active-bg)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Import past work in bulk</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.6, margin: '5px 0 10px' }}>Start a new chat in Claude Code and run the import skill to review your existing work.</div>
+                        <button onClick={() => copy(IMPORT_PROMPT, 'import')} className="mono" style={{ padding: '8px 12px', background: copied === 'import' ? 'var(--surface)' : 'var(--accent)', color: copied === 'import' ? 'var(--accent)' : 'var(--bg)', border: '1px solid var(--accent)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>{copied === 'import' ? '✓ Copied' : `Copy ${IMPORT_PROMPT}`}</button>
+                      </div>
+                      <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 14, background: 'var(--surface)' }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Add work from one conversation</div>
+                        <div style={{ fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.6, margin: '5px 0 10px' }}>In the conversation you want to turn into portfolio work, run the regular Builder&apos;s Diary skill.</div>
+                        <button onClick={() => copy('/builders-diary', 'single')} className="mono" style={{ padding: '8px 12px', background: copied === 'single' ? 'var(--tag-active-bg)' : 'transparent', color: copied === 'single' ? 'var(--accent)' : 'var(--text2)', border: '1px solid var(--border)', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>{copied === 'single' ? '✓ Copied' : 'Copy /builders-diary'}</button>
+                      </div>
+                    </div>
                   )}
 
                   <button

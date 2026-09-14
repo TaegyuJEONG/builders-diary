@@ -33,3 +33,14 @@ test('an arbitrary connected folder without a marker offers initialization, not 
   assert.doesNotMatch(onboarding, /wasn&apos;t set up by the installer/);
   assert.match(onboarding, /initialize|Initialize/);
 });
+
+test('step three asks bulk import versus individual capture and never deep-links Claude', async () => {
+  const onboarding = await source('src/components/OnboardingScreen.tsx');
+
+  assert.match(onboarding, /Import past work in bulk/);
+  assert.match(onboarding, /Add work from one conversation/);
+  assert.match(onboarding, /Start a new chat in Claude Code/);
+  assert.match(onboarding, /conversation you want to turn into portfolio work/);
+  assert.doesNotMatch(onboarding, /claude:\/\//);
+  assert.doesNotMatch(onboarding, /Open Claude Code/);
+});
