@@ -29,7 +29,7 @@ export function TaskProposalCard({ proposal, busy = false, onApprove, onDrop, on
   const toggleEvidence = (id: string) => setSelectedEvidence(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   return <article style={{ border: '1px solid var(--border)', borderRadius: 7, background: 'var(--surface)', padding: 14, display: 'flex', flexDirection: 'column', gap: 9 }}>
     <div style={{ display: 'flex', gap: 10, alignItems: 'baseline' }}><strong style={{ fontSize: 14, flex: 1 }}>{proposal.project || 'Unassigned project'}</strong><span className="mono" style={{ fontSize: 10, color: 'var(--text3)' }}>{proposal.date}</span></div>
-    <div className="mono" style={{ fontSize: 10, color: 'var(--accent)' }}>{proposal.stage} · {proposal.purpose || 'No Purpose'}</div>
+    <div className="mono" style={{ fontSize: 10, color: 'var(--accent)' }}>{proposal.stage} · {proposal.purpose || 'No Purpose'}{proposal.source_ref.startsWith('http://') || proposal.source_ref.startsWith('https://') ? <> · <a href={proposal.source_ref} target="_blank" rel="noreferrer">Source chat</a></> : null}</div>
     {editing ? <>
       <label style={{ fontSize: 11 }}>Title<input aria-label="Task title" value={title} onChange={event => setTitle(event.target.value)} style={input} /></label>
       <label style={{ fontSize: 11 }}>Summary / body<textarea aria-label="Task body" value={body} onChange={event => setBody(event.target.value)} rows={5} style={input} /></label>
