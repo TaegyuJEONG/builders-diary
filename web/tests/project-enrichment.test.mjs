@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const source = relativePath => readFile(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), 'utf8');
 
-test('project enrichment is an allowlisted proposal with a pending card state', async () => {
+test('project enrichment remains an allowlisted helper contract while its obsolete queue is not rendered', async () => {
   const [protocol, fs, detail, queue] = await Promise.all([
     source('../skill/scripts/action_protocol.py'),
     source('src/lib/fileSystem.ts'),
@@ -16,7 +16,8 @@ test('project enrichment is an allowlisted proposal with a pending card state', 
   assert.match(fs, /project-enrich\.json/);
   assert.match(fs, /project\.enrich/);
   assert.match(detail, /Pending enrichment|Enrich project|Sector|One-line story/);
-  assert.match(queue, /Pending enrichment|Approve enrichment/);
+  const home = await source('src/app/home-content.tsx');
+  assert.doesNotMatch(home, /ProjectEnrichmentQueue/);
 });
 
 test('approval polls result before refreshing the project card', async () => {

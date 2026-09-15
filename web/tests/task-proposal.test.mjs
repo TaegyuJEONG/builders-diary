@@ -34,11 +34,12 @@ test('queue and card expose the complete review workflow in English', async () =
     source('src/components/ImportReview.tsx'),
     source('src/app/home-content.tsx'),
   ]);
-  for (const text of [queue, card]) {
-    for (const label of ['Approve', 'Edit and approve', 'Drop', 'Purpose', 'Activities', 'Tools', 'Mindset', 'Evidence']) {
-      assert.match(text, new RegExp(label));
-    }
+  for (const label of ['Approve', 'Drop', 'Purpose', 'Activities', 'Tools', 'Mindset', 'Evidence']) {
+    assert.match(queue, new RegExp(label));
   }
+  for (const label of ['Approve', 'Edit', 'Save', 'Cancel', 'Drop', 'Purpose', 'Activities', 'Tools', 'Mindset', 'Evidence']) assert.match(card, new RegExp(label));
+  assert.doesNotMatch(card, /Edit and approve/);
+  assert.match(card, /Evidence candidates/);
   assert.match(review, /TaskProposalQueue/);
   assert.match(card, /Evidence candidates/);
   assert.match(card, /Verified|Unverified/);
