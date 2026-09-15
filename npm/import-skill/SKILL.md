@@ -30,6 +30,8 @@ This is a **local import workflow**, not the daily `builders-diary` session reco
 
 ## Step 0 — Open the live portfolio first
 
+keep the onboarding web page open while this skill runs. If it is closed, click or open https://web-one-alpha-57.vercel.app and keep it beside this chat. An in-progress Step 4 import run owns the current step: derive it from the connected folder, import manifest, and proposal state; do not reset to Step 1.
+
 The viewer is the deployed site:
 
 ```
@@ -93,11 +95,9 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" download-page \
 open "$HOME/Downloads/builders-diary-claude-download.html"
 ```
 
-Tell the user: click the three links in that local page — **Conversation**, **Projects**, and **Memories** — while signed in to Claude, saving the archives in Downloads. Then wait for confirmation and run `scan-export` again. Conversations and Projects are required; Memories are optional context. Light metadata is intentionally omitted. Do not attempt the links yourself and never retain or print their URLs.
+Tell the user: click all three links in that local page — **Conversations**, **Projects**, and **Memories** — while signed in to Claude, saving the archives in Downloads. After the user replies “Done”, continue in this chat/local helper flow by re-running `scan-export`; do not force a return to the web page or repeated navigation. The local page owns the one-time URLs, and raw `export_url` values must never be printed in chat. Conversations and Projects are required; Memories are optional context. Light metadata is intentionally omitted. Do not attempt the links yourself and never retain or print their URLs.
 
 Re-run `scan-export` before moving on: Step 2 must start with `conversations-*.zip` and `projects-*.zip` present.
-
-**Only if the user explicitly chooses to skip the Chat export**, say plainly that only local Claude Code sessions will be indexed and that Chat work can be added later by re-running this skill — then continue to Step 2. Never make that choice for them, and never imply the run includes Chat work it cannot see.
 
 ## Step 2 — Build a local source index
 
@@ -235,6 +235,10 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" apply-selections \
 Then continue to Step 4 with the confirmed projects.
 
 ## Step 4 — Curate sources chronologically and create structure lazily
+
+### Project-first bulk contract
+
+After the project list is finalized, analyze **all selected project sources first** using metadata and, only after the user confirms, source content. For each project, propose a story with summary, sector, one-liner, a logo question or placeholder, and a suggested target plan of Discovery 2, Build 5, and Growth 3. These are targets, not fabricated Tasks: every eventual Task needs source evidence. The user may drop a project when its story does not make sense. Generate and approve Task proposals only after that project is confirmed. Preserve the `project`, `learning`, and `noise` taxonomy. The manifest phases are `project_selection` → `source_task_curation` → `complete`; progress may report per-project completed/total counts. Pause/resume is not promised unless the helper explicitly supports it.
 
 The canonical structure is:
 

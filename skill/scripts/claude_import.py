@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Local, read-only Claude import preparation for Builder's Diary.
 
-This helper deliberately separates source discovery from model analysis:
+This helper implements the honest project-first bulk contract: project_selection
+precedes source_task_curation, and no task is fabricated without source evidence.
 - Claude Chat export ZIPs contribute title/summary/project metadata only.
 - Claude Code contributes every main local session's metadata.
 - Source files are never extracted in place, changed, or uploaded.
@@ -542,6 +543,9 @@ def prepare_import_run(
         "id": run_id,
         "source": "claude",
         "status": "project_selection",
+        "phase": "project_first",
+        "pause_supported": False,
+        "project_progress": [],
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "privacy": {
             "light_metadata_included": False,
@@ -616,6 +620,9 @@ def list_import_runs(*, data_root: str | Path) -> list[dict[str, Any]]:
             "updated_at": manifest.get("updated_at"),
             "counts": manifest.get("counts", {}),
             "checkpoint": manifest.get("checkpoint"),
+            "phase": manifest.get("phase"),
+            "project_progress": manifest.get("project_progress", []),
+            "pause_supported": manifest.get("pause_supported", False),
         })
     return sorted(runs, key=lambda item: str(item.get("updated_at") or item.get("created_at") or ""), reverse=True)
 
@@ -1011,6 +1018,7 @@ def confirm_project(
         # Overwriting silently dropped the earlier sources.
         item["source_refs"] = list(dict.fromkeys([*(item.get("source_refs") or []), *source_refs]))
     manifest["status"] = "source_task_curation"
+    manifest["phase"] = "source_task_curation"
     manifest["updated_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
     _write_json(run_dir / "manifest.json", manifest)
     return project
