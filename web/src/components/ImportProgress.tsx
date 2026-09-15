@@ -69,7 +69,7 @@ export function ImportProgress({ runs, toolId, onReview }: ImportProgressProps) 
       <button onClick={copy} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: copied ? 'var(--tag-active-bg)' : 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: copied ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
         {copied ? '✓ Copied' : 'Continue'}
       </button>
-      <button disabled={!latest.pause_supported} title={latest.pause_supported ? 'Pause import' : 'Pause is not available for this helper version'} className="mono" style={{ padding: '4px 8px', fontSize: 10, color: 'var(--text3)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 3, cursor: latest.pause_supported ? 'pointer' : 'not-allowed' }}>Pause</button>
+      <button disabled={!latest.pause_supported} title={latest.pause_supported ? 'Pause or resume import' : 'Pause and resume are not available for this helper version'} className="mono" style={{ padding: '4px 8px', fontSize: 10, color: 'var(--text3)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 3, cursor: latest.pause_supported ? 'pointer' : 'not-allowed' }}>Pause / Resume</button>
     </div>
   );
 }

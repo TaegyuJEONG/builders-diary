@@ -540,6 +540,9 @@ export async function scanImportRuns(handle: FileSystemDirectoryHandle): Promise
         created_at: String(manifest.created_at || ''),
         counts: manifest.counts || undefined,
         warnings: Array.isArray(manifest.warnings) ? manifest.warnings : [],
+        phase: manifest.phase,
+        project_progress: Array.isArray(manifest.project_progress) ? manifest.project_progress : [],
+        pause_supported: manifest.pause_supported === true,
       });
     }
     return runs.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
