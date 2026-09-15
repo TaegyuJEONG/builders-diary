@@ -5,11 +5,12 @@ import { Header } from '@/components/Header';
 import { ProjectSectionView, ExploreMode } from '@/components/ProjectSectionView';
 import { DetailPanel } from '@/components/DetailPanel';
 import { OnboardingScreen } from '@/components/OnboardingScreen';
-import { FirstRecordBanner } from '@/components/FirstRecordBanner';
+
 import { ManagePanel, ManageMode } from '@/components/ManagePanel';
 import { ImportReview } from '@/components/ImportReview';
 import { TaskProposalQueue } from '@/components/TaskProposalQueue';
-import { ProjectEnrichmentQueue } from '@/components/ProjectEnrichmentQueue';
+import { ImportProgress } from '@/components/ImportProgress';
+
 import { ProjectDetailPanel } from '@/components/ProjectDetailPanel';
 import { SkillUpdateBanner } from '@/components/SkillUpdateBanner';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
@@ -489,8 +490,7 @@ export function HomeContent() {
     }
   }, [portfolio, refreshPortfolio, stageDeleteTarget, selectedProjectId, tasksInStage]);
 
-  // Total records across the whole portfolio (ignores filters) — drives the empty banner.
-  const totalRecordCount = allRecords.length;
+
   const installedVersion = installMarker?.version;
   const updateAvailable = !!installedVersion
     && isOlderVersion(installedVersion, CURRENT_INSTALLER_VERSION);
@@ -579,13 +579,8 @@ export function HomeContent() {
         />
       )}
 
-      {/* First-record nudge — shown only when the whole portfolio is empty */}
-      {totalRecordCount === 0 && (
-        <FirstRecordBanner toolId={selectedClients[0]} />
-      )}
-
       <TaskProposalQueue onSaved={refreshPortfolio} refreshKey={importTick} />
-      <ProjectEnrichmentQueue onSaved={refreshPortfolio} refreshKey={importTick} />
+      <ImportProgress runs={importRuns} toolId={selectedClients[0] || 'claude'} />
 
       {error && (
         <div className="mono" style={{

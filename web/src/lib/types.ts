@@ -199,6 +199,9 @@ export interface ImportRun {
     dedup_merge_candidates?: number;
   };
   warnings?: string[];
+  phase?: 'project_first' | 'source_task_curation' | 'complete';
+  project_progress?: Array<{ project: string; completed: number; total: number }>;
+  pause_supported?: boolean;
 }
 
 export interface Project {

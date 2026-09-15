@@ -43,16 +43,18 @@ export function ImportProgress({ runs, toolId, onReview }: ImportProgressProps) 
   const counts = latest.counts || {};
   const status = latest.status.replace(/_/g, ' ');
   const selecting = latest.status === 'project_selection';
+  const projectProgress = latest.project_progress || [];
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
       <span style={{ fontSize: 13, color: 'var(--accent)' }}>◌</span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)', marginBottom: 3 }}>
-          Claude import · {status}
+          Claude import · {latest.phase === 'project_first' ? 'project-first' : status}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text2)' }}>
           {counts.chat_conversations ?? 0} chat conversations · {counts.chat_projects ?? 0} chat projects · {counts.code_sessions ?? 0} Claude Code sessions
         </div>
+        {!!projectProgress.length && <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>{projectProgress.map(item => `${item.project} ${item.completed}/${item.total}`).join(' · ')}</div>}
         {!!latest.warnings?.length && (
           <div className="mono" style={{ marginTop: 3, fontSize: 10, color: 'var(--text3)' }}>
             {latest.warnings.length} source notice{latest.warnings.length === 1 ? '' : 's'} — review in the import skill.
@@ -67,6 +69,7 @@ export function ImportProgress({ runs, toolId, onReview }: ImportProgressProps) 
       <button onClick={copy} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: copied ? 'var(--tag-active-bg)' : 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: copied ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
         {copied ? '✓ Copied' : 'Continue'}
       </button>
+      <button disabled={!latest.pause_supported} title={latest.pause_supported ? 'Pause import' : 'Pause is not available for this helper version'} className="mono" style={{ padding: '4px 8px', fontSize: 10, color: 'var(--text3)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 3, cursor: latest.pause_supported ? 'pointer' : 'not-allowed' }}>Pause</button>
     </div>
   );
 }

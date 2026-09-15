@@ -14,8 +14,6 @@ import { TaskProposalCard } from '@/components/TaskProposalCard';
 
 interface Props { refreshKey?: number; onSaved?: () => void }
 
-const EDIT_LABEL = 'Edit and approve';
-
 export function TaskProposalQueue({ refreshKey = 0, onSaved }: Props) {
   const [runId, setRunId] = useState<string | null>(null);
   const [proposals, setProposals] = useState<TaskProposal[]>([]);
@@ -42,8 +40,8 @@ export function TaskProposalQueue({ refreshKey = 0, onSaved }: Props) {
         proposal_id: proposal.id,
         project: proposal.project, goal: proposal.purpose, stage: proposal.stage,
         title: String(edited.title || proposal.title), date: proposal.date,
-        activity: proposal.activities, purpose: String(edited.task_aim || proposal.task_aim),
-        tools: proposal.tools, mindset: proposal.mindset, body: String(edited.body || proposal.body),
+        activity: edited.activities || proposal.activities, purpose: String(edited.task_aim || proposal.task_aim),
+        tools: edited.tools || proposal.tools, mindset: edited.mindset || proposal.mindset, body: String(edited.body || proposal.body),
         evidence: (edited.evidence_candidates || proposal.evidence_candidates).map(item => ({ candidate_id: item.id, kind: item.kind, type: item.kind, label: item.label, url: item.url, meta: item.meta, detail: item.detail, quote: item.quote, visibility: item.visibility === 'public' ? 'public' : 'private', verified: item.verified })), highlight: proposal.highlight,
       };
       await writeTaskApproveAction(handle, runId, task);
@@ -55,6 +53,11 @@ export function TaskProposalQueue({ refreshKey = 0, onSaved }: Props) {
       onSaved?.();
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Task approval failed.'); }
     finally { setBusyId(null); }
+  };
+
+  const save = (proposal: TaskProposal, edited: Partial<TaskProposal>) => {
+    setProposals(items => items.map(item => item.id === proposal.id ? { ...item, ...edited } : item));
+    setMessage('Task draft saved.');
   };
 
   const drop = async (proposal: TaskProposal) => {
@@ -77,6 +80,6 @@ export function TaskProposalQueue({ refreshKey = 0, onSaved }: Props) {
   return <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
     <div><strong style={{ fontSize: 13 }}>Task proposals</strong><div className="mono" style={{ color: 'var(--text2)', fontSize: 10, marginTop: 3 }}>Purpose · Activities · Tools · Mindset · Evidence · Review each proposed Task before it enters your portfolio.</div></div>
     {message && <div className="mono" style={{ color: 'var(--text2)', fontSize: 11 }}>{message}</div>}
-    {proposals.map(proposal => <TaskProposalCard key={proposal.id} proposal={proposal} busy={busyId === proposal.id} onApprove={approve} onDrop={drop} />)}
+    {proposals.map(proposal => <TaskProposalCard key={proposal.id} proposal={proposal} busy={busyId === proposal.id} onApprove={approve} onDrop={drop} onSave={save} />)}
   </section>;
 }

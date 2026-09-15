@@ -332,9 +332,7 @@ function ToolsPopover({
             )}
           </>
         )}
-        <div className="mono" style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 9.5, color: 'var(--text3)', lineHeight: 1.6 }}>
-          Coming soon: {COMING_SOON_TOOLS.map(t => TOOL_LABELS[t] ?? t).join(', ')}
-        </div>
+
       </div>
     </div>
   );
