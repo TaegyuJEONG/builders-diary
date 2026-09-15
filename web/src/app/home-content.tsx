@@ -491,6 +491,7 @@ export function HomeContent() {
   }, [portfolio, refreshPortfolio, stageDeleteTarget, selectedProjectId, tasksInStage]);
 
 
+  // Total records across the whole portfolio (ignores filters) — derived board state.
   const installedVersion = installMarker?.version;
   const updateAvailable = !!installedVersion
     && isOlderVersion(installedVersion, CURRENT_INSTALLER_VERSION);
