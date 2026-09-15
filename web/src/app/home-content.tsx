@@ -31,7 +31,7 @@ const CONNECTED_KEY = 'builders-diary-connected';
 const ONBOARDING_DONE_KEY = 'builders-diary-onboarding-done';
 const TOOLS_KEY = 'builders-diary-tools';
 // Keep this aligned with npm/package.json when a release is prepared.
-const CURRENT_INSTALLER_VERSION = '1.10.2';
+const CURRENT_INSTALLER_VERSION = '1.10.3';
 
 function isOlderVersion(installed: string, current: string): boolean {
   const parse = (value: string) => value.split('-', 1)[0].split('.').slice(0, 3).map(Number);
