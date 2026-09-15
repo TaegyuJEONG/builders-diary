@@ -26,11 +26,11 @@ export function ClaudeExportDownload() {
 
   return <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 14, background: 'var(--surface)' }}>
     <div style={{ fontSize: 13, fontWeight: 600 }}>Download your Claude export</div>
-    <div style={{ fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.6, margin: '5px 0 10px' }}>Choose the manifest JSON from Claude. Links stay in this browser tab and are never saved to your portfolio.</div>
+    <div style={{ fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.6, margin: '5px 0 10px' }}>Choose the manifest JSON from Claude. Open all three links in this page; then reply “Done” in the same Claude Code chat so the import scan can continue.</div>
     <input type="file" accept="application/json,.json" onChange={loadManifest} aria-label="Choose Claude export manifest" />
     {error && <div role="alert" className="mono" style={{ color: 'var(--danger)', fontSize: 10.5, marginTop: 8 }}>{error}</div>}
     {items.length > 0 && <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>{items.map(item => <a key={item.category} href={item.export_url} target="_self" rel="noreferrer" onClick={() => setOpened(prev => [...new Set([...prev, item.category])])} className="mono" style={{ color: 'var(--accent)', fontSize: 11 }}>{opened.includes(item.category) ? '✓ ' : ''}{item.category[0].toUpperCase() + item.category.slice(1)}{item.filename ? ` · ${item.filename}` : ''}</a>)}</div>}
     {items.length > 0 && !requiredReady && <div className="mono" style={{ color: 'var(--danger)', fontSize: 10, marginTop: 9 }}>Conversations and Projects are required before continuing.</div>}
-    {requiredReady && <div className="mono" style={{ color: 'var(--accent)', fontSize: 10, marginTop: 9 }}>Required downloads ready. Return to Claude Code to continue the import.</div>}
+    {requiredReady && <div className="mono" style={{ color: 'var(--accent)', fontSize: 10, marginTop: 9 }}>Required downloads ready. Reply “Done” in your Claude Code chat; the import will continue there by re-running the local scan.</div>}
   </div>;
 }

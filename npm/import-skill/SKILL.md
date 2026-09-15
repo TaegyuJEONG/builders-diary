@@ -10,6 +10,8 @@ triggers:
 
 # Builder's Diary Import — Claude
 
+**Language default:** Respond in English by default unless the user explicitly asks for another language. All user-facing import messages, progress updates, generated helper prompts, and local-page instructions must be in English.
+
 ## Scope and privacy boundary
 
 This is a **local import workflow**, not the daily `builders-diary` session recorder.
@@ -95,7 +97,7 @@ python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" download-page \
 open "$HOME/Downloads/builders-diary-claude-download.html"
 ```
 
-Tell the user: click all three links in that local page — **Conversations**, **Projects**, and **Memories** — while signed in to Claude, saving the archives in Downloads. After the user replies “Done”, continue in this chat/local helper flow by re-running `scan-export`; do not force a return to the web page or repeated navigation. The local page owns the one-time URLs, and raw `export_url` values must never be printed in chat. Conversations and Projects are required; Memories are optional context. Light metadata is intentionally omitted. Do not attempt the links yourself and never retain or print their URLs.
+Tell the user: click all three links in that local page — **Conversations**, **Projects**, and **Memories** — while signed in to Claude, saving the archives in Downloads. After the user replies “Done”, continue in this chat/local helper flow by re-running `scan-export`; stay in this same chat and do not navigate away. The local page owns the one-time URLs, and raw `export_url` values must never be printed in chat. Conversations and Projects are required; Memories are optional context. Light metadata is intentionally omitted. Do not attempt the links yourself and never retain or print their URLs.
 
 Re-run `scan-export` before moving on: Step 2 must start with `conversations-*.zip` and `projects-*.zip` present.
 

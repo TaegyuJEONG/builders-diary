@@ -510,6 +510,58 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertNotIn("example.test/private", html)
         self.assertEqual(page.stat().st_mode & 0o777, 0o600)
 
+    def test_import_skill_declares_english_default_and_same_chat_done_flow(self) -> None:
+        skill = (ROOT / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("respond in english by default", skill.lower())
+        self.assertIn("After the user replies “Done”, continue in this chat/local helper flow by re-running `scan-export`", skill)
+        self.assertNotIn("return to the web page", skill.lower())
+
+    def test_task_proposal_requires_confirmed_project_and_read_source(self) -> None:
+        from skill.scripts.claude_import import confirm_project, prepare_import_run, propose_task, read_source
+
+        run = prepare_import_run(data_root=self.data_root, export_dir=self.export_dir, claude_config_dir=self.config_dir)
+        with self.assertRaisesRegex(ValueError, "confirmed project"):
+            propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
+        confirm_project(data_root=self.data_root, run_id=run["run_id"], name="Product Builder Jobs", source_refs=["code:code-1"])
+        with self.assertRaisesRegex(ValueError, "read"):
+            propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
+        read_source(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1")
+        proposal = propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
+        self.assertEqual(proposal["status"], "pending")
+        self.assertEqual(proposal["project"], "Product Builder Jobs")
+
+    def test_project_proposal_carries_story_targets_without_fake_tasks(self) -> None:
+        from skill.scripts.claude_import import prepare_import_run, propose_project
+        run = prepare_import_run(data_root=self.data_root, export_dir=self.export_dir, claude_config_dir=self.config_dir)
+        proposal = propose_project(data_root=self.data_root, run_id=run["run_id"], name="Product Builder Jobs", summary="A real project story", source_refs=["code:code-1"])
+        self.assertEqual(proposal["suggested_plan"], {"Discovery": 2, "Build": 5, "Growth": 3})
+        self.assertEqual(proposal["logo"]["status"], "not_provided")
+        self.assertNotIn("tasks", proposal)
+
+    def test_project_merge_web_action_applies_redirect_union_and_portfolio_scan(self) -> None:
+        from skill.scripts.action_protocol import create_action
+        from skill.scripts.claude_import import apply_web_action, prepare_import_run
+        from skill.scripts.save_record import list_projects
+
+        run = prepare_import_run(data_root=self.data_root, export_dir=self.export_dir, claude_config_dir=self.config_dir)
+        for slug, pid, title, purpose in [("target", "p-target", "Target", "one"), ("source", "p-source", "Source", "two")]:
+            folder = self.data_root / slug / purpose
+            folder.mkdir(parents=True)
+            (self.data_root / slug / "project.json").write_text(json.dumps({"id": pid, "slug": slug, "title": title, "source_refs": [f"fixture:{slug}"]}))
+            (folder / "goal.json").write_text(json.dumps({"id": f"g-{purpose}", "slug": purpose, "title": purpose, "project_slug": slug}))
+            task = folder / f"20260101-000-{slug}"
+            task.mkdir()
+            (task / "record.json").write_text(json.dumps({"id": f"r-{slug}", "folder": task.name, "title": title, "project_id": pid, "project_slug": slug, "goal_id": f"g-{purpose}", "goal_slug": purpose, "goal_title": purpose, "source_refs": [f"fixture:{slug}"]}))
+        action = create_action("project.merge", run["run_id"], {"target_slug": "target", "source_slug": "source"})
+        action_path = Path(run["run_dir"]) / "actions" / "project-merge.json"
+        action_path.parent.mkdir()
+        action_path.write_text(json.dumps(action))
+        result = apply_web_action(data_root=self.data_root, run_id=run["run_id"], action_name="project-merge")
+        self.assertEqual(result["status"], "applied")
+        self.assertTrue((self.data_root / "target" / "two" / task.name / "record.json").exists())
+        self.assertEqual(json.loads((self.data_root / "source" / "project.json").read_text())["merged_into"]["slug"], "target")
+        self.assertEqual({p["slug"] for p in list_projects(str(self.data_root))}, {"target", "source"})
+
     def test_download_page_rejects_non_https_urls(self) -> None:
         from skill.scripts.claude_import import create_download_page
 

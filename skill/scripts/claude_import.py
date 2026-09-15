@@ -818,6 +818,11 @@ def propose_project(
             "summary": summary.strip(),
             "candidate_ids": all_candidates,
             "source_refs": all_refs,
+            # Targets are planning guidance only; no Tasks are fabricated here.
+            "sector": item.get("sector", ""),
+            "one_liner": item.get("one_liner", ""),
+            "logo": item.get("logo") or {"status": "not_provided", "question": "Would you like to add a project logo?"},
+            "suggested_plan": {"Discovery": 2, "Build": 5, "Growth": 3},
             "chat": [_visible_source_metadata(catalog[ref]) for ref in all_refs if catalog[ref].get("kind") == "chat"],
             "claude_code": [_visible_source_metadata(catalog[ref]) for ref in all_refs if catalog[ref].get("kind") == "code"],
         }
@@ -1087,7 +1092,49 @@ def read_source(
         except ImportError:
             from adapters.claude_chat_export import ClaudeChatExportAdapter
         content = ClaudeChatExportAdapter(source_index["chat"]["export_dir"]).read(str(metadata["source_id"])).content
+    # Reading is the durable helper checkpoint that unlocks a task proposal.
+    # The source itself remains untouched; only run metadata is updated.
+    read_sources = manifest.setdefault("read_sources", [])
+    if source_ref not in read_sources:
+        read_sources.append(source_ref)
+    manifest["updated_at"] = _utc_now()
+    _write_json(run_dir / "manifest.json", manifest)
     return {"source_ref": source_ref, "metadata": metadata, "content": content}
+
+
+def propose_task(
+    *, data_root: str | Path, run_id: str, project_name: str, source_ref: str,
+    title: str, body: str, purpose: str = "", stage: str = "Discovery",
+    date: str | None = None, activities: list[str] | None = None,
+    tools: list[str] | None = None, mindset: list[str] | None = None,
+    task_aim: str = "", highlight: str = "", evidence_candidates: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Persist a Task proposal only after project confirmation and source reading."""
+    if not isinstance(title, str) or not title.strip() or not isinstance(body, str) or not body.strip():
+        raise ValueError("Task proposal requires a title and body")
+    root = Path(data_root).expanduser()
+    run_dir, manifest = _load_run_manifest(root, run_id)
+    if manifest.get("phase") != "source_task_curation" or not manifest.get("confirmed_projects"):
+        raise ValueError("Task proposals require a confirmed project")
+    project = next((item for item in manifest["confirmed_projects"] if isinstance(item, dict) and str(item.get("name", "")).casefold() == project_name.casefold()), None)
+    if project is None or source_ref not in (project.get("source_refs") or []):
+        raise ValueError("Source is not assigned to confirmed project")
+    if source_ref not in (manifest.get("read_sources") or []):
+        raise ValueError("read and curate the source before creating Task proposals")
+    proposal_id = f"task-{uuid.uuid4().hex[:12]}"
+    metadata = _source_catalog(_load_source_index(run_dir)).get(source_ref, {})
+    proposal = {
+        "id": proposal_id, "source_ref": source_ref, "project": project_name,
+        "purpose": purpose.strip(), "stage": stage.strip() or "Discovery",
+        "title": title.strip(), "date": date or str(metadata.get("created_at") or "")[:10],
+        "activities": list(activities or []), "task_aim": task_aim.strip(),
+        "tools": list(tools or []), "mindset": list(mindset or []), "body": body.strip(),
+        "highlight": highlight.strip(), "evidence_candidates": list(evidence_candidates or []),
+        "status": "pending",
+    }
+    _write_json(run_dir / "task-proposals" / f"{proposal_id}.json", proposal)
+    _append_run_event(run_dir, "task_proposed", proposal_id=proposal_id, source_ref=source_ref, project_id=project.get("id"))
+    return proposal
 
 
 def complete_source(
@@ -1688,6 +1735,17 @@ def main() -> int:
     propose_project_cmd.add_argument("--source-ref", action="append", default=None)
     propose_project_cmd.add_argument("--candidate-id", action="append", default=None)
 
+    propose_task_cmd = sub.add_parser("propose-task", help="Write a source-backed Task proposal after source curation")
+    propose_task_cmd.add_argument("--data-root", required=True)
+    propose_task_cmd.add_argument("--run-id", required=True)
+    propose_task_cmd.add_argument("--project", required=True)
+    propose_task_cmd.add_argument("--source-ref", required=True)
+    propose_task_cmd.add_argument("--title", required=True)
+    propose_task_cmd.add_argument("--body", required=True)
+    propose_task_cmd.add_argument("--purpose", default="")
+    propose_task_cmd.add_argument("--stage", default="Discovery")
+    propose_task_cmd.add_argument("--task-aim", default="")
+
     finalize_proposal_cmd = sub.add_parser("finalize-proposal", help="Mark a complete proposal ready for web selection")
     finalize_proposal_cmd.add_argument("--data-root", required=True)
     finalize_proposal_cmd.add_argument("--run-id", required=True)
@@ -1778,6 +1836,8 @@ def main() -> int:
         print(json.dumps(classify_import_sources(data_root=args.data_root, run_id=args.run_id, classification=args.classification, source_refs=args.source_ref, note=args.note), ensure_ascii=False, indent=2))
     elif args.command == "propose-project":
         print(json.dumps(propose_project(data_root=args.data_root, run_id=args.run_id, name=args.name, summary=args.summary, source_refs=args.source_ref, candidate_ids=args.candidate_id), ensure_ascii=False, indent=2))
+    elif args.command == "propose-task":
+        print(json.dumps(propose_task(data_root=args.data_root, run_id=args.run_id, project_name=args.project, source_ref=args.source_ref, title=args.title, body=args.body, purpose=args.purpose, stage=args.stage, task_aim=args.task_aim), ensure_ascii=False, indent=2))
     elif args.command == "finalize-proposal":
         print(json.dumps(finalize_project_proposal(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "materialize-chat-views":
