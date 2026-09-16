@@ -56,7 +56,7 @@ done
 - If both pass, the **first user-facing message** must share [https://web-one-alpha-57.vercel.app](https://web-one-alpha-57.vercel.app) and say: "Open this in another window and leave it open beside us. Confirmed projects, Purposes, section chips, and Tasks will appear here live as you approve them."
 - Continue only after both checks pass. The page polls the connected local folder, so no manual reload should be needed.
 
-Use the folder printed above as `DATA_ROOT` for the rest of this run.
+Use the folder printed above as `DATA_ROOT` for the rest of this run. If the user invoked this skill with a copied `Portfolio folder: "$HOME/Documents/<folder-name>"` line, expand `$HOME`, verify that exact folder contains `.builders-diary.json`, and use it as `DATA_ROOT` instead. Do not fall back to another portfolio folder when an explicit folder hint is present; if it is missing or has no marker, stop and ask the user to reconnect the intended folder in the web page.
 
 Only after the viewer check succeeds, verify and use this installed helper:
 

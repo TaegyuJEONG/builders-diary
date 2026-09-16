@@ -54,6 +54,8 @@ test('bulk route directs every selected source to Claude Code without web export
   assert.doesNotMatch(onboarding, /Open the current Claude Code chat/);
   assert.match(onboarding, /aria-label="Copy import skill"/);
   assert.match(onboarding, /title="Copy import skill"/);
+  assert.match(onboarding, /Portfolio folder:/);
+  assert.match(onboarding, /connected-folder-name/);
   assert.match(onboarding, /Claude Sonnet 5 \/ Medium/);
   assert.match(onboarding, /5-hour limit remaining/);
 
@@ -71,6 +73,8 @@ test('individual route uses the regular skill, not export or import flow', async
   assert.match(onboarding, /Open the Claude chat, Cowork space, or Claude Code session you want to turn into a portfolio entry, then use the regular skill\./);
   assert.match(onboarding, /aria-label="Copy regular skill"/);
   assert.match(onboarding, /title="Copy regular skill"/);
+  assert.match(onboarding, /Portfolio folder:/);
+  assert.match(onboarding, /connected-folder-name/);
   assert.match(onboarding, /Claude Sonnet 5 \/ Medium/);
   assert.match(onboarding, /5-hour limit remaining/);
   assert.match(onboarding, /captureRoute === 'individual'/);
