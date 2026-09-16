@@ -45,9 +45,9 @@ test('a fresh onboarding does not restore a previous source choice', async () =>
 test('install command copy is next to the command and lower hierarchy than continue', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
-  assert.match(onboarding, /commandRow/);
+  assert.match(onboarding, /commandBox/);
   assert.match(onboarding, /secondaryButton/);
-  assert.ok(onboarding.indexOf('commandRow') < onboarding.indexOf('secondaryButton'));
+  assert.ok(onboarding.indexOf('commandBox') < onboarding.indexOf('secondaryButton'));
   assert.match(onboarding, /Installed — continue/);
 });
 
