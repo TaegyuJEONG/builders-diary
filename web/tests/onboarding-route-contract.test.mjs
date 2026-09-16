@@ -49,7 +49,9 @@ test('bulk route directs every selected source to Claude Code without web export
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
   assert.match(onboarding, /Open a new Claude Code chat and use the import skill\./);
-  assert.match(onboarding, /Copy \/builders-diary-import/);
+  assert.doesNotMatch(onboarding, /Open the current Claude Code chat/);
+  assert.match(onboarding, /aria-label="Copy import skill"/);
+  assert.match(onboarding, /title="Copy import skill"/);
 
   assert.match(onboarding, /Cursor/);
   assert.match(onboarding, /Codex CLI/);
