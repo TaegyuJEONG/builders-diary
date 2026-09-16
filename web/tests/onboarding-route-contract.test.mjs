@@ -64,8 +64,9 @@ test('bulk route directs every selected source to Claude Code without web export
 test('individual route uses the regular skill, not export or import flow', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
-  assert.match(onboarding, /Open a new Claude Code chat/);
-  assert.match(onboarding, /Copy \/builders-diary/);
+  assert.match(onboarding, /Open an existing Claude chat, Cowork space, or Claude Code session, then use the import skill\./);
+  assert.match(onboarding, /aria-label="Copy regular skill"/);
+  assert.match(onboarding, /title="Copy regular skill"/);
   assert.match(onboarding, /captureRoute === 'individual'/);
 });
 
