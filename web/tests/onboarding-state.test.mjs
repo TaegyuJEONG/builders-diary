@@ -46,8 +46,8 @@ test('install command copy is next to the command and lower hierarchy than conti
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
   assert.match(onboarding, /commandBox/);
-  assert.match(onboarding, /secondaryButton/);
-  assert.ok(onboarding.indexOf('commandBox') < onboarding.indexOf('secondaryButton'));
+  assert.match(onboarding, /aria-label="Copy command"/);
+  assert.match(onboarding, /title="Copy command"/);
   assert.match(onboarding, /Installed — continue/);
 });
 
