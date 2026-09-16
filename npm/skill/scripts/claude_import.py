@@ -1114,7 +1114,8 @@ def propose_task(
         raise ValueError("Task proposal requires a title and body")
     root = Path(data_root).expanduser()
     run_dir, manifest = _load_run_manifest(root, run_id)
-    if manifest.get("phase") != "source_task_curation" or not manifest.get("confirmed_projects"):
+    phase = manifest.get("phase") or manifest.get("status")
+    if phase != "source_task_curation" or not manifest.get("confirmed_projects"):
         raise ValueError("Task proposals require a confirmed project")
     project = next((item for item in manifest["confirmed_projects"] if isinstance(item, dict) and str(item.get("name", "")).casefold() == project_name.casefold()), None)
     if project is None or source_ref not in (project.get("source_refs") or []):

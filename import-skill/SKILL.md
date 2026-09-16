@@ -55,6 +55,9 @@ else
 fi
 [ -n "$DATA_ROOT" ] || { echo "Connect the intended portfolio folder in the viewer first."; exit 1; }
 printf '%s\n' "$DATA_ROOT"
+
+VIEWER_URL="<the copied Viewer origin, or https://web-one-alpha-57.vercel.app>"
+curl -fsS --max-time 10 "$VIEWER_URL" >/dev/null
 ```
 
 - If the marker is missing, stop before creating an import run: the user has not finished onboarding. Tell them to open the exact viewer origin from the copied `Viewer:` line and connect the portfolio folder. Never guess or create a different folder.
