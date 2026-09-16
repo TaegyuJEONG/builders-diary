@@ -5,12 +5,13 @@ import { fileURLToPath } from 'node:url';
 
 const source = relativePath => readFile(fileURLToPath(new URL(`../${relativePath}`, import.meta.url)), 'utf8');
 
-test('project cards expose an explicit merge action with target and source selection', async () => {
+test('project cards expose no merge UI in v1 while the declarative merge contract stays', async () => {
   const [view, detail] = await Promise.all([
     source('src/components/ProjectSectionView.tsx'),
     source('src/components/ProjectDetailPanel.tsx'),
   ]);
-  assert.match(view, /Merge projects/);
+  assert.doesNotMatch(view, /Merge projects/);
+  assert.doesNotMatch(view, /Split project/);
   assert.match(detail, /targetSlug/);
   assert.match(detail, /sourceSlug/);
   assert.match(detail, /Confirm merge/);
@@ -25,12 +26,12 @@ test('web merge writes declarative action and waits for helper result', async ()
   assert.doesNotMatch(home, /removeEntry\([^)]*source/);
 });
 
-test('project detail exposes explicit split selection and confirmation', async () => {
+test('project detail split stays available only via the detail contract, not card buttons', async () => {
   const [view, detail] = await Promise.all([
     source('src/components/ProjectSectionView.tsx'),
     source('src/components/ProjectDetailPanel.tsx'),
   ]);
-  assert.match(view, /Split project/);
+  assert.doesNotMatch(view, /Split project/);
   assert.match(detail, /Split project/);
   assert.match(detail, /selectedTaskIds/);
   assert.match(detail, /Confirm split/);

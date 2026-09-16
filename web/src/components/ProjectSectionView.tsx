@@ -90,8 +90,6 @@ function ProjectCard({
       onMouseLeave={e => { if (!selected) (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border)'; }}
     >
       <button onClick={e => { e.stopPropagation(); onEdit?.(); }} title={`Edit ${project.title || project.slug}`} aria-label={`Edit ${project.title || project.slug}`} style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text2)', cursor: 'pointer', fontSize: 12 }}>✎</button>
-      <button onClick={e => { e.stopPropagation(); onMerge?.(); }} className="mono" style={{ position: 'absolute', top: 8, right: 38, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text2)', cursor: 'pointer', fontSize: 9, padding: '5px 6px' }}>Merge projects</button>
-      <button onClick={e => { e.stopPropagation(); onSplit?.(); }} className="mono" style={{ position: 'absolute', top: 38, right: 8, border: '1px solid var(--border)', borderRadius: 4, background: 'var(--surface)', color: 'var(--text2)', cursor: 'pointer', fontSize: 9, padding: '5px 6px' }}>Split project</button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
         {/* Logo or initial badge */}
         {project.logo ? (

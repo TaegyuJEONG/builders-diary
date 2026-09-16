@@ -10,15 +10,17 @@ const input: React.CSSProperties = { width: '100%', background: 'var(--bg)', bor
 const head = (text: string) => <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{text}</div>;
 
 function SourceDetails({ kind, sources, runId, projectId }: { kind: 'Chat' | 'Claude Code'; sources: ImportSourcePreview[]; runId?: string | null; projectId?: string }) {
+  const [showAll, setShowAll] = useState(false);
   if (!sources.length) return null;
+  const visible = showAll ? sources : sources.slice(0, 10);
   return <div style={{ gridColumn: '3 / -1', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 4, background: 'var(--bg)' }}>
     <div className="mono" style={{ fontSize: 9, color: 'var(--text3)', marginBottom: 7 }}>{kind === 'Chat' ? 'Chat metadata from Claude export' : 'Claude Code session metadata — title and first prompt'}</div>
-    {sources.slice(0, 10).map((source, i) => <div key={`${source.title}-${i}`} style={{ borderTop: i ? '1px solid var(--border)' : 0, paddingTop: i ? 7 : 0, marginTop: i ? 7 : 0 }}>
+    {visible.map((source, i) => <div key={`${source.title}-${i}`} style={{ borderTop: i ? '1px solid var(--border)' : 0, paddingTop: i ? 7 : 0, marginTop: i ? 7 : 0 }}>
       <div style={{ fontSize: 12, color: 'var(--text)' }}>{source.title}</div>
       <div style={{ marginTop: 2, fontSize: 11, lineHeight: 1.5, color: 'var(--text2)' }}>{source.summary || source.first_prompt || (kind === 'Chat' ? 'No export summary.' : 'No first prompt metadata.')}</div>
     </div>)}
-    {sources.length > 10 && <div className="mono" style={{ color: 'var(--text3)', fontSize: 10, marginTop: 8 }}>Showing 10 of {sources.length}. Full Chat viewer will be available after proposal finalization.</div>}
-    {kind === 'Chat' && runId && projectId && <button onClick={() => window.open(`?chatRun=${encodeURIComponent(runId)}&chatProject=${encodeURIComponent(projectId)}`, '_blank', 'noopener,noreferrer')} className="mono" style={{ marginTop: 10, color: 'var(--accent)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer' }}>View all {sources.length} chats ↗</button>}
+    {sources.length > 10 && <button onClick={() => setShowAll(value => !value)} className="mono" style={{ marginTop: 8, color: 'var(--accent)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer' }}>{showAll ? 'Show fewer' : `View all ${sources.length} ↗`}</button>}
+    {kind === 'Chat' && runId && projectId && <button onClick={() => window.open(`?chatRun=${encodeURIComponent(runId)}&chatProject=${encodeURIComponent(projectId)}`, '_blank', 'noopener,noreferrer')} className="mono" style={{ marginTop: 10, marginLeft: 8, color: 'var(--accent)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 4, padding: '6px 9px', cursor: 'pointer' }}>View all {sources.length} chats ↗</button>}
   </div>;
 }
 

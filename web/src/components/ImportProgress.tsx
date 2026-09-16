@@ -14,62 +14,40 @@ const IMPORT_PROMPT = '/builders-diary-import';
 /**
  * A compact, local-only bridge between the web portfolio and the AI-client skill.
  * The helper writes imports/<run>/manifest.json; this component never reads raw
- * conversations, export URLs, source indexes, or account metadata.
+ * conversations, export URLs, source indexes, or account metadata. Read-only:
+ * pause and resume live in the AI-client chat, and the manifest is the checkpoint.
  */
-export function ImportProgress({ runs, toolId, onReview }: ImportProgressProps) {
-  const [copied, setCopied] = useState(false);
+export function ImportProgress({ runs, toolId }: ImportProgressProps) {
   const latest = runs[0];
-  const copy = () => {
-    navigator.clipboard.writeText(IMPORT_PROMPT).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
 
   if (!latest) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', background: 'var(--tag-active-bg)', borderBottom: '1px solid var(--accent-dim)' }}>
-        <span style={{ fontSize: 13, color: 'var(--accent)' }}>↙</span>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: 'var(--text)' }}>
-          Import past Claude work from a local export and Claude Code sessions. In {toolId === 'claude' ? 'Claude Code' : 'your AI client'}, start a new session and run <code className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>{IMPORT_PROMPT}</code>.
-        </div>
-        <button onClick={copy} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: copied ? 'var(--surface)' : 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: copied ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          {copied ? '✓ Copied' : 'Copy'}
-        </button>
-      </div>
-    );
+    return null;
   }
 
   const counts = latest.counts || {};
-  const status = latest.status.replace(/_/g, ' ');
-  const selecting = latest.status === 'project_selection';
-  const projectProgress = latest.project_progress || [];
+  const ready = latest.status === 'project_selection' || latest.phase === 'source_task_curation' || latest.phase === 'complete';
+  const toolLabel = toolId === 'claude' ? 'Claude' : toolId === 'cursor' ? 'Cursor' : toolId === 'codex' ? 'Codex CLI' : toolId === 'hermes' ? 'Hermes' : toolId || 'Claude';
+  const route = typeof window !== 'undefined' && localStorage.getItem('bd-route') === 'single' ? 'Single import' : 'Bulk import';
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '11px 16px', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
-      <span style={{ fontSize: 13, color: 'var(--accent)' }}>◌</span>
+      {ready
+        ? <span className="mono" style={{ width: 16, height: 16, borderRadius: '50%', border: '1px solid var(--accent)', background: 'var(--accent)', color: 'var(--bg)', display: 'grid', placeItems: 'center', fontSize: 9, flexShrink: 0 }}>✓</span>
+        : <span className="mono bd-import-spinner" style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', flexShrink: 0 }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--accent)', marginBottom: 3 }}>
-          Claude import · {latest.phase === 'project_first' ? 'project-first' : status}
+        <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: ready ? 'var(--text2)' : 'var(--accent)', marginBottom: 3 }}>
+          {toolLabel} · {route}{ready ? ' · Proposal ready' : ''}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text2)' }}>
           {counts.chat_conversations ?? 0} chat conversations · {counts.chat_projects ?? 0} chat projects · {counts.code_sessions ?? 0} Claude Code sessions
         </div>
-        {!!projectProgress.length && <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', marginTop: 4 }}>{projectProgress.map(item => `${item.project} ${item.completed}/${item.total}`).join(' · ')}</div>}
         {!!latest.warnings?.length && (
           <div className="mono" style={{ marginTop: 3, fontSize: 10, color: 'var(--text3)' }}>
             {latest.warnings.length} source notice{latest.warnings.length === 1 ? '' : 's'} — review in the import skill.
           </div>
         )}
       </div>
-      {selecting && onReview && (
-        <button onClick={onReview} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 3, color: 'var(--bg)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-          Review projects
-        </button>
-      )}
-      <button onClick={copy} className="mono" style={{ flexShrink: 0, padding: '4px 10px', fontSize: 11, background: copied ? 'var(--tag-active-bg)' : 'transparent', border: '1px solid var(--border)', borderRadius: 3, color: copied ? 'var(--accent)' : 'var(--text2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-        {copied ? '✓ Copied' : 'Continue'}
-      </button>
-      <button disabled={!latest.pause_supported} title={latest.pause_supported ? 'Pause or resume import' : 'Pause and resume are not available for this helper version'} className="mono" style={{ padding: '4px 8px', fontSize: 10, color: 'var(--text3)', background: 'transparent', border: '1px solid var(--border)', borderRadius: 3, cursor: latest.pause_supported ? 'pointer' : 'not-allowed' }}>Pause / Resume</button>
+      <style>{`@keyframes bd-import-spin { to { transform: rotate(360deg) } } .bd-import-spinner { animation: bd-import-spin 1s linear infinite }`}</style>
     </div>
   );
 }
