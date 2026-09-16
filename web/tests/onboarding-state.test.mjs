@@ -55,8 +55,8 @@ test('route choices are neutral until the user explicitly clicks one', async () 
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
   assert.match(onboarding, /routeButton\(false\)/);
-  assert.match(onboarding, />\s*Add one conversation\s*</);
-  assert.match(onboarding, /Open the current Claude Code chat and use the import skill/);
+  assert.match(onboarding, />\s*Single import\s*</);
+  assert.doesNotMatch(onboarding, /Open the current Claude Code chat and use the import skill/);
   assert.doesNotMatch(onboarding, /claude:\/\//);
   assert.doesNotMatch(onboarding, /Enter portfolio/);
 });
@@ -68,6 +68,6 @@ test('onboarding exposes copy install command, connected path, and stacked route
   assert.match(onboarding, /Connected folder/);
   assert.match(onboarding, /display: 'block'/);
   assert.doesNotMatch(onboarding, /It checks the selected apps/);
-  assert.match(onboarding, /current Claude Code chat/);
+  assert.doesNotMatch(onboarding, /Open the current Claude Code chat/);
   assert.match(onboarding, /regular skill/);
 });
