@@ -41,7 +41,9 @@ test('the first add-work screen exposes exactly the two route choices', async ()
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
   assert.match(onboarding, />\s*Bulk import\s*</);
-  assert.match(onboarding, />\s*Add one conversation\s*</);
+  assert.match(onboarding, /Build your portfolio from your past conversations\./);
+  assert.match(onboarding, />\s*Single import\s*</);
+  assert.match(onboarding, /Start with one conversation and create your first portfolio entry\./);
   assert.match(onboarding, /type CaptureRoute = 'choose' \| 'bulk' \| 'individual'/);
 });
 
