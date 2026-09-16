@@ -42,18 +42,24 @@ https://web-one-alpha-57.vercel.app
 
 It is a static page that reads the folder the user connected in the browser. There is no local server, no port, and nothing for the user to start.
 
-Before scanning exports or proposing anything, verify that onboarding is finished and that the viewer is reachable:
+Before scanning exports or proposing anything, use the copied `Viewer: <origin>` line when one is present. Open that exact viewer origin; do not substitute the production URL. If no viewer hint was provided, use the deployed viewer below. Verify that onboarding is finished and that the viewer is reachable:
 
 ```bash
-curl -fsS --max-time 10 https://web-one-alpha-57.vercel.app >/dev/null
-for root in "$HOME/Documents/builders-diary" "$HOME/builders-diary"; do
-  [ -f "$root/.builders-diary.json" ] && echo "$root" && break
-done
+DATA_ROOT="<the copied Portfolio folder, with $HOME expanded>"
+if [ -n "$DATA_ROOT" ]; then
+  [ -f "$DATA_ROOT/.builders-diary.json" ] || { echo "The connected portfolio folder was not found."; exit 1; }
+else
+  for root in "$HOME/Documents/builders-diary" "$HOME/builders-diary"; do
+    if [ -f "$root/.builders-diary.json" ]; then DATA_ROOT="$root"; break; fi
+  done
+fi
+[ -n "$DATA_ROOT" ] || { echo "Connect the intended portfolio folder in the viewer first."; exit 1; }
+printf '%s\n' "$DATA_ROOT"
 ```
 
-- If the marker is missing, stop before creating an import run: the user has not finished onboarding. Tell them to open https://web-one-alpha-57.vercel.app, run the install command shown there, and connect the portfolio folder. Never guess or create a different folder.
+- If the marker is missing, stop before creating an import run: the user has not finished onboarding. Tell them to open the exact viewer origin from the copied `Viewer:` line and connect the portfolio folder. Never guess or create a different folder.
 - If the site is unreachable, stop before creating an import run and say the viewer could not be reached; do not guess another URL.
-- If both pass, the **first user-facing message** must share [https://web-one-alpha-57.vercel.app](https://web-one-alpha-57.vercel.app) and say: "Open this in another window and leave it open beside us. Confirmed projects, Purposes, section chips, and Tasks will appear here live as you approve them."
+- If both pass, the **first user-facing message** must share the exact viewer URL from the copied `Viewer:` line and say: "Keep this onboarding page open beside us. If you closed it, open it again in another window and leave it beside this chat. Confirmed projects, Purposes, section chips, and Tasks will appear here live as you approve them."
 - Continue only after both checks pass. The page polls the connected local folder, so no manual reload should be needed.
 
 Use the folder printed above as `DATA_ROOT` for the rest of this run. If the user invoked this skill with a copied `Portfolio folder: "$HOME/Documents/<folder-name>"` line, expand `$HOME`, verify that exact folder contains `.builders-diary.json`, and use it as `DATA_ROOT` instead. Do not fall back to another portfolio folder when an explicit folder hint is present; if it is missing or has no marker, stop and ask the user to reconnect the intended folder in the web page.
