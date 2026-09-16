@@ -51,7 +51,7 @@ export function HomeContent() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [installMarker, setInstallMarker] = useState<{ version?: string; tools?: string[] } | null>(null);
+  const [installMarker, setInstallMarker] = useState<{ version?: string; tools?: string[]; import_sources?: string[] } | null>(null);
   const [importRuns, setImportRuns] = useState<ImportRun[]>([]);
   // Bumped on every import rescan so the selection table re-reads candidates live.
   const [importTick, setImportTick] = useState(0);
@@ -130,6 +130,30 @@ export function HomeContent() {
 
     const wasDone = typeof window !== 'undefined'
       && localStorage.getItem(ONBOARDING_DONE_KEY) === '1';
+
+    const restoreConnectedFolder = async () => {
+      try {
+        const handle = await loadFolderHandleFromStorage();
+        if (!handle || !(await verifyFolderPermission(handle))) return false;
+        const marker = await readInstallMarker(handle);
+        const data = await scanFolderStructure(handle);
+        setInstallMarker(marker);
+        setImportRuns(await scanImportRuns(handle));
+        setPortfolio(data);
+        setConnected(true);
+        if (marker?.import_sources?.length) setSelectedClientsState(marker.import_sources);
+        setOnboardingDone((data.projects || []).length > 0);
+        initSelection(data);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (!wasDone) {
+      restoreConnectedFolder().then(() => setHydrated(true));
+      return;
+    }
 
     if (wasDone) {
       // Restore a completed portfolio's source labels for the header only. A

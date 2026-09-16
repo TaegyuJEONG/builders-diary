@@ -51,6 +51,16 @@ test('install command copy is next to the command and lower hierarchy than conti
   assert.match(onboarding, /Installed — continue/);
 });
 
+test('a connected folder restores onboarding progress even before a project exists', async () => {
+  const home = await source('src/app/home-content.tsx');
+
+  assert.match(home, /loadFolderHandleFromStorage/);
+  assert.match(home, /readInstallMarker/);
+  assert.match(home, /setConnected\(true\)/);
+  assert.match(home, /import_sources/);
+  assert.match(home, /setOnboardingDone\(\(data\.projects \|\| \[\]\)\.length > 0\)/);
+});
+
 test('route choices are neutral until the user explicitly clicks one', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 

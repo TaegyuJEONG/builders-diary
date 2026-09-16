@@ -159,7 +159,7 @@ export async function writeImportConfig(handle: FileSystemDirectoryHandle, confi
  */
 export async function readInstallMarker(
   handle: FileSystemDirectoryHandle
-): Promise<{ version?: string; tools?: string[]; source_roots?: ImportClientRoot[]; enabled_clients?: string[]; clients?: { [clientId: string]: { enabled?: boolean; adapter_ids?: string[]; roots?: ImportClientRoot[] } } } | null> {
+): Promise<{ version?: string; tools?: string[]; import_sources?: string[]; source_roots?: ImportClientRoot[]; enabled_clients?: string[]; clients?: { [clientId: string]: { enabled?: boolean; adapter_ids?: string[]; roots?: ImportClientRoot[] } } } | null> {
   try {
     const fh = await handle.getFileHandle('.builders-diary.json');
     const file = await fh.getFile();
