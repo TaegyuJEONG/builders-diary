@@ -16,6 +16,7 @@ interface OnboardingScreenProps {
 
 const IMPORT_PROMPT = '/builders-diary-import';
 const RECORD_PROMPT = '/builders-diary';
+const DEFAULT_FOLDER_NAME = 'builders-diary';
 const SOURCES = [
   { id: 'claude', label: 'Claude', description: 'Past Claude conversations and Claude Code sessions.' },
   { id: 'cursor', label: 'Cursor', description: 'Local Cursor conversation history.' },
@@ -26,11 +27,16 @@ type SourceId = typeof SOURCES[number]['id'];
 type CaptureRoute = 'choose' | 'bulk' | 'individual';
 type MarkerStatus = 'unchecked' | 'checking' | 'ok' | 'missing';
 
-function installCommand(sources: SourceId[]) {
+function folderNameOf(value?: string) {
+  const cleaned = (value || '').replace(/["\\/\r\n\t]/g, '').replace(/^\.+/, '').trim();
+  return cleaned || DEFAULT_FOLDER_NAME;
+}
+
+function installCommand(sources: SourceId[], folderName: string) {
   const tools = ['claude'];
   if (sources.includes('cursor')) tools.push('cursor');
   if (sources.includes('codex')) tools.push('codex');
-  return `npx --yes builders-diary@${installerPackage.version} install --tools ${tools.join(',')} --sources ${sources.join(',')}`;
+  return `npx --yes builders-diary@${installerPackage.version} install --tools ${tools.join(',')} --sources ${sources.join(',')} --data-root "$HOME/Documents/${folderNameOf(folderName)}"`;
 }
 
 export function OnboardingScreen({ onSelectFolder, isLoading, error, folderConnected, connectNonce = 0, folderPath, selectedClients, setSelectedClients, onComplete, importRuns = [], importRefreshKey = 0 }: OnboardingScreenProps) {
@@ -38,6 +44,7 @@ export function OnboardingScreen({ onSelectFolder, isLoading, error, folderConne
   const [installAcknowledged, setInstallAcknowledged] = useState(false);
   const [captureRoute, setCaptureRoute] = useState<CaptureRoute>('choose');
   const [copied, setCopied] = useState<string | null>(null);
+  const [folderName, setFolderName] = useState(DEFAULT_FOLDER_NAME);
   const selectedSources = selectedClients.filter((id): id is SourceId => SOURCES.some(source => source.id === id));
   const viewerUrl = typeof window !== 'undefined' ? window.location.origin : 'https://web-one-alpha-57.vercel.app';
   const latestRun = importRuns[0];
@@ -55,7 +62,7 @@ export function OnboardingScreen({ onSelectFolder, isLoading, error, folderConne
         {SOURCES.map(source => <ToolChoice key={source.id} active={selectedSources.includes(source.id)} onClick={() => toggleSource(source.id)} label={source.label} description={source.description} />)}
       </StepCard>
       {selectedSources.length > 0 && <StepCard n={2} active={!installAcknowledged && markerStatus !== 'ok'} done={installAcknowledged || markerStatus === 'ok'} title="Install Builder&apos;s Diary">
-        {markerStatus === 'ok' || installAcknowledged ? <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Installed</div> : <><p style={body}>Run this once. It installs the import skill in Claude Code.</p><div style={commandBox}><code className="mono" style={code}>{installCommand(selectedSources)}</code><button onClick={() => copy(installCommand(selectedSources), 'install')} aria-label="Copy command" title="Copy command" className="mono" style={secondaryButton}>{copied === 'install' ? '✓' : '⧉'}</button></div><button onClick={() => setInstallAcknowledged(true)} className="mono" style={primaryButton(false)}>Installed — continue</button></>}
+        {markerStatus === 'ok' || installAcknowledged ? <div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Installed</div> : <><p style={body}>Run this once. It installs the import skill in Claude Code. Name the folder you want your portfolio kept in; the default is fine.</p><label style={fieldLabel}>Portfolio folder name<input aria-label="Portfolio folder name" value={folderName} onChange={event => setFolderName(folderNameOf(event.target.value))} className="mono" style={fieldInput} /></label><p style={hint}>Stored at <code className="mono">$HOME/Documents/{folderNameOf(folderName)}</code></p><div style={commandBox}><code className="mono" style={code}>{installCommand(selectedSources, folderName)}</code><button onClick={() => copy(installCommand(selectedSources, folderName), 'install')} aria-label="Copy command" title="Copy command" className="mono" style={secondaryButton}>{copied === 'install' ? '✓' : '⧉'}</button></div><button onClick={() => setInstallAcknowledged(true)} className="mono" style={primaryButton(false)}>Installed — continue</button></>}
       </StepCard>}
       {(selectedSources.length > 0 && installAcknowledged && markerStatus !== 'ok') && <StepCard n={3} active done={false} title="Connect your folder"><p style={body}>The installer created <code className="mono">Documents/builders-diary</code>. Choose that folder to keep your portfolio private and on this computer.</p><button onClick={onSelectFolder} disabled={isLoading || markerStatus === 'checking'} className="mono" style={primaryButton(isLoading || markerStatus === 'checking')}>{isLoading ? 'Connecting…' : markerStatus === 'checking' ? 'Checking…' : markerStatus === 'missing' ? 'Choose another folder' : 'Choose folder'}</button>{error && <p className="mono" style={{ fontSize: 11, color: 'var(--danger)', marginTop: 8 }}>{error}</p>}{markerStatus === 'missing' && <p style={hint}>This folder is not a Builder&apos;s Diary portfolio{folderPath ? ` (you picked “${folderPath}”)` : ''}. Choose the folder where you already set up Builder&apos;s Diary.</p>}</StepCard>}
       {markerStatus === 'ok' && <StepCard n={3} active={false} done title="Connect your folder"><div className="mono" style={{ fontSize: 12, color: 'var(--accent)' }}>✓ Connected folder</div>{folderPath && <div className="mono" style={{ fontSize: 10, color: 'var(--text3)', marginTop: 5 }}>{folderPath}</div>}</StepCard>}
@@ -64,9 +71,9 @@ export function OnboardingScreen({ onSelectFolder, isLoading, error, folderConne
 }
 function RouteChoices({ onBulk, onIndividual }: { onBulk: () => void; onIndividual: () => void }) { return <><p style={body}>How would you like to add work?</p><div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}><button onClick={onBulk} style={routeButton(false)}><strong>Bulk import</strong><span style={routeDescription}>Build your portfolio from your past conversations.</span></button><button onClick={onIndividual} style={routeButton(false)}><strong>Single import</strong><span style={routeDescription}>Start with one conversation and create your first portfolio entry.</span></button></div></>; }
 function skillPrompt(prompt: string, folderPath?: string, viewerUrl?: string) {
-  const folderName = (folderPath || 'connected-folder-name').replace(/["\\\r\n]/g, '');
+  const folder = folderNameOf(folderPath);
   const viewer = viewerUrl || 'https://web-one-alpha-57.vercel.app';
-  return `${prompt}\nViewer: ${viewer}\nPortfolio folder: "$HOME/Documents/${folderName}"`;
+  return `${prompt}\nViewer: ${viewer}\nPortfolio folder: "$HOME/Documents/${folder}"`;
 }
 function BulkRoute({ copied, copy, folderPath, viewerUrl, onBack }: { copied: string | null; copy: (text: string, key: string) => void; folderPath?: string; viewerUrl?: string; onBack: () => void }) { const prompt = skillPrompt(IMPORT_PROMPT, folderPath, viewerUrl); return <div><BackButton onClick={onBack} /><p style={body}>Open a new Claude Code chat and use the import skill.</p><div style={commandBox}><code className="mono" style={code}>{prompt}</code><button onClick={() => copy(prompt, 'import')} aria-label="Copy import skill" title="Copy import skill" className="mono" style={secondaryButton}>{copied === 'import' ? '✓' : '⧉'}</button></div><ModelRecommendation /></div>; }
 function IndividualRoute({ copied, copy, folderPath, viewerUrl, onBack }: { copied: string | null; copy: (text: string, key: string) => void; folderPath?: string; viewerUrl?: string; onBack: () => void }) { const prompt = skillPrompt(RECORD_PROMPT, folderPath, viewerUrl); return <div><BackButton onClick={onBack} /><p style={body}>Open the Claude chat, Cowork space, or Claude Code session you want to turn into a portfolio entry, then use the regular skill.</p><div style={commandBox}><code className="mono" style={code}>{prompt}</code><button onClick={() => copy(prompt, 'record')} aria-label="Copy regular skill" title="Copy regular skill" className="mono" style={secondaryButton}>{copied === 'record' ? '✓' : '⧉'}</button></div><ModelRecommendation /></div>; }
@@ -85,3 +92,5 @@ const smallPrimary: React.CSSProperties = { padding: '8px 11px', background: 'va
 const primaryButton = (disabled: boolean): React.CSSProperties => ({ padding: '10px 18px', background: disabled ? 'var(--border)' : 'var(--accent)', color: disabled ? 'var(--text3)' : 'var(--bg)', border: 0, borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer' });
 const routeButton = (_active: boolean): React.CSSProperties => ({ padding: '15px', border: '1px solid var(--border)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', textAlign: 'left' as const });
 const routeDescription: React.CSSProperties = { display: 'block', marginTop: 7, fontSize: 11.5, color: 'var(--text2)', lineHeight: 1.5 };
+const fieldLabel: React.CSSProperties = { display: 'block', fontSize: 11, color: 'var(--text3)', marginBottom: 5 };
+const fieldInput: React.CSSProperties = { display: 'block', width: '100%', padding: '8px 10px', marginBottom: 6, background: 'var(--bg)', color: 'var(--text)', border: '1px solid var(--border)', borderRadius: 4, fontSize: 12 };

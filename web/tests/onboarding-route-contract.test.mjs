@@ -23,7 +23,7 @@ test('a fresh browser requires a source choice before it shows installer guidanc
   assert.match(onboarding, /Hermes/);
   assert.doesNotMatch(onboarding, /ChatGPT|Gemini|Grok|Antigravity/);
   assert.ok(onboarding.includes("import installerPackage from '../../../npm/package.json';"));
-  assert.match(onboarding, /function installCommand\(sources: SourceId\[\]\)/);
+  assert.match(onboarding, /function installCommand\(sources: SourceId\[\], folderName: string\)/);
   assert.match(onboarding, /tools\.push\('cursor'\)/);
   assert.match(onboarding, /tools\.push\('codex'\)/);
   assert.match(onboarding, /selectedSources\.length > 0 && <StepCard n=\{2\}/);
@@ -56,6 +56,8 @@ test('bulk route directs every selected source to Claude Code without web export
   assert.match(onboarding, /title="Copy import skill"/);
   assert.match(onboarding, /Viewer:/);
   assert.match(onboarding, /window\.location\.origin/);
+  assert.match(onboarding, /Portfolio folder name/);
+  assert.match(onboarding, /--data-root/);
   assert.match(onboarding, /Claude Sonnet 5 \/ Medium/);
   assert.match(onboarding, /5-hour limit remaining/);
 
