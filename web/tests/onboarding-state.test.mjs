@@ -42,6 +42,15 @@ test('a fresh onboarding does not restore a previous source choice', async () =>
   assert.doesNotMatch(home, /\/\/ Always restore selected tools/);
 });
 
+test('install command copy is next to the command and lower hierarchy than continue', async () => {
+  const onboarding = await source('src/components/OnboardingScreen.tsx');
+
+  assert.match(onboarding, /commandRow/);
+  assert.match(onboarding, /secondaryButton/);
+  assert.ok(onboarding.indexOf('commandRow') < onboarding.indexOf('secondaryButton'));
+  assert.match(onboarding, /Installed — continue/);
+});
+
 test('route choices are neutral until the user explicitly clicks one', async () => {
   const onboarding = await source('src/components/OnboardingScreen.tsx');
 
