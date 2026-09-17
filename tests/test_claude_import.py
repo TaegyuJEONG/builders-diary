@@ -536,11 +536,11 @@ class ClaudeImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "task list"):
             plan_tasks(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", plan={"structure": [{"purpose": "Research", "cards": [{"title": "A", "evidence_note": "b"}]}]})
         confirm_project_plan(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs")
-        with self.assertRaisesRegex(ValueError, "task plan"):
+        with self.assertRaisesRegex(ValueError, "card-list plan"):
             propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
         tasks = plan_tasks(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", plan={"structure": [{"purpose": "Research", "cards": [{"title": "Job-board landscape", "evidence_note": "Research chats"}]}]})
         self.assertEqual(tasks["status"], "proposed")
-        with self.assertRaisesRegex(ValueError, "task plan"):
+        with self.assertRaisesRegex(ValueError, "card-list plan"):
             propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
         confirm_task_plan(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs")
         proposal = propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
