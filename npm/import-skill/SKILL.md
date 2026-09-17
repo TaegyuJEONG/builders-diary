@@ -38,7 +38,7 @@ The viewer origin comes **only** from the copied `Viewer: <origin>` line in the 
 https://web-one-alpha-57.vercel.app
 ```
 
-It is a static page that reads the folder the user connected in the browser. There is no local server, no port, and nothing for the user to start. Keep that page open beside this chat the whole run. An in-progress Step 4 import run owns the current step: derive it from the connected folder, import manifest, and proposal state; do not reset to Step 1.
+It is a static page that reads the folder the user connected in the browser. Nothing needs to be started by the user. Keep that page open beside this chat the whole run. An in-progress Step 4 import run owns the current step: derive it from the connected folder, import manifest, and proposal state; do not reset to Step 1.
 
 Verify that onboarding is finished and that the viewer is reachable:
 
@@ -258,26 +258,27 @@ Then continue to Step 4 with the confirmed projects.
 
 ### Project-first bulk contract
 
-After the project list is finalized, work **one project at a time** in this strict order. Never mass-draft Task cards across projects before the per-project story and structure are confirmed — the portfolio must let a stranger understand, for every project or learning entry, what the work was trying to say and prove.
+After the project list is finalized, work **one project at a time** through five phases. The helper enforces the order with hard gates — a skipped phase fails the next helper call.
 
-**Step A + B — File the structure plan as JSON (helper-enforced).** After confirming a project and reading its sources, file the project's story and card structure with the helper — prose proposals are not accepted by the flow:
+**Phase 1 — Decide every source (read first, drops included).** Walk the project's sources in date order. Read each substantial source in full; classify unambiguous noise (keyword-match accidents, duplicates, greetings, 1–3 message Q&As) with `classify-sources` without asking. Announce progress as "Reading sources: N/Total · dropped M as noise" as you go. A source is decided when it is read or classified.
+
+**Phase 2 — Project story plan (helper-gated JSON).** When every source is decided, file the story with `plan-project`; the helper rejects it while any source is still pending:
 
 ```bash
-python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" plan-structure \
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" plan-project \
   --data-root "$DATA_ROOT" --run-id "<run-id>" --project "Product Builder Jobs" \
-  --plan '{"one_liner":"A job board for product builders, by a product builder.","sector":"Career tools","logo":"","structure":[{"purpose":"Research","cards":[{"title":"Western Europe job-board landscape","evidence_note":"3 research chats comparing boards and pricing"},{"title":"How AI assists job matching","evidence_note":"Claude Code session prototyping fit-analysis prompts"}]},{"purpose":"Build","cards":[{"title":"Chrome extension scaffold","evidence_note":"First repo push and manifest setup session"}]}]}'
+  --plan '{"one_liner":"A job board that classifies real product builders.","sector":"Career tools","logo":"","problem":"Hiring screens filter on credentials, not shipped work.","solution":"A rubric-scored job board with an embedded matching pipeline.","opportunity":"Builder-economy hiring is growing faster than credential hiring.","architecture":"Scraping pipeline + bi-encoder embeddings + LLM verification + Supabase."}'
 ```
 
-The helper rejects the plan unless `one_liner`, `sector`, and a non-empty `structure` are present, every card has a `title` and an `evidence_note` naming its real evidence, and the project is confirmed. Never use generic labels like `Research / Demo / Build`: the card names must be concrete enough that the user can judge the content from the names alone. Show the plan to the user in chat, ask them to confirm, rename, add, or rearrange, and then record their confirmation:
+`one_liner`, `sector`, `problem`, and `solution` are required; `logo`, `opportunity`, and `architecture` are optional (ask the user for a logo upload when the export has none). Show the plan in chat, let the user edit it, then record confirmation with `confirm-project-plan`.
 
-```bash
-python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" confirm-structure \
-  --data-root "$DATA_ROOT" --run-id "<run-id>" --project "Product Builder Jobs"
-```
+**Phase 3 — Card-list plan (helper-gated JSON).** Only after the story is confirmed, file the card list with `plan-tasks`: `structure=[{purpose, cards=[{title, evidence_note}]}]`. Card names must be concrete enough to judge from the names alone — never generic labels like `Research / Demo / Build` — and each `evidence_note` names the real chats/sessions backing it. Show it in chat, let the user rename, add, rearrange, or drop cards, then `confirm-task-plan`.
 
-**Step C — Task cards one by one inside the confirmed structure.** The helper blocks `propose-task` until `confirm-structure` succeeds for that project, so the order cannot be skipped. Then walk the project's sources in date order and propose each Task card with its full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below, keeping every card inside the confirmed structure. Never leave a project without a readable story.
+**Phase 4 — Task cards one by one inside the confirmed list.** The helper blocks `propose-task` until `confirm-task-plan` succeeds for that project. Then walk the project's sources in date order and propose each Task card with full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below, keeping every card inside the confirmed list. Evidence is the point: every card must carry verifiable source traces.
 
-**Silent-drop rule.** Do not ask permission for clearly unusable sources. If a source is unambiguously noise — a keyword-match accident pointing at a different project, a duplicate, a greeting, or a 1–3 message Q&A with no build work — classify it `noise` with `classify-sources`, move on, and keep a running one-line list ("Dropped as noise: …") to report in the project's summary. Ask the user only when the drop is genuinely ambiguous or the source looks substantive.
+**Phase 5 — Finish or pause, per project.** When every source of the project is resolved, summarize the project (story + cards + dropped-noise list), ask whether to continue to the next project or pause. Pausing is always safe: the manifest is the checkpoint, and `list-runs` plus the confirmed plans resume exactly here next time. Never start the next project's Phase 1 without the user's go-ahead.
+
+**Silent-drop rule.** Do not ask permission for clearly unusable sources. Classify them `noise`, move on, and keep a running one-line list ("Dropped as noise: …") to report in the project summary. Ask only when the drop is genuinely ambiguous or the source looks substantive.
 
 These are targets, not fabricated Tasks: every eventual Task needs source evidence. The user may drop a project when its story does not make sense. Preserve the `project`, `learning`, and `noise` taxonomy. The manifest phases are `project_selection` → `source_task_curation` → `complete`; progress may report per-project completed/total counts. Pause/resume is not promised unless the helper explicitly supports it.
 

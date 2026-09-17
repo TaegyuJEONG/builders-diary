@@ -1102,49 +1102,96 @@ def read_source(
     return {"source_ref": source_ref, "metadata": metadata, "content": content}
 
 
-def plan_structure(*, data_root: str | Path, run_id: str, project_name: str, plan: dict[str, Any]) -> dict[str, Any]:
-    """Persist the structured story + card-structure plan the agent must file before Task proposals."""
-    root = Path(data_root).expanduser()
-    run_dir, manifest = _load_run_manifest(root, run_id)
-    phase = manifest.get("phase") or manifest.get("status")
-    if phase != "source_task_curation" and phase != "project_selection":
-        raise ValueError("Structure plans require confirmed projects")
+def _project_source_decisions(run_dir: Path, manifest: dict[str, Any], project_name: str) -> dict[str, str]:
+    """Map each confirmed project source to its decision: read, classified, or pending."""
     project = next((item for item in manifest.get("confirmed_projects") or [] if isinstance(item, dict) and str(item.get("name", "")).casefold() == project_name.casefold()), None)
     if project is None:
         raise ValueError("Project is not confirmed")
-    one_liner = str(plan.get("one_liner") or "").strip()
-    sector = str(plan.get("sector") or "").strip()
+    proposal = _load_project_proposal(run_dir)
+    classified = {str(item.get("source_ref")) for bucket in ("learning", "noise") for item in proposal.get(bucket, []) if isinstance(item, dict)}
+    read = set(manifest.get("read_sources") or [])
+    decisions: dict[str, str] = {}
+    for ref in project.get("source_refs") or []:
+        decisions[str(ref)] = "read" if str(ref) in read else "classified" if str(ref) in classified else "pending"
+    return decisions
+
+
+def plan_project(*, data_root: str | Path, run_id: str, project_name: str, plan: dict[str, Any]) -> dict[str, Any]:
+    """Persist the project-level story plan; requires every source decided (read or classified)."""
+    root = Path(data_root).expanduser()
+    run_dir, manifest = _load_run_manifest(root, run_id)
+    decisions = _project_source_decisions(run_dir, manifest, project_name)
+    if not decisions:
+        raise ValueError("Project has no sources")
+    pending = [ref for ref, state in decisions.items() if state == "pending"]
+    if pending:
+        raise ValueError(f"Read or classify all {len(decisions)} sources first ({len(pending)} pending, e.g. {pending[0]})")
+    story = {field: str(plan.get(field) or "").strip() for field in ("one_liner", "sector", "logo", "problem", "solution", "opportunity", "architecture")}
+    if not story["one_liner"] or not story["sector"] or not story["problem"] or not story["solution"]:
+        raise ValueError("plan requires one_liner, sector, problem, and solution")
+    plans = manifest.setdefault("project_plans", {})
+    entry = {**story, "status": "proposed"}
+    plans[project_name] = entry
+    manifest["project_plans"] = plans
+    _write_json(run_dir / "manifest.json", manifest)
+    _append_run_event(run_dir, "project_plan_proposed", project=project_name)
+    return {"project": project_name, **entry}
+
+
+def confirm_project_plan(*, data_root: str | Path, run_id: str, project_name: str) -> dict[str, Any]:
+    """Mark the user-confirmed project story plan."""
+    root = Path(data_root).expanduser()
+    run_dir, manifest = _load_run_manifest(root, run_id)
+    plans = manifest.get("project_plans") or {}
+    entry = plans.get(project_name)
+    if not isinstance(entry, dict):
+        raise ValueError("No project plan filed for this project")
+    entry["status"] = "confirmed"
+    plans[project_name] = entry
+    manifest["project_plans"] = plans
+    _write_json(run_dir / "manifest.json", manifest)
+    _append_run_event(run_dir, "project_plan_confirmed", project=project_name)
+    return {"project": project_name, "status": "confirmed", "plan": entry}
+
+
+def plan_tasks(*, data_root: str | Path, run_id: str, project_name: str, plan: dict[str, Any]) -> dict[str, Any]:
+    """Persist the card-list structure plan; requires the project plan confirmed."""
+    root = Path(data_root).expanduser()
+    run_dir, manifest = _load_run_manifest(root, run_id)
+    project_entry = (manifest.get("project_plans") or {}).get(project_name)
+    if not isinstance(project_entry, dict) or project_entry.get("status") != "confirmed":
+        raise ValueError("confirm the project plan (plan-project) before the task list")
     structure = plan.get("structure")
-    if not one_liner or not sector or not isinstance(structure, list) or not structure:
-        raise ValueError("plan requires one_liner, sector, and a non-empty structure list")
+    if not isinstance(structure, list) or not structure:
+        raise ValueError("plan requires a non-empty structure list")
     for group in structure:
         if not isinstance(group, dict) or not str(group.get("purpose") or "").strip() or not isinstance(group.get("cards"), list) or not group["cards"]:
             raise ValueError("each structure group needs a purpose and a non-empty cards list")
         for card in group["cards"]:
             if not isinstance(card, dict) or not str(card.get("title") or "").strip() or not str(card.get("evidence_note") or "").strip():
                 raise ValueError("each card needs a title and an evidence_note")
-    plans = manifest.setdefault("structure_plans", {})
-    entry = {"one_liner": one_liner, "sector": sector, "logo": str(plan.get("logo") or "").strip(), "structure": structure, "status": "proposed"}
+    plans = manifest.setdefault("task_plans", {})
+    entry = {"structure": structure, "status": "proposed"}
     plans[project_name] = entry
-    manifest["structure_plans"] = plans
+    manifest["task_plans"] = plans
     _write_json(run_dir / "manifest.json", manifest)
-    _append_run_event(run_dir, "structure_planned", project_id=project.get("id"), groups=len(structure))
+    _append_run_event(run_dir, "task_plan_proposed", project=project_name, groups=len(structure))
     return {"project": project_name, **entry}
 
 
-def confirm_structure(*, data_root: str | Path, run_id: str, project_name: str) -> dict[str, Any]:
-    """Mark the user-confirmed structure plan; propose-task requires this."""
+def confirm_task_plan(*, data_root: str | Path, run_id: str, project_name: str) -> dict[str, Any]:
+    """Mark the user-confirmed task-list plan; propose-task requires this."""
     root = Path(data_root).expanduser()
     run_dir, manifest = _load_run_manifest(root, run_id)
-    plans = manifest.get("structure_plans") or {}
+    plans = manifest.get("task_plans") or {}
     entry = plans.get(project_name)
     if not isinstance(entry, dict):
-        raise ValueError("No structure plan filed for this project")
+        raise ValueError("No task plan filed for this project")
     entry["status"] = "confirmed"
     plans[project_name] = entry
-    manifest["structure_plans"] = plans
+    manifest["task_plans"] = plans
     _write_json(run_dir / "manifest.json", manifest)
-    _append_run_event(run_dir, "structure_confirmed", project=project_name)
+    _append_run_event(run_dir, "task_plan_confirmed", project=project_name)
     return {"project": project_name, "status": "confirmed", "structure": entry["structure"]}
 
 
@@ -1168,9 +1215,9 @@ def propose_task(
         raise ValueError("Source is not assigned to confirmed project")
     if source_ref not in (manifest.get("read_sources") or []):
         raise ValueError("read and curate the source before creating Task proposals")
-    plan_entry = (manifest.get("structure_plans") or {}).get(project_name)
+    plan_entry = (manifest.get("task_plans") or {}).get(project_name)
     if not isinstance(plan_entry, dict) or plan_entry.get("status") != "confirmed":
-        raise ValueError("file the structure plan with plan-structure and get user confirmation before Task proposals")
+        raise ValueError("file the card-list plan with plan-tasks and get user confirmation before Task proposals")
     proposal_id = f"task-{uuid.uuid4().hex[:12]}"
     metadata = _source_catalog(_load_source_index(run_dir)).get(source_ref, {})
     proposal = {
@@ -1864,16 +1911,27 @@ def main() -> int:
     apply_pending_cmd.add_argument("--data-root", required=True)
     apply_pending_cmd.add_argument("--run-id", required=True)
 
-    plan_structure_cmd = sub.add_parser("plan-structure", help="File the structured story + card-structure plan for a confirmed project")
-    plan_structure_cmd.add_argument("--data-root", required=True)
-    plan_structure_cmd.add_argument("--run-id", required=True)
-    plan_structure_cmd.add_argument("--project", required=True)
-    plan_structure_cmd.add_argument("--plan", required=True, help="JSON: one_liner, sector, logo, structure=[{purpose, cards=[{title, evidence_note}]}]")
+    plan_project_cmd = sub.add_parser("plan-project", help="File the project story plan (one_liner, sector, problem, solution); requires all sources decided")
+    plan_project_cmd.add_argument("--data-root", required=True)
+    plan_project_cmd.add_argument("--run-id", required=True)
+    plan_project_cmd.add_argument("--project", required=True)
+    plan_project_cmd.add_argument("--plan", required=True, help="JSON: one_liner, sector, problem, solution, optional logo/opportunity/architecture")
 
-    confirm_structure_cmd = sub.add_parser("confirm-structure", help="Record the user's confirmation of a project's structure plan")
-    confirm_structure_cmd.add_argument("--data-root", required=True)
-    confirm_structure_cmd.add_argument("--run-id", required=True)
-    confirm_structure_cmd.add_argument("--project", required=True)
+    confirm_project_plan_cmd = sub.add_parser("confirm-project-plan", help="Record the user's confirmation of a project story plan")
+    confirm_project_plan_cmd.add_argument("--data-root", required=True)
+    confirm_project_plan_cmd.add_argument("--run-id", required=True)
+    confirm_project_plan_cmd.add_argument("--project", required=True)
+
+    plan_tasks_cmd = sub.add_parser("plan-tasks", help="File the card-list plan (purpose groups with titled, evidence-backed cards); requires the project plan confirmed")
+    plan_tasks_cmd.add_argument("--data-root", required=True)
+    plan_tasks_cmd.add_argument("--run-id", required=True)
+    plan_tasks_cmd.add_argument("--project", required=True)
+    plan_tasks_cmd.add_argument("--plan", required=True, help="JSON: structure=[{purpose, cards=[{title, evidence_note}]}]")
+
+    confirm_task_plan_cmd = sub.add_parser("confirm-task-plan", help="Record the user's confirmation of a card-list plan")
+    confirm_task_plan_cmd.add_argument("--data-root", required=True)
+    confirm_task_plan_cmd.add_argument("--run-id", required=True)
+    confirm_task_plan_cmd.add_argument("--project", required=True)
 
 
     source_queue_cmd = sub.add_parser("source-queue", help="List a confirmed project's remaining sources oldest first")
@@ -1945,10 +2003,14 @@ def main() -> int:
         print(json.dumps(apply_selections(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "apply-pending-actions":
         print(json.dumps(apply_pending_web_actions(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
-    elif args.command == "plan-structure":
-        print(json.dumps(plan_structure(data_root=args.data_root, run_id=args.run_id, project_name=args.project, plan=json.loads(args.plan)), ensure_ascii=False, indent=2))
-    elif args.command == "confirm-structure":
-        print(json.dumps(confirm_structure(data_root=args.data_root, run_id=args.run_id, project_name=args.project), ensure_ascii=False, indent=2))
+    elif args.command == "plan-project":
+        print(json.dumps(plan_project(data_root=args.data_root, run_id=args.run_id, project_name=args.project, plan=json.loads(args.plan)), ensure_ascii=False, indent=2))
+    elif args.command == "confirm-project-plan":
+        print(json.dumps(confirm_project_plan(data_root=args.data_root, run_id=args.run_id, project_name=args.project), ensure_ascii=False, indent=2))
+    elif args.command == "plan-tasks":
+        print(json.dumps(plan_tasks(data_root=args.data_root, run_id=args.run_id, project_name=args.project, plan=json.loads(args.plan)), ensure_ascii=False, indent=2))
+    elif args.command == "confirm-task-plan":
+        print(json.dumps(confirm_task_plan(data_root=args.data_root, run_id=args.run_id, project_name=args.project), ensure_ascii=False, indent=2))
     elif args.command == "source-queue":
         print(json.dumps(project_source_queue(data_root=args.data_root, run_id=args.run_id, project_name=args.project), ensure_ascii=False, indent=2))
     elif args.command == "read-source":
