@@ -36,7 +36,7 @@ export function ImportProgress({ runs, toolId }: ImportProgressProps) {
         : <span className="mono bd-import-spinner" style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--border)', borderTopColor: 'var(--accent)', flexShrink: 0 }} />}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="mono" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', color: ready ? 'var(--text2)' : 'var(--accent)', marginBottom: 3 }}>
-          {toolLabel} · {route}{ready ? ' · Proposal ready' : ''}
+          {toolLabel} · {route}
         </div>
         <div style={{ fontSize: 12, color: 'var(--text2)' }}>
           {counts.chat_conversations ?? 0} chat conversations · {counts.chat_projects ?? 0} chat projects · {counts.code_sessions ?? 0} Claude Code sessions

@@ -58,7 +58,7 @@ export function OnboardingScreen({ onSelectFolder, isLoading, error, folderConne
   return <div style={page}><div style={{ maxWidth: needsReview ? 1000 : 620, width: '100%' }}>
     <div style={{ textAlign: 'center', marginBottom: 42 }}><h1 className="serif" style={{ fontSize: 40, fontWeight: 400, margin: 0 }}>Builder&apos;s Diary</h1><p className="mono" style={{ fontSize: 11, color: 'var(--text3)', lineHeight: 1.8 }}>Everything stays on your computer.<br />Only records you choose to share are sent to us.</p></div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {importMode && latestRun && <div><ImportProgress runs={importRuns} toolId={selectedSources[0] || 'claude'} />{needsReview && <><p style={{ ...body, marginTop: 16 }}>Your import is ready. Confirm the projects you want in your portfolio.</p><ImportSelectionTable onSaved={onComplete} refreshKey={importRefreshKey} /></>}</div>}
+      {importMode && latestRun && <div><ImportProgress runs={importRuns} toolId={selectedSources[0] || 'claude'} /><ImportSelectionTable onSaved={onComplete} refreshKey={importRefreshKey} /></div>}
       {!importMode && <StepCard n={1} active={!selectedSources.length} done={selectedSources.length > 0} title="Choose your sources">
         <p style={body}>Where should we bring in past work from?</p><p style={hint}>Choose one or more. We remove duplicates before review, and the review runs in Claude Code.</p>
         {SOURCES.map(source => <ToolChoice key={source.id} active={selectedSources.includes(source.id)} onClick={() => toggleSource(source.id)} label={source.label} description={source.description} />)}
