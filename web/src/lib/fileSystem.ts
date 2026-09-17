@@ -951,7 +951,7 @@ export async function writeTaskDropAction(handle: FileSystemDirectoryHandle, run
   await writable.close();
 }
 
-export async function waitForTaskActionResult(handle: FileSystemDirectoryHandle, runId: string, action: 'approve' | 'drop', timeoutMs = 900000): Promise<{ status: string; result?: { [key: string]: unknown }; error?: string } | null> {
+export async function waitForTaskActionResult(handle: FileSystemDirectoryHandle, runId: string, action: 'approve' | 'drop', timeoutMs = 15000): Promise<{ status: string; result?: { [key: string]: unknown }; error?: string } | null> {
   const started = Date.now();
   const resultName = action === 'approve' ? 'task-approve.json' : 'task-drop.json';
   while (Date.now() - started < timeoutMs) {
@@ -966,7 +966,7 @@ export async function waitForTaskActionResult(handle: FileSystemDirectoryHandle,
   return { status: 'timeout', error: 'The applying session is not connected. In the Claude Code import chat, type: save done' };
 }
 
-export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; confirmed?: string[]; error?: string } | null> {
+export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 15000): Promise<{ status: string; confirmed?: string[]; error?: string } | null> {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
