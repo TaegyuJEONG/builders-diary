@@ -260,7 +260,18 @@ Then continue to Step 4 with the confirmed projects.
 
 ### Project-first bulk contract
 
-After the project list is finalized, analyze **all selected project sources first** using metadata and, only after the user confirms, source content. For each project, propose a story with summary, sector, one-liner, a logo question or placeholder, and a suggested target plan of Discovery 2, Build 5, and Growth 3. These are targets, not fabricated Tasks: every eventual Task needs source evidence. The user may drop a project when its story does not make sense. Generate and approve Task proposals only after that project is confirmed. Preserve the `project`, `learning`, and `noise` taxonomy. The manifest phases are `project_selection` → `source_task_curation` → `complete`; progress may report per-project completed/total counts. Pause/resume is not promised unless the helper explicitly supports it.
+After the project list is finalized, work **one project at a time** in this strict order. Never mass-draft Task cards across projects before the per-project story and structure are confirmed — the portfolio must let a stranger understand, for every project or learning entry, what the work was trying to say and prove.
+
+**Step A — Story first (before reading any source in full).** For the project, use only metadata (titles, summaries, dates, session counts) to draft and confirm with the user:
+- a one-line summary of what this project is and who it is for;
+- the industry/sector label;
+- a logo question or placeholder.
+
+**Step B — Structure proposal (before writing any Task proposal).** Read the project's full sources only after Step A is confirmed. Then, instead of drafting cards immediately, propose the project's **large structure first**: the handful of Purposes/section groups the cards will be organized into, each with one sentence on what it will show (example: `Research / Office hours / Subagents / Demo / Methodology / Architecture`). State explicitly: "I plan to build this project's cards as: …". Ask the user to confirm, rename, or rearrange the structure before Step C.
+
+**Step C — Task cards one by one inside the confirmed structure.** Only after the structure is confirmed, walk the project's sources in date order and propose each Task card with its full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below. Never write Task proposals for a project whose structure the user has not confirmed, and never leave a project without a readable story.
+
+These are targets, not fabricated Tasks: every eventual Task needs source evidence. The user may drop a project when its story does not make sense. Preserve the `project`, `learning`, and `noise` taxonomy. The manifest phases are `project_selection` → `source_task_curation` → `complete`; progress may report per-project completed/total counts. Pause/resume is not promised unless the helper explicitly supports it.
 
 The canonical structure is:
 

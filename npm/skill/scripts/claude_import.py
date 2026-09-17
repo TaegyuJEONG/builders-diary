@@ -1765,6 +1765,11 @@ def main() -> int:
     propose_task_cmd.add_argument("--purpose", default="")
     propose_task_cmd.add_argument("--stage", default="Discovery")
     propose_task_cmd.add_argument("--task-aim", default="")
+    propose_task_cmd.add_argument("--date", default=None)
+    propose_task_cmd.add_argument("--activity", action="append", default=[])
+    propose_task_cmd.add_argument("--tool", action="append", default=[])
+    propose_task_cmd.add_argument("--mindset", action="append", default=[])
+    propose_task_cmd.add_argument("--highlight", default="")
 
     finalize_proposal_cmd = sub.add_parser("finalize-proposal", help="Mark a complete proposal ready for web selection")
     finalize_proposal_cmd.add_argument("--data-root", required=True)
@@ -1861,7 +1866,7 @@ def main() -> int:
     elif args.command == "propose-project":
         print(json.dumps(propose_project(data_root=args.data_root, run_id=args.run_id, name=args.name, summary=args.summary, source_refs=args.source_ref, candidate_ids=args.candidate_id), ensure_ascii=False, indent=2))
     elif args.command == "propose-task":
-        print(json.dumps(propose_task(data_root=args.data_root, run_id=args.run_id, project_name=args.project, source_ref=args.source_ref, title=args.title, body=args.body, purpose=args.purpose, stage=args.stage, task_aim=args.task_aim), ensure_ascii=False, indent=2))
+        print(json.dumps(propose_task(data_root=args.data_root, run_id=args.run_id, project_name=args.project, source_ref=args.source_ref, title=args.title, body=args.body, purpose=args.purpose, stage=args.stage, task_aim=args.task_aim, date=args.date, activities=args.activity, tools=args.tool, mindset=args.mindset, highlight=args.highlight), ensure_ascii=False, indent=2))
     elif args.command == "finalize-proposal":
         print(json.dumps(finalize_project_proposal(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "materialize-chat-views":
