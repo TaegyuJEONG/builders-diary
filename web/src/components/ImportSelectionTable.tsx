@@ -11,12 +11,12 @@ const input: React.CSSProperties = { width: '100%', background: 'var(--bg)', bor
 function SaveDoneNotice() {
   const [copied, setCopied] = useState(false);
   const copy = () => navigator.clipboard.writeText('save done').then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '11px 14px', borderLeft: '2px solid var(--danger)', background: 'var(--surface)', borderRadius: 4 }}>
-    <strong style={{ fontSize: 12.5, color: 'var(--danger)' }}>The import chat is not connected</strong>
-    <span style={{ fontSize: 12, color: 'var(--text2)', lineHeight: 1.55 }}>Your save is recorded and waiting. Open the <strong style={{ color: 'var(--text)' }}>Claude Code chat running the Bulk import</strong>, then paste this one line:</span>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <code className="mono" style={{ flex: 1, padding: '7px 10px', background: 'var(--bg)', border: '1px solid var(--danger)', borderRadius: 4, fontSize: 12, color: 'var(--text)' }}>save done</code>
-      <button onClick={copy} aria-label="Copy save done" title="Copy save done" className="mono" style={{ width: 30, height: 30, display: 'grid', placeItems: 'center', background: 'var(--danger)', color: 'var(--bg)', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 13 }}>{copied ? '✓' : '⧉'}</button>
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '9px 11px', borderLeft: '2px solid var(--danger)', background: 'var(--tag-active-bg)', color: 'var(--text2)', fontSize: 11.5, lineHeight: 1.5 }}>
+    <strong style={{ fontSize: 11.5, color: 'var(--danger)' }}>Not connected</strong>
+    <span>Open the <strong style={{ color: 'var(--text2)' }}>Claude Code chat running the Bulk import</strong> and paste this one line. Your save is already recorded.</span>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 2 }}>
+      <code className="mono" style={{ flex: 1, padding: '5px 9px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 3, fontSize: 11.5, color: 'var(--text)' }}>save done</code>
+      <button onClick={copy} aria-label="Copy save done" title="Copy save done" className="mono" style={{ width: 26, height: 26, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'transparent', color: 'var(--text2)', border: '1px solid var(--border)', borderRadius: 3, cursor: 'pointer', fontSize: 12 }}>{copied ? '✓' : '⧉'}</button>
     </div>
   </div>;
 }
