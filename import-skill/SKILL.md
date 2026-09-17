@@ -273,6 +273,8 @@ Step A confirmation and full source reading can proceed in parallel; Step B belo
 
 **Step C — Task cards one by one inside the confirmed structure.** Only after the structure is confirmed, walk the project's sources in date order and propose each Task card with its full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below. Never write Task proposals for a project whose structure the user has not confirmed, and never leave a project without a readable story.
 
+**Silent-drop rule.** Do not ask permission for clearly unusable sources. If a source is unambiguously noise — a keyword-match accident pointing at a different project, a duplicate, a greeting, or a 1–3 message Q&A with no build work — classify it `noise` with `classify-sources`, move on, and keep a running one-line list ("Dropped as noise: …") to report in the project's summary. Ask the user only when the drop is genuinely ambiguous or the source looks substantive.
+
 These are targets, not fabricated Tasks: every eventual Task needs source evidence. The user may drop a project when its story does not make sense. Preserve the `project`, `learning`, and `noise` taxonomy. The manifest phases are `project_selection` → `source_task_curation` → `complete`; progress may report per-project completed/total counts. Pause/resume is not promised unless the helper explicitly supports it.
 
 The canonical structure is:
