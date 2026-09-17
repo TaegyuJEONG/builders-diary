@@ -963,7 +963,7 @@ export async function waitForTaskActionResult(handle: FileSystemDirectoryHandle,
     } catch { /* helper may not have created the result directory yet */ }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  return { status: 'timeout', error: 'Claude Code did not apply the Task decision in time.' };
+  return { status: 'timeout', error: 'The applying session is not connected. In the Claude Code import chat, type: save done' };
 }
 
 export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHandle, runId: string, timeoutMs = 900000): Promise<{ status: string; confirmed?: string[]; error?: string } | null> {
@@ -977,7 +977,7 @@ export async function waitForProjectConfirmResult(handle: FileSystemDirectoryHan
     } catch { /* helper may not have created the result directory yet */ }
     await new Promise(resolve => setTimeout(resolve, 500));
   }
-  return { status: 'timeout', error: 'Claude Code did not apply the project selection in time.' };
+  return { status: 'timeout', error: 'The applying session is not connected. In the Claude Code import chat, type: save done' };
 }
 
 export async function writeProjectMergeAction(handle: FileSystemDirectoryHandle, runId: string, targetSlug: string, sourceSlug: string): Promise<void> {

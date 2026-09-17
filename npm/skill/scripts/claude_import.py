@@ -1618,8 +1618,27 @@ def apply_web_action(*, data_root: str | Path, run_id: str, action_name: str) ->
     return stored_result
 
 
+def apply_pending_web_actions(*, data_root: str | Path, run_id: str) -> dict[str, Any]:
+    """Apply every allowlisted web action that has no result yet (resume trigger)."""
+    run_dir, _ = _load_run_manifest(data_root, run_id)
+    actions_dir = run_dir / "actions"
+    results_dir = run_dir / "results"
+    applied: list[dict[str, Any]] = []
+    if actions_dir.is_dir():
+        for path in sorted(actions_dir.glob("*.json")):
+            action_name = path.stem
+            if action_name not in WEB_ACTIONS:
+                continue
+            try:
+                stored = apply_web_action(data_root=data_root, run_id=run_id, action_name=action_name)
+            except (FileNotFoundError, ValueError) as error:
+                applied.append({"action": action_name, "status": "failed", "error": str(error)})
+                continue
+            applied.append({"action": action_name, "status": "applied" if isinstance(stored, dict) and stored.get("status") == "applied" else "unchanged"})
+    return {"run_id": run_id, "applied": applied, "results_dir": str(results_dir)}
+
+
 def wait_for_web_action(*, data_root: str | Path, run_id: str, action_name: str, timeout_seconds: int = 900) -> dict[str, Any]:
-    """Bounded local wait for one allowlisted action from the connected web view."""
     if not 1 <= timeout_seconds <= 3600:
         raise ValueError("timeout_seconds must be between 1 and 3600")
     deadline = time.monotonic() + timeout_seconds
@@ -1787,6 +1806,10 @@ def main() -> int:
     apply_selections_cmd.add_argument("--data-root", required=True)
     apply_selections_cmd.add_argument("--run-id", required=True)
 
+    apply_pending_cmd = sub.add_parser("apply-pending-actions", help="Apply all pending web actions for a run (resume trigger)")
+    apply_pending_cmd.add_argument("--data-root", required=True)
+    apply_pending_cmd.add_argument("--run-id", required=True)
+
 
     source_queue_cmd = sub.add_parser("source-queue", help="List a confirmed project's remaining sources oldest first")
     source_queue_cmd.add_argument("--data-root", required=True)
@@ -1855,6 +1878,8 @@ def main() -> int:
         print(json.dumps(wait_for_web_action(data_root=args.data_root, run_id=args.run_id, action_name=args.action, timeout_seconds=args.timeout), ensure_ascii=False, indent=2))
     elif args.command == "apply-selections":
         print(json.dumps(apply_selections(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
+    elif args.command == "apply-pending-actions":
+        print(json.dumps(apply_pending_web_actions(data_root=args.data_root, run_id=args.run_id), ensure_ascii=False, indent=2))
     elif args.command == "source-queue":
         print(json.dumps(project_source_queue(data_root=args.data_root, run_id=args.run_id, project_name=args.project), ensure_ascii=False, indent=2))
     elif args.command == "read-source":
