@@ -262,12 +262,14 @@ Then continue to Step 4 with the confirmed projects.
 
 After the project list is finalized, work **one project at a time** in this strict order. Never mass-draft Task cards across projects before the per-project story and structure are confirmed — the portfolio must let a stranger understand, for every project or learning entry, what the work was trying to say and prove.
 
-**Step A — Story first (before reading any source in full).** For the project, use only metadata (titles, summaries, dates, session counts) to draft and confirm with the user:
+**Step A — Story first.** Using only metadata (titles, summaries, dates, session counts), draft and confirm with the user:
 - a one-line summary of what this project is and who it is for;
 - the industry/sector label;
 - a logo question or placeholder.
 
-**Step B — Structure proposal (before writing any Task proposal).** Read the project's full sources only after Step A is confirmed. Then, instead of drafting cards immediately, propose the project's **large structure first**: the handful of Purposes/section groups the cards will be organized into, each with one sentence on what it will show (example: `Research / Office hours / Subagents / Demo / Methodology / Architecture`). State explicitly: "I plan to build this project's cards as: …". Ask the user to confirm, rename, or rearrange the structure before Step C.
+Step A confirmation and full source reading can proceed in parallel; Step B below needs the sources read.
+
+**Step B — Structure proposal (confirm before writing any Task proposal).** While or after reading the project's full sources, propose the project's **large structure** and then wait for confirmation. Do not draft Task cards yet. The structure must be concrete enough to judge from its names alone — never generic labels like `Research / Demo / Build`. Name the actual cards, e.g. `Research → Western Europe research card / Global research card / How AI is used card`, each with one sentence on what evidence backs it. State explicitly: "I plan to build this project's cards as: …" and ask the user to confirm, rename, add, or rearrange before Step C.
 
 **Step C — Task cards one by one inside the confirmed structure.** Only after the structure is confirmed, walk the project's sources in date order and propose each Task card with its full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below. Never write Task proposals for a project whose structure the user has not confirmed, and never leave a project without a readable story.
 
