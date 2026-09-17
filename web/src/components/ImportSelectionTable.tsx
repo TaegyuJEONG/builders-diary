@@ -16,7 +16,7 @@ function SaveDoneNotice() {
     <span>Open the <strong style={{ color: 'var(--text2)' }}>Claude Code chat running the Bulk import</strong> and paste this one line. Your save is already recorded.</span>
     <div style={{ display: 'inline-flex', alignItems: 'center', alignSelf: 'flex-start', marginTop: 2, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 4 }}>
       <code className="mono" style={{ padding: '6px 9px', fontSize: 11.5, color: 'var(--text)' }}>{copied ? '✓' : 'save done'}</code>
-      <button onClick={copy} aria-label="Copy save done" title="Copy save done" className="mono" style={{ width: 28, height: 28, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'transparent', color: 'var(--text2)', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 14 }}>{copied ? '✓' : '⧉'}</button>
+      <button onClick={copy} aria-label="Copy save done" title="Copy save done" className="mono" style={{ width: 28, height: 28, flexShrink: 0, display: 'grid', placeItems: 'center', background: 'var(--danger)', color: 'var(--bg)', border: 0, borderRadius: 4, cursor: 'pointer', fontSize: 14 }}>{copied ? '✓' : '⧉'}</button>
     </div>
   </div>;
 }
