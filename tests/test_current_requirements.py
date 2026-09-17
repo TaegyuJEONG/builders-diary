@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class CurrentRequirementsTests(unittest.TestCase):
     def test_import_skill_is_english_and_keeps_three_download_links(self):
         text = (ROOT / "import-skill" / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("keep the onboarding web page open", text)
+        self.assertIn("The viewer origin comes **only** from the copied `Viewer: <origin>` line", text)
         self.assertIn("https://web-one-alpha-57.vercel.app", text)
         self.assertIn("Conversations", text)
         self.assertIn("Projects", text)
