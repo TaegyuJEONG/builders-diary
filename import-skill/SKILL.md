@@ -32,17 +32,15 @@ This is a **local import workflow**, not the daily `builders-diary` session reco
 
 ## Step 0 — Open the live portfolio first
 
-keep the onboarding web page open while this skill runs. If it is closed, click or open https://web-one-alpha-57.vercel.app and keep it beside this chat. An in-progress Step 4 import run owns the current step: derive it from the connected folder, import manifest, and proposal state; do not reset to Step 1.
-
-The viewer is the deployed site:
+The viewer origin comes **only** from the copied `Viewer: <origin>` line in the user's prompt. Use that exact origin for every viewer URL you share and verify; never open, share, or substitute the production URL when a Viewer hint is present. Only when the user's prompt has no `Viewer:` line at all, fall back to the deployed viewer:
 
 ```
 https://web-one-alpha-57.vercel.app
 ```
 
-It is a static page that reads the folder the user connected in the browser. There is no local server, no port, and nothing for the user to start.
+It is a static page that reads the folder the user connected in the browser. There is no local server, no port, and nothing for the user to start. Keep that page open beside this chat the whole run. An in-progress Step 4 import run owns the current step: derive it from the connected folder, import manifest, and proposal state; do not reset to Step 1.
 
-Before scanning exports or proposing anything, use the copied `Viewer: <origin>` line when one is present. Open that exact viewer origin; do not substitute the production URL. If no viewer hint was provided, use the deployed viewer below. Verify that onboarding is finished and that the viewer is reachable:
+Verify that onboarding is finished and that the viewer is reachable:
 
 ```bash
 DATA_ROOT="<the copied Portfolio folder, with $HOME expanded>"
