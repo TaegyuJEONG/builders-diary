@@ -516,8 +516,8 @@ class ClaudeImportTests(unittest.TestCase):
         self.assertIn("After the user replies “Done”, continue in this chat/local helper flow by re-running `scan-export`", skill)
         self.assertNotIn("return to the web page", skill.lower())
 
-    def test_task_proposal_requires_confirmed_project_and_read_source(self) -> None:
-        from skill.scripts.claude_import import confirm_project, prepare_import_run, propose_task, read_source
+    def test_task_proposal_requires_confirmed_project_read_source_and_structure(self) -> None:
+        from skill.scripts.claude_import import confirm_project, confirm_structure, plan_structure, prepare_import_run, propose_task, read_source
 
         run = prepare_import_run(data_root=self.data_root, export_dir=self.export_dir, claude_config_dir=self.config_dir)
         with self.assertRaisesRegex(ValueError, "confirmed project"):
@@ -526,6 +526,18 @@ class ClaudeImportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "read"):
             propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
         read_source(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1")
+        with self.assertRaisesRegex(ValueError, "structure plan"):
+            propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
+        plan = plan_structure(
+            data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs",
+            plan={"one_liner": "A job board for product builders.", "sector": "Career tools", "logo": "", "structure": [
+                {"purpose": "Research", "cards": [{"title": "Job-board landscape", "evidence_note": "Research chats comparing boards"}]},
+            ]},
+        )
+        self.assertEqual(plan["status"], "proposed")
+        with self.assertRaisesRegex(ValueError, "structure plan"):
+            propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
+        confirm_structure(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs")
         proposal = propose_task(data_root=self.data_root, run_id=run["run_id"], project_name="Product Builder Jobs", source_ref="code:code-1", title="Task", body="Evidence-backed task")
         self.assertEqual(proposal["status"], "pending")
         self.assertEqual(proposal["project"], "Product Builder Jobs")
