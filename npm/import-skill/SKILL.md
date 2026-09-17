@@ -262,16 +262,22 @@ Then continue to Step 4 with the confirmed projects.
 
 After the project list is finalized, work **one project at a time** in this strict order. Never mass-draft Task cards across projects before the per-project story and structure are confirmed — the portfolio must let a stranger understand, for every project or learning entry, what the work was trying to say and prove.
 
-**Step A — Story first.** Using only metadata (titles, summaries, dates, session counts), draft and confirm with the user:
-- a one-line summary of what this project is and who it is for;
-- the industry/sector label;
-- a logo question or placeholder.
+**Step A + B — File the structure plan as JSON (helper-enforced).** After confirming a project and reading its sources, file the project's story and card structure with the helper — prose proposals are not accepted by the flow:
 
-Step A confirmation and full source reading can proceed in parallel; Step B below needs the sources read.
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" plan-structure \
+  --data-root "$DATA_ROOT" --run-id "<run-id>" --project "Product Builder Jobs" \
+  --plan '{"one_liner":"A job board for product builders, by a product builder.","sector":"Career tools","logo":"","structure":[{"purpose":"Research","cards":[{"title":"Western Europe job-board landscape","evidence_note":"3 research chats comparing boards and pricing"},{"title":"How AI assists job matching","evidence_note":"Claude Code session prototyping fit-analysis prompts"}]},{"purpose":"Build","cards":[{"title":"Chrome extension scaffold","evidence_note":"First repo push and manifest setup session"}]}]}'
+```
 
-**Step B — Structure proposal (confirm before writing any Task proposal).** While or after reading the project's full sources, propose the project's **large structure** and then wait for confirmation. Do not draft Task cards yet. The structure must be concrete enough to judge from its names alone — never generic labels like `Research / Demo / Build`. Name the actual cards, e.g. `Research → Western Europe research card / Global research card / How AI is used card`, each with one sentence on what evidence backs it. State explicitly: "I plan to build this project's cards as: …" and ask the user to confirm, rename, add, or rearrange before Step C.
+The helper rejects the plan unless `one_liner`, `sector`, and a non-empty `structure` are present, every card has a `title` and an `evidence_note` naming its real evidence, and the project is confirmed. Never use generic labels like `Research / Demo / Build`: the card names must be concrete enough that the user can judge the content from the names alone. Show the plan to the user in chat, ask them to confirm, rename, add, or rearrange, and then record their confirmation:
 
-**Step C — Task cards one by one inside the confirmed structure.** Only after the structure is confirmed, walk the project's sources in date order and propose each Task card with its full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below. Never write Task proposals for a project whose structure the user has not confirmed, and never leave a project without a readable story.
+```bash
+python3 "{{BUILDERS_DIARY_IMPORT_SCRIPT}}" confirm-structure \
+  --data-root "$DATA_ROOT" --run-id "<run-id>" --project "Product Builder Jobs"
+```
+
+**Step C — Task cards one by one inside the confirmed structure.** The helper blocks `propose-task` until `confirm-structure` succeeds for that project, so the order cannot be skipped. Then walk the project's sources in date order and propose each Task card with its full details (activity, tools, mindset, evidence, highlight) for per-card approval, exactly as described below, keeping every card inside the confirmed structure. Never leave a project without a readable story.
 
 **Silent-drop rule.** Do not ask permission for clearly unusable sources. If a source is unambiguously noise — a keyword-match accident pointing at a different project, a duplicate, a greeting, or a 1–3 message Q&A with no build work — classify it `noise` with `classify-sources`, move on, and keep a running one-line list ("Dropped as noise: …") to report in the project's summary. Ask the user only when the drop is genuinely ambiguous or the source looks substantive.
 
